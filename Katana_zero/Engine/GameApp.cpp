@@ -1,4 +1,4 @@
-#include "GameApp.h"
+﻿#include "GameApp.h"
 
 GameApp::GameApp() : m_hWnd(nullptr), m_hInstance(nullptr), m_Width(0), m_Height(0) {}
 GameApp::~GameApp() {}
@@ -39,11 +39,20 @@ bool GameApp::Initialize(HINSTANCE hInstance, const wchar_t* title, int width, i
 }
 
 // 2. 게임 루프 (심장 박동)
+// GameApp.cpp 의 Run() 함수 전체 교체
+
 int GameApp::Run()
 {
     MSG msg = {};
 
-    // GetMessage가 아닌 PeekMessage를 사용!
+    // ★ 더블 버퍼링을 위한 도화지 세팅 준비
+    HDC hdc = GetDC(m_hWnd); // 진짜 모니터 화면
+    HDC memDC = CreateCompatibleDC(hdc); // 가짜 스케치북 (메모리)
+
+    // 모니터 크기와 똑같은 도화지(비트맵) 만들기
+    HBITMAP hBit = CreateCompatibleBitmap(hdc, m_Width, m_Height);
+    HBITMAP oldBit = (HBITMAP)SelectObject(memDC, hBit); // 스케치북에 도화지 끼우기
+
     while (msg.message != WM_QUIT)
     {
         if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
@@ -53,12 +62,28 @@ int GameApp::Run()
         }
         else
         {
-            // 윈도우 메시지가 없을 때(마우스나 키보드가 가만히 있을 때)도
-            // 게임은 계속 업데이트되고 화면이 그려져야 합니다.
+            // 1. 게임 로직 업데이트 (좌표 이동)
             Update();
-            Render();
+
+            // 2. 화면 지우기 (스케치북 전체를 하얀색으로 칠함)
+            PatBlt(memDC, 0, 0, m_Width, m_Height, WHITENESS);
+
+            // 3. 자식 클래스(KatanaZero)에게 가짜 스케치북(memDC)을 넘겨서 그림을 그리게 함
+            Render(memDC);
+
+            // 4. 스케치북에 다 그린 그림을 진짜 모니터(hdc)에 빛의 속도로 복사!! (깜빡임 완벽 제거)
+            BitBlt(hdc, 0, 0, m_Width, m_Height, memDC, 0, 0, SRCCOPY);
+
+            Sleep(10);
         }
     }
+
+    // 게임이 끝나면 빌렸던 붓과 스케치북을 모두 반납 (메모리 누수 방지)
+    SelectObject(memDC, oldBit);
+    DeleteObject(hBit);
+    DeleteDC(memDC);
+    ReleaseDC(m_hWnd, hdc);
+
     return (int)msg.wParam;
 }
 
