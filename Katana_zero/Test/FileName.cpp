@@ -2,6 +2,7 @@
 #include <atlimage.h> // PNG 파일 로드 및 투명도 처리를 위한 CImage
 #include <math.h>
 //test123tttt
+// branch ttt
 // --- [전역 변수 및 상태 정의] ---
 HINSTANCE g_hInst;
 HWND g_hWnd;
