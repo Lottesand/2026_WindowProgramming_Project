@@ -1,91 +1,146 @@
 ﻿#include <windows.h>
-#include <atlimage.h> // PNG 파일 로드 및 투명도 처리를 위한 CImage
+#include <atlimage.h> 
 #include <math.h>
-//test123tttt
+#include <algorithm>
+
+using namespace std;
+
 // --- [전역 변수 및 상태 정의] ---
 HINSTANCE g_hInst;
 HWND g_hWnd;
 LPCTSTR lpszClass = L"My Window Class";
 LPCTSTR lpszWindowName = L"Window Programming Lab";
 
-// 캐릭터 상태 열거형
-enum PlayerState { IDLE, WALK, RUN, JUMP, ROLL_PREP };
+// 🌟 [추가됨] 걷기 전환 모션 2가지 상태 추가
+enum PlayerState {
+    IDLE, IDLE_TO_WALK, WALK, WALK_TO_IDLE, RUN,
+    JUMP_UP, FALL,
+    PREVDOWN, DOWN, POSTDOWN,
+    ROLL, ATTACK,
+    WALL_GRAB, WALL_SLIDE, WALL_FLIP
+};
 PlayerState pState = IDLE;
 
 // ==============================================================================
-// 🛠️ [환경 설정 및 튜닝 변수 모음] 🛠️
+// 🌟 [해상도 및 환경 설정] 🌟
 // ==============================================================================
-const int WIN_WIDTH = 1280;
-const int WIN_HEIGHT = 720;
+const int VIRTUAL_WIDTH = 1280;
+const int VIRTUAL_HEIGHT = 720;
 
-// 💡 스케일 및 카메라 조정
+int WIN_WIDTH = 1280;
+int WIN_HEIGHT = 720;
+
+// ==============================================================================
+// 🛠️ [튜닝 변수 모음] 
+// ==============================================================================
 float mapScale = 1.0f;
 float playerScale = 2.0f;
 float camY_Fixed = 60.0f;
 
-// 💡 스프라이트 위치 보정 (발바닥 위치 미세 조정)
-int playerFootOffsetX = 0;
-int playerFootOffsetY = 35;
+float colW = 20.0f;
+float colH = 45.0f;
 
-// 🌟 [관성 및 속도 관련 변수] 🌟
-float currentVx = 0.0f;        // 현재 플레이어의 X축 실제 속도 (관성 적용을 위함)
-float moveSpeedWalk = 10.0f;    // 걷기 최고 속도
-float moveSpeedRun = 10.0f;   // 뛰기 최고 속도
-float accelRate = 0.6f;        // 가속력 (숫자가 클수록 키 누르자마자 최고속도에 도달)
-float frictionRate = 0.3f;     // 마찰력/관성 (키를 뗐을 때 멈추는 속도. 낮을수록 얼음판처럼 미끄러짐)
+float currentVx = 0.0f;
+float moveSpeedWalk = 12.0f;
+float moveSpeedRun = 10.0f;
+float moveSpeedRoll = 15.0f;
+float accelRate = 0.6f;
+float frictionRate = 0.3f;
 
-// 🌟 [점프 및 중력 관련 변수] 🌟
-const float JUMP_POWER = -10.0f;   // 초기 점프 폭발력 (음수여야 위로 뜀)
-const float GRAVITY_NORMAL = 2.0f; // 기본 중력 (떨어질 때 혹은 키를 뗐을 때의 무거운 중력)
-const float GRAVITY_HOLD = 1.0f;   // 점프 키를 누르고 있을 때의 가벼운 중력 (체공 시간 증가)
-const float MAX_FALL_SPEED = 30.0f;// 최대 낙하 속도 제한
+const float JUMP_POWER = -10.5f;
+const float GRAVITY_NORMAL = 1.0f;
+const float GRAVITY_HOLD = 0.45f;
+const float MAX_FALL_SPEED = 30.0f;
 
-// 💡 애니메이션 딜레이
-DWORD aniDelayIdle = 100;
-DWORD aniDelayWalk = 50;
+float dashRadius = 150.0f;
+float dashSpeed = 15.0f;
+DWORD attackCooldown = 350;
+
+DWORD wallHangTime = 150;
+float wallSlideSpeed = 2.5f;
+float wallSlideFastSpeed = 12.0f;
+float wallJumpPowerY = -11.0f;
+float wallJumpPowerX = 14.0f;
+
+// 🌟 [추가됨] 걷기 전환 디테일 튜닝 변수
+float speedIdleToWalk = 1.0f;     // IDLE -> WALK 전환 중일 때의 속도 (제자리 느낌)
+DWORD aniDelayIdleToWalk = 60;    // IDLE -> WALK 애니메이션 속도 (4프레임)
+DWORD aniDelayWalkToIdle = 60;    // WALK -> IDLE 애니메이션 속도 (5프레임)
+
+DWORD aniDelayIdle = 150;
+DWORD aniDelayWalk = 100;
 DWORD aniDelayRun = 80;
-// ==============================================================================
+DWORD aniDelayJumpFall = 100;
+DWORD aniDelayCrouch = 80;
+DWORD aniDelayRoll = 50;
+DWORD aniDelayAttack = 40;
+DWORD aniDelaySlash = 40;
+DWORD aniDelayWallGrab = 80;
+DWORD aniDelayWallSlide = 100;
+DWORD aniDelayWallFlip = 40;
 
-// --- [전체화면(F키) 관련 변수] ---
+bool g_prevLButton = false;
+DWORD lastAttackTime = 0;
+bool canAirYDash = true;
+
+DWORD wallGrabTime = 0;
+int wallDir = 0;
+
+float attackTargetX = 0.0f;
+float attackTargetY = 0.0f;
+float attackDirX = 0.0f;
+float attackDirY = 0.0f;
+float attackAngle = 0.0f;
+
+float g_renderMapScale = 1.0f;
+float g_renderPlayerScale = 2.0f;
+float g_mapOffsetX = 0.0f;
+float g_mapOffsetY = 0.0f;
+
+bool canRoll = true;
+bool canJump = true;
+
+bool g_showDebugRect = false;
+bool g_prevEState = false;
+
 bool g_isFullMapView = false;
 bool g_prevFState = false;
 
-// 마우스 및 카메라 변수
-int mouseX = WIN_WIDTH / 2;
+int mouseX = VIRTUAL_WIDTH / 2;
+int mouseY = VIRTUAL_HEIGHT / 2;
 float camX = 0.0f;
 float camY = camY_Fixed;
 
 float pX = 100.0f, pY = 300.0f;
-float pVy = 0.0f; // y축 속도
+float pVy = 0.0f;
 bool isJumping = false;
 bool isFacingRight = true;
 
-// 애니메이션 프레임 제어
 int currentFrame = 0;
-int aniDelay = 0;
 
-// 이미지 객체 (CImage)
-CImage imgMap;
-CImage imgColMap;
-CImage imgIdle[11];
-CImage imgWalk[10];
-CImage imgRun[10];
+CImage imgMap, imgColMap, imgIdle[11], imgWalk[10], imgRun[10], imgJumpUp[4], imgFall[4];
+CImage imgPrevDown[2], imgDown[1], imgPostDown[2], imgRoll[6], imgCursor, imgAttack[7], imgSlashFX[5];
+CImage imgWallGrab[2], imgWallSlide[1], imgWallFlip[11];
+// 🌟 [추가됨] 걷기 전환 애니메이션 에셋
 CImage imgIdleToWalk[4];
-CImage imgRunToIdle[4];
+CImage imgWalkToIdle[5];
+
+CImage imgHudBase, imgHudBattery, imgHudTimer, imgHudInven;
 
 // --- [함수 선언] ---
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 void LoadAssets();
+void UpdateScreenScale();
 void UpdatePhysicsAndInput();
 void UpdateAnimation();
-bool CheckCollision(int x, int y);
+int GetCollisionType(int x, int y);
+bool CheckMapCollision(float x, float y, float w, float h);
+bool CheckSpecificCollision(float x, float y, float w, float h, int targetType);
 void UpdateCamera();
 void Render(HDC hDC);
 
-// 메인 함수
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdParam, int nCmdShow) {
     HWND hWnd;
-    MSG Message;
     WNDCLASSEX WndClass;
     g_hInst = hInstance;
     WndClass.cbSize = sizeof(WndClass);
@@ -102,13 +157,37 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
     WndClass.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
     RegisterClassEx(&WndClass);
 
-    g_hWnd = CreateWindow(lpszClass, TEXT("Katana Zero Rebirth"), WS_OVERLAPPEDWINDOW, 0, 0, WIN_WIDTH, WIN_HEIGHT, NULL, (HMENU)NULL, hInstance, NULL);
+    RECT wr = { 0, 0, WIN_WIDTH, WIN_HEIGHT };
+    AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
+
+    g_hWnd = CreateWindow(lpszClass, TEXT("Katana Zero Rebirth"), WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT, wr.right - wr.left, wr.bottom - wr.top,
+        NULL, (HMENU)NULL, hInstance, NULL);
+
     ShowWindow(g_hWnd, nCmdShow);
 
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+    DWORD prevTime = GetTickCount();
+
+    while (true) {
+        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) break;
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        else {
+            DWORD currentTime = GetTickCount();
+
+            if (currentTime - prevTime >= 16) {
+                UpdateScreenScale();
+                UpdatePhysicsAndInput();
+                UpdateAnimation();
+                UpdateCamera();
+
+                InvalidateRect(g_hWnd, NULL, FALSE);
+                prevTime = currentTime;
+            }
+        }
     }
     return (int)msg.wParam;
 }
@@ -116,32 +195,35 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam) {
     HDC hDC;
     PAINTSTRUCT ps;
-    RECT rect;
 
     switch (iMsg) {
     case WM_CREATE:
+        ShowCursor(FALSE);
         LoadAssets();
-        SetTimer(hWnd, 1, 1000 / 60, NULL);
         break;
 
-    case WM_TIMER:
-        UpdatePhysicsAndInput();
-        UpdateAnimation();
-        UpdateCamera();
-        InvalidateRect(hWnd, NULL, FALSE);
+    case WM_SIZE:
+        WIN_WIDTH = LOWORD(lParam);
+        WIN_HEIGHT = HIWORD(lParam);
+        break;
+
+    case WM_ERASEBKGND:
+        return 1;
+
+    case WM_MOUSEMOVE:
+        if (WIN_WIDTH != 0 && WIN_HEIGHT != 0) {
+            mouseX = (int)(LOWORD(lParam) * ((float)VIRTUAL_WIDTH / WIN_WIDTH));
+            mouseY = (int)(HIWORD(lParam) * ((float)VIRTUAL_HEIGHT / WIN_HEIGHT));
+        }
         break;
 
     case WM_PAINT: {
-        GetClientRect(hWnd, &rect);
         hDC = BeginPaint(hWnd, &ps);
-
         Render(hDC);
-
         EndPaint(hWnd, &ps);
         break;
     }
     case WM_DESTROY:
-        KillTimer(hWnd, 1);
         PostQuitMessage(0);
         break;
     }
@@ -149,321 +231,686 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam) {
 }
 
 void LoadAssets() {
-    HRESULT hr;
-
-    hr = imgMap.Load(TEXT("assets/map.png"));
-    if (FAILED(hr)) MessageBox(g_hWnd, TEXT("map.png 로드 실패!"), TEXT("에러"), MB_OK);
-
-    hr = imgColMap.Load(TEXT("assets/colmap.png"));
-    if (FAILED(hr)) MessageBox(g_hWnd, TEXT("colmap.png 로드 실패!"), TEXT("에러"), MB_OK);
+    imgMap.Load(TEXT("assets/map.png"));
+    imgColMap.Load(TEXT("assets/colmap.png"));
 
     TCHAR path[256];
-    for (int i = 0; i < 11; i++) {
-        wsprintf(path, TEXT("assets/idle/%d.png"), i);
-        imgIdle[i].Load(path);
-    }
-    for (int i = 0; i < 10; i++) {
-        wsprintf(path, TEXT("assets/walk/%d.png"), i);
-        imgWalk[i].Load(path);
-    }
-    for (int i = 0; i < 10; i++) {
-        wsprintf(path, TEXT("assets/run/%d.png"), i);
-        imgRun[i].Load(path);
+    for (int i = 0; i < 11; i++) { wsprintf(path, TEXT("assets/idle/%d.png"), i); imgIdle[i].Load(path); }
+    for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/walk/%d.png"), i); imgWalk[i].Load(path); }
+    for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/run/%d.png"), i); imgRun[i].Load(path); }
+    for (int i = 0; i < 4; i++) { wsprintf(path, TEXT("assets/jump/%d.png"), i); imgJumpUp[i].Load(path); }
+    for (int i = 0; i < 4; i++) { wsprintf(path, TEXT("assets/fall/%d.png"), i); imgFall[i].Load(path); }
+    for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/prevdown/%d.png"), i); imgPrevDown[i].Load(path); }
+    for (int i = 0; i < 1; i++) { wsprintf(path, TEXT("assets/down/%d.png"), i); imgDown[i].Load(path); }
+    for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/postdown/%d.png"), i); imgPostDown[i].Load(path); }
+    for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/roll/%d.png"), i); imgRoll[i].Load(path); }
+    for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/wallgrab/%d.png"), i); imgWallGrab[i].Load(path); }
+    for (int i = 0; i < 1; i++) { wsprintf(path, TEXT("assets/wallslide/%d.png"), i); imgWallSlide[i].Load(path); }
+    for (int i = 0; i < 11; i++) { wsprintf(path, TEXT("assets/wallflip/%d.png"), i); imgWallFlip[i].Load(path); }
+
+    // 🌟 걷기 전환 모션 에셋 (경로 주의!)
+    for (int i = 0; i < 4; i++) { wsprintf(path, TEXT("assets/idletowalk/%d.png"), i); imgIdleToWalk[i].Load(path); }
+    for (int i = 0; i < 5; i++) { wsprintf(path, TEXT("assets/walktoidle/%d.png"), i); imgWalkToIdle[i].Load(path); }
+
+    imgCursor.Load(TEXT("assets/cursor.png"));
+    for (int i = 0; i < 7; i++) { wsprintf(path, TEXT("assets/attack/%d.png"), i); imgAttack[i].Load(path); }
+    for (int i = 0; i < 5; i++) { wsprintf(path, TEXT("assets/slash/%d.png"), i); imgSlashFX[i].Load(path); }
+
+    imgHudBase.Load(TEXT("assets/hud/base.png"));
+    imgHudBattery.Load(TEXT("assets/hud/battery.png"));
+    imgHudTimer.Load(TEXT("assets/hud/timer.png"));
+    imgHudInven.Load(TEXT("assets/hud/inven.png"));
+}
+
+void UpdateScreenScale() {
+    g_renderMapScale = mapScale;
+    g_renderPlayerScale = playerScale;
+    g_mapOffsetX = 0.0f;
+    g_mapOffsetY = 0.0f;
+
+    int mapW = imgMap.IsNull() ? VIRTUAL_WIDTH : imgMap.GetWidth();
+    int mapH = imgMap.IsNull() ? VIRTUAL_HEIGHT : imgMap.GetHeight();
+
+    if (g_isFullMapView && !imgMap.IsNull()) {
+        float scaleX = (float)VIRTUAL_WIDTH / mapW;
+        float scaleY = (float)VIRTUAL_HEIGHT / mapH;
+        g_renderMapScale = (scaleX < scaleY) ? scaleX : scaleY;
+        g_renderPlayerScale = playerScale * (g_renderMapScale / mapScale);
+        g_mapOffsetX = (VIRTUAL_WIDTH - (mapW * g_renderMapScale)) / 2.0f;
+        g_mapOffsetY = (VIRTUAL_HEIGHT - (mapH * g_renderMapScale)) / 2.0f;
     }
 }
 
-// --- [물리 및 입력 연산] ---
+int GetCollisionType(int targetX, int targetY) {
+    if (imgColMap.IsNull()) return 1;
+    if (targetX < 0 || targetY < 0 || targetX >= imgColMap.GetWidth() || targetY >= imgColMap.GetHeight()) return 1;
+    COLORREF pixelColor = imgColMap.GetPixel(targetX, targetY);
+    int r = GetRValue(pixelColor); int g = GetGValue(pixelColor); int b = GetBValue(pixelColor);
+    if (r == 0 && g == 255 && b == 0) return 1;
+    if (r == 255 && g == 0 && b == 0) return 2;
+    if (r == 0 && g == 0 && b == 255) return 3;
+    return 0;
+}
+
+bool CheckMapCollision(float x, float y, float w, float h) {
+    auto isSolid = [](int t) { return t == 1 || t == 3; };
+    if (isSolid(GetCollisionType((int)x, (int)y))) return true;
+    if (isSolid(GetCollisionType((int)(x + w / 2), (int)y))) return true;
+    if (isSolid(GetCollisionType((int)(x + w), (int)y))) return true;
+    if (isSolid(GetCollisionType((int)x, (int)(y + h / 2)))) return true;
+    if (isSolid(GetCollisionType((int)(x + w), (int)(y + h / 2)))) return true;
+    if (isSolid(GetCollisionType((int)x, (int)(y + h)))) return true;
+    if (isSolid(GetCollisionType((int)(x + w / 2), (int)(y + h)))) return true;
+    if (isSolid(GetCollisionType((int)(x + w), (int)(y + h)))) return true;
+    return false;
+}
+
+bool CheckSpecificCollision(float x, float y, float w, float h, int targetType) {
+    if (GetCollisionType((int)x, (int)y) == targetType) return true;
+    if (GetCollisionType((int)(x + w / 2), (int)y) == targetType) return true;
+    if (GetCollisionType((int)(x + w), (int)y) == targetType) return true;
+    if (GetCollisionType((int)x, (int)(y + h / 2)) == targetType) return true;
+    if (GetCollisionType((int)(x + w), (int)(y + h / 2)) == targetType) return true;
+    if (GetCollisionType((int)x, (int)(y + h)) == targetType) return true;
+    if (GetCollisionType((int)(x + w / 2), (int)(y + h)) == targetType) return true;
+    if (GetCollisionType((int)(x + w), (int)(y + h)) == targetType) return true;
+    return false;
+}
+
 void UpdatePhysicsAndInput() {
+    DWORD currentTime = GetTickCount();
+
     bool currentFState = (GetAsyncKeyState('F') & 0x8000) != 0;
-    if (currentFState && !g_prevFState) {
-        g_isFullMapView = !g_isFullMapView;
-    }
+    if (currentFState && !g_prevFState) g_isFullMapView = !g_isFullMapView;
     g_prevFState = currentFState;
 
-    int charWidth = imgIdle[0].IsNull() ? 40 : imgIdle[0].GetWidth();
-    int charHeight = imgIdle[0].IsNull() ? 60 : imgIdle[0].GetHeight();
+    bool currentEState = (GetAsyncKeyState('E') & 0x8000) != 0;
+    if (currentEState && !g_prevEState) g_showDebugRect = !g_showDebugRect;
+    g_prevEState = currentEState;
 
-    int footOffsetX = (charWidth / 2) + playerFootOffsetX;
-    int footOffsetY = charHeight + playerFootOffsetY;
+    bool isW = GetAsyncKeyState('W') & 0x8000;
+    bool isA = GetAsyncKeyState('A') & 0x8000;
+    bool isS = GetAsyncKeyState('S') & 0x8000;
+    bool isD = GetAsyncKeyState('D') & 0x8000;
+    bool isSpace = GetAsyncKeyState(VK_SPACE) & 0x8000;
 
-    int footX = (int)pX + footOffsetX;
-    int footY = (int)pY + footOffsetY;
     int maxStepHeight = 15;
 
-    // -------------------------------------------------------------
-    // 🌟 1. 관성이 적용된 좌우 이동 로직 (가속 및 마찰력)
-    // -------------------------------------------------------------
-    float targetVx = 0.0f; // 키 입력에 따른 목표 속도
-    float currentSpeedLimit = moveSpeedWalk; // 현재 상태에 따른 최고 속도
+    int touchWallDir = 0;
+    if (CheckSpecificCollision(pX - 3.0f, pY, colW, colH, 3)) touchWallDir = -1;
+    else if (CheckSpecificCollision(pX + 3.0f, pY, colW, colH, 3)) touchWallDir = 1;
 
-    // A키와 D키 입력 감지 (동시 입력 시 상쇄되어 targetVx는 0이 됨)
-    if (GetAsyncKeyState('A') & 0x8000) {
-        targetVx = -currentSpeedLimit;
-        isFacingRight = false;
-    }
-    if (GetAsyncKeyState('D') & 0x8000) {
-        targetVx = currentSpeedLimit;
-        isFacingRight = true;
+    bool inAir = isJumping || (pVy != 0.0f);
+    bool isJumpKeyPressed = isW || isSpace;
+    if (!isJumpKeyPressed) canJump = true;
+
+    // -------------------------------------------------------------
+    // 0. 점프 & 플립 판정
+    // -------------------------------------------------------------
+    if (isJumpKeyPressed && canJump) {
+        if (pState == WALL_GRAB || pState == WALL_SLIDE) {
+            pState = WALL_FLIP;
+            currentFrame = 0;
+            pVy = wallJumpPowerY;
+            currentVx = (wallDir == 1) ? -wallJumpPowerX : wallJumpPowerX;
+            isFacingRight = (wallDir == -1);
+            isJumping = true;
+            canJump = false;
+
+            pX += (wallDir == 1) ? -2.0f : 2.0f;
+            touchWallDir = 0;
+        }
+        else if (!inAir && touchWallDir != 0 && ((touchWallDir == -1 && isA) || (touchWallDir == 1 && isD))) {
+            pState = WALL_SLIDE;
+            currentFrame = 0;
+            wallDir = touchWallDir;
+            isFacingRight = (wallDir == 1);
+            pVy = JUMP_POWER;
+            isJumping = true;
+            canJump = false;
+            canAirYDash = true;
+        }
+        else if (!inAir && pState != ROLL && pState != ATTACK && pState != WALL_FLIP) {
+            pVy = JUMP_POWER;
+            isJumping = true;
+            canJump = false;
+        }
     }
 
-    // 부드러운 가속 및 마찰력 적용 (Lerp 원리)
-    if (targetVx != 0.0f) {
-        // 키를 누르고 있을 때: 가속력(accelRate)만큼 목표 속도를 향해 증가
+    // -------------------------------------------------------------
+    // 1. 마우스 조준 대시 공격
+    // -------------------------------------------------------------
+    bool currentLButton = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    float worldMouseX = (mouseX - g_mapOffsetX) / g_renderMapScale;
+    float worldMouseY = (mouseY - g_mapOffsetY) / g_renderMapScale;
+    if (!g_isFullMapView) { worldMouseX += camX; worldMouseY += camY; }
+
+    if (currentLButton && !g_prevLButton && pState != ATTACK && pState != ROLL && pState != PREVDOWN && pState != DOWN) {
+        if (currentTime - lastAttackTime >= attackCooldown) {
+            pState = ATTACK;
+            currentFrame = 0;
+            lastAttackTime = currentTime;
+
+            float dx = worldMouseX - (pX + colW / 2.0f);
+            float dy = worldMouseY - (pY + colH / 2.0f);
+            float dist = sqrt(dx * dx + dy * dy);
+
+            attackAngle = atan2(dy, dx);
+            isFacingRight = (dx >= 0);
+
+            if (dist > 0) {
+                attackDirX = dx / dist;
+                attackDirY = dy / dist;
+            }
+            else {
+                attackDirX = 1.0f; attackDirY = 0.0f;
+            }
+
+            if (dy < 0) {
+                if (canAirYDash) {
+                    canAirYDash = false;
+                }
+                else {
+                    attackDirY = 0.0f;
+                    attackDirX = (dx >= 0) ? 1.0f : -1.0f;
+                }
+            }
+
+            float dashDist = min(dist, dashRadius);
+            attackTargetX = pX + attackDirX * dashDist;
+            attackTargetY = pY + attackDirY * dashDist;
+        }
+    }
+    g_prevLButton = currentLButton;
+
+    // -------------------------------------------------------------
+    // 2. 공중 벽타기(Grab/Slide) 진입 및 탈출
+    // -------------------------------------------------------------
+    if (inAir && touchWallDir != 0 && pState != ATTACK && pState != ROLL) {
+        if (pState != WALL_GRAB && pState != WALL_SLIDE) {
+            bool isPressingWall = ((touchWallDir == -1 && isA) || (touchWallDir == 1 && isD));
+            bool isFlippingToNewWall = (pState == WALL_FLIP && touchWallDir != wallDir);
+
+            if (isFlippingToNewWall || (pState != WALL_FLIP && isPressingWall)) {
+                pState = WALL_GRAB;
+                currentFrame = 0;
+                wallGrabTime = currentTime;
+                wallDir = touchWallDir;
+                isFacingRight = (wallDir == 1);
+                canAirYDash = true;
+            }
+        }
+        else {
+            if ((wallDir == 1 && isA) || (wallDir == -1 && isD)) {
+                pState = FALL;
+                currentVx = (wallDir == 1) ? -moveSpeedWalk : moveSpeedWalk;
+            }
+            else if (touchWallDir != wallDir) {
+                pState = FALL;
+            }
+        }
+    }
+    else if (pState == WALL_GRAB || pState == WALL_SLIDE) {
+        if (!inAir) pState = IDLE;
+        else pState = FALL;
+    }
+
+    // -------------------------------------------------------------
+    // 🌟 3. 상태별 X, Y축 이동 및 전환 애니메이션용 목표 속도 제어
+    // -------------------------------------------------------------
+    float targetVx = 0.0f;
+    float currentSpeedLimit = moveSpeedWalk;
+    bool isWalkAfterRoll = (isS && (isA || isD) && !canRoll);
+
+    if (pState == ATTACK) {
+        float distToTarget = sqrt(pow(attackTargetX - pX, 2) + pow(attackTargetY - pY, 2));
+        if (distToTarget > dashSpeed) {
+            float nextX = pX + attackDirX * dashSpeed;
+            float nextY = pY + attackDirY * dashSpeed;
+            if (!CheckMapCollision(nextX, pY, colW, colH)) pX += attackDirX * dashSpeed;
+            if (!CheckMapCollision(pX, nextY, colW, colH)) pY += attackDirY * dashSpeed;
+        }
+        else { pX = attackTargetX; pY = attackTargetY; }
+        pVy = 0.0f; currentVx = 0.0f;
+    }
+    else if (pState == ROLL) {
+        currentVx = isFacingRight ? moveSpeedRoll : -moveSpeedRoll;
+    }
+    else if (pState == WALL_GRAB || pState == WALL_SLIDE) {
+        currentVx = 0.0f;
+    }
+    else if (pState == WALL_FLIP) {
+        // 유저 입력 무시하고 날아가기
+    }
+    else if (pState == IDLE_TO_WALK) {
+        // 💡 [핵심] 모션 중에는 매우 느린 속도로 제자리걸음 하는 느낌을 줌
+        if (isA) { targetVx = -speedIdleToWalk; isFacingRight = false; }
+        if (isD) { targetVx = speedIdleToWalk; isFacingRight = true; }
+    }
+    else if (pState == WALK_TO_IDLE) {
+        // 💡 [핵심] 마찰력(frictionRate)에 의해 자연스럽게 스무스하게 정지
+        targetVx = 0.0f;
+    }
+    else if ((pState == PREVDOWN || pState == DOWN || pState == POSTDOWN) && !isWalkAfterRoll) {}
+    else {
+        if (isA) { targetVx = -currentSpeedLimit; isFacingRight = false; }
+        if (isD) { targetVx = currentSpeedLimit; isFacingRight = true; }
+    }
+
+    if (targetVx != 0.0f && pState != ROLL && pState != ATTACK && pState != WALL_GRAB && pState != WALL_SLIDE && pState != WALL_FLIP) {
         currentVx += (targetVx - currentVx) * accelRate;
     }
-    else {
-        // 키를 뗐을 때: 마찰력(frictionRate)만큼 0을 향해 감소 (관성 미끄러짐)
+    else if (pState != ROLL && pState != ATTACK && pState != WALL_GRAB && pState != WALL_SLIDE && pState != WALL_FLIP) {
         currentVx += (0.0f - currentVx) * frictionRate;
-
-        // 속도가 거의 0에 가까워지면 완전히 멈춤 처리
         if (fabs(currentVx) < 0.1f) currentVx = 0.0f;
     }
 
-    // -------------------------------------------------------------
-    // 🌟 2. 이동 및 지형 충돌 처리 (X축)
-    // -------------------------------------------------------------
-    if (currentVx != 0.0f) {
-        int nextX = footX + (int)currentVx;
-
-        if (!CheckCollision(nextX, footY - 5)) {
-            pX += currentVx;
+    if (currentVx != 0.0f && pState != ATTACK && pState != WALL_GRAB && pState != WALL_SLIDE) {
+        float nextX = pX + currentVx;
+        if (!CheckMapCollision(nextX, pY, colW, colH - 5)) {
+            pX = nextX;
         }
         else {
-            // 벽에 막혔을 때 계단 오르기 시도
             bool steppedUp = false;
             for (int step = 1; step <= maxStepHeight; step++) {
-                if (!CheckCollision(nextX, footY - 5 - step)) {
-                    pX += currentVx;
-                    pY -= step;
-                    steppedUp = true;
-                    break;
+                if (!CheckMapCollision(nextX, pY - step, colW, colH - 5)) {
+                    pX = nextX; pY -= step; steppedUp = true; break;
                 }
             }
-            // 계단 오르기에도 실패했다면 벽에 부딪힌 것이므로 속도를 0으로 깎음
-            if (!steppedUp) currentVx = 0.0f;
+            if (!steppedUp) {
+                float sign = (currentVx > 0) ? 1.0f : -1.0f;
+                int failsafe = 0;
+                while (!CheckMapCollision(pX + sign, pY, colW, colH - 5) && failsafe++ < (int)fabs(currentVx) + 2) {
+                    pX += sign;
+                }
+                if (pState != WALL_FLIP) currentVx = 0.0f;
+            }
         }
     }
 
-    // -------------------------------------------------------------
-    // 🌟 3. 가변 점프 및 중력 로직 (짧게 누르면 낮게, 길게 누르면 높게)
-    // -------------------------------------------------------------
-    bool isJumpKeyPressed = (GetAsyncKeyState('W') & 0x8000) || (GetAsyncKeyState(VK_SPACE) & 0x8000);
-
-    // 점프 시작
-    if (isJumpKeyPressed && !isJumping) {
-        pVy = JUMP_POWER; // 초기 폭발적인 상승력 부여
-        isJumping = true;
-    }
-
-    // 중력 계산 (키를 누르고 상승 중일 때는 중력을 적게 받아 체공시간이 김)
-    float currentGravity = GRAVITY_NORMAL;
-    if (isJumpKeyPressed && pVy < 0.0f) {
-        currentGravity = GRAVITY_HOLD;
-    }
-
-    pVy += currentGravity; // 중력 누적
-
-    // 최대 낙하 속도 제한 (너무 빨리 떨어져서 바닥을 뚫는 현상 방지)
-    if (pVy > MAX_FALL_SPEED) pVy = MAX_FALL_SPEED;
-
-    int nextY = (int)pY + (int)pVy;
-    int nextFootY = nextY + footOffsetY;
-
-    // -------------------------------------------------------------
-    // 🌟 4. Y축 지형 충돌 처리
-    // -------------------------------------------------------------
-    if (pVy > 0 && CheckCollision(footX, nextFootY)) {
-        // 바닥에 닿았을 때
-        isJumping = false;
-        pVy = 0;
-
-        pY = nextY;
-        while (CheckCollision(footX, (int)pY + footOffsetY)) {
-            pY -= 1.0f; // 파묻히지 않게 위로 끌어올림
+    if (isS && !isJumping && pState != ROLL && pState != ATTACK && pState != WALL_GRAB && pState != WALL_SLIDE && pState != WALL_FLIP) {
+        int fTypeL = GetCollisionType((int)pX, (int)(pY + colH + 1));
+        int fTypeC = GetCollisionType((int)(pX + colW / 2), (int)(pY + colH + 1));
+        int fTypeR = GetCollisionType((int)(pX + colW), (int)(pY + colH + 1));
+        if (fTypeL == 2 || fTypeC == 2 || fTypeR == 2) {
+            pY += 4.0f; isJumping = true; pVy = 1.0f;
         }
     }
-    else if (pVy < 0 && CheckCollision(footX, (int)pY + footOffsetY + (int)pVy - charHeight)) {
-        // [선택적] 천장에 머리를 부딪혔을 때 로직 (필요시 사용)
-        // pVy = 0.0f; 
-        // pY = nextY;
-    }
-    else {
-        // 공중에 떠 있는 중
-        pY = nextY;
 
-        // 발밑 1픽셀 아래가 비어있다면 점프 상태로 전환 (절벽에서 떨어질 때)
-        if (!CheckCollision(footX, (int)pY + footOffsetY + 1)) {
-            isJumping = true;
+    // Y축 이동 
+    if (pState != ATTACK) {
+        if (pState == WALL_GRAB) {
+            pVy = 0.0f;
+            if (currentTime - wallGrabTime >= wallHangTime) {
+                pState = WALL_SLIDE; currentFrame = 0;
+            }
         }
         else {
-            isJumping = false;
+            float currentGravity = (isJumpKeyPressed && pVy < 0.0f) ? GRAVITY_HOLD : GRAVITY_NORMAL;
+            pVy += currentGravity;
+
+            float maxFall = MAX_FALL_SPEED;
+            if (pState == WALL_SLIDE && pVy >= 0.0f) {
+                maxFall = isS ? wallSlideFastSpeed : wallSlideSpeed;
+                pVy = maxFall;
+            }
+            else if (pVy > maxFall) {
+                pVy = maxFall;
+            }
+        }
+
+        float nextY = pY + pVy;
+
+        if (pVy > 0) { // 하강 
+            bool hitFloor = false;
+            float finalFloorY = nextY;
+
+            if (CheckMapCollision(pX, nextY, colW, colH)) hitFloor = true;
+            else {
+                for (float checkY = pY; checkY <= nextY; checkY += 1.0f) {
+                    int typeL = GetCollisionType((int)pX, (int)(checkY + colH));
+                    int typeC = GetCollisionType((int)(pX + colW / 2), (int)(checkY + colH));
+                    int typeR = GetCollisionType((int)(pX + colW), (int)(checkY + colH));
+
+                    if (typeL == 2 || typeC == 2 || typeR == 2) {
+                        if (pY + colH <= checkY + colH + 2) { hitFloor = true; finalFloorY = checkY; break; }
+                    }
+                }
+            }
+
+            if (hitFloor) {
+                isJumping = false; pVy = 0; pY = finalFloorY; canAirYDash = true;
+                int failsafe = 0;
+                while ((CheckMapCollision(pX, pY, colW, colH) ||
+                    GetCollisionType((int)pX, (int)(pY + colH)) == 2 ||
+                    GetCollisionType((int)(pX + colW / 2), (int)(pY + colH)) == 2 ||
+                    GetCollisionType((int)(pX + colW), (int)(pY + colH)) == 2) && failsafe++ < 100) {
+                    pY -= 1.0f;
+                }
+                pY += 1.0f;
+            }
+            else {
+                pY = nextY;
+                int nL = GetCollisionType((int)pX, (int)(pY + colH + 1));
+                int nC = GetCollisionType((int)(pX + colW / 2), (int)(pY + colH + 1));
+                int nR = GetCollisionType((int)(pX + colW), (int)(pY + colH + 1));
+                if (!CheckMapCollision(pX, pY + 1.0f, colW, colH) && nL != 2 && nC != 2 && nR != 2) isJumping = true;
+                else { isJumping = false; canAirYDash = true; }
+            }
+        }
+        else if (pVy < 0) { // 상승
+            if (CheckMapCollision(pX, nextY, colW, colH)) {
+                pVy = 0; pY = nextY;
+                int failsafe = 0;
+                while (CheckMapCollision(pX, pY, colW, colH) && failsafe++ < 100) pY += 1.0f;
+            }
+            else pY = nextY;
+        }
+
+        int mapLimit = imgMap.IsNull() ? VIRTUAL_HEIGHT : imgMap.GetHeight();
+        if (pY + colH > mapLimit - 20) { pY = mapLimit - colH - 20; isJumping = false; pVy = 0; }
+    }
+
+    // -------------------------------------------------------------
+    // 🌟 4. 애니메이션 상태 머신 (걷기 전환 포함)
+    // -------------------------------------------------------------
+    PlayerState newState = pState;
+
+    if (pState == ATTACK && currentFrame >= 7) {
+        newState = isJumping ? FALL : IDLE;
+    }
+    else if (pState == WALL_FLIP && currentFrame >= 10) {
+        newState = isJumping ? (pVy < 0.0f ? JUMP_UP : FALL) : IDLE;
+    }
+    else if (pState == ROLL && currentFrame >= 6) {
+        if (isA || isD) newState = WALK;
+        else newState = isS ? DOWN : IDLE;
+    }
+    else if (pState == PREVDOWN && currentFrame >= 2) newState = DOWN;
+    else if (pState == POSTDOWN && currentFrame >= 2) newState = IDLE;
+
+    if (!isS) {
+        canRoll = true;
+        if (newState == PREVDOWN || newState == DOWN) newState = POSTDOWN;
+    }
+    else {
+        if (canRoll && (isA || isD) && !isJumping && newState != ROLL && newState != ATTACK && newState != WALL_GRAB && newState != WALL_SLIDE && newState != WALL_FLIP) {
+            newState = ROLL; canRoll = false; isFacingRight = isD;
+        }
+        else if (!canRoll && (isA || isD) && !isJumping && newState != ROLL && newState != ATTACK && newState != WALL_GRAB && newState != WALL_SLIDE && newState != WALL_FLIP) {
+            newState = WALK;
+        }
+        else if (!(isA || isD) && !isJumping && newState != ROLL && newState != ATTACK && newState != PREVDOWN && newState != DOWN && newState != POSTDOWN && newState != WALL_GRAB && newState != WALL_SLIDE && newState != WALL_FLIP) {
+            newState = PREVDOWN;
+        }
+        else if (!(isA || isD) && newState == POSTDOWN) {
+            newState = PREVDOWN;
         }
     }
 
-    // 맵 하단 추락 방지 안전장치
-    int mapLimit = imgMap.IsNull() ? WIN_HEIGHT : imgMap.GetHeight();
-    if (pY + charHeight > mapLimit - 20) {
-        pY = mapLimit - charHeight - 20;
-        isJumping = false;
-        pVy = 0;
+    // 🌟 [핵심] 부드러운 걷기 전환(Transitions) 로직 적용
+    if (newState != ROLL && newState != ATTACK && newState != PREVDOWN && newState != DOWN && newState != POSTDOWN && newState != WALL_GRAB && newState != WALL_SLIDE && newState != WALL_FLIP) {
+        if (isJumping) {
+            newState = (pVy < 0.0f) ? JUMP_UP : FALL;
+        }
+        else {
+            if (isA || isD) {
+                if (pState == IDLE_TO_WALK) {
+                    if (currentFrame >= 3) newState = WALK;
+                    else newState = IDLE_TO_WALK; // 4프레임 끝날때까지 유지
+                }
+                else if (pState == WALK || pState == RUN) {
+                    newState = WALK;
+                }
+                else {
+                    newState = IDLE_TO_WALK; // 정지 상태나 낙하 후 걷기 시작할 때 무조건 전환 모션 발동
+                }
+            }
+            else {
+                if (pState == WALK_TO_IDLE) {
+                    if (currentFrame >= 4) newState = IDLE;
+                    else newState = WALK_TO_IDLE; // 5프레임 끝날때까지 유지
+                }
+                else if (pState == WALK || pState == RUN || pState == IDLE_TO_WALK || pState == FALL) {
+                    newState = WALK_TO_IDLE; // 걷다가 혹은 착지하면서 키 떼면 스무스하게 정지
+                }
+                else {
+                    newState = IDLE;
+                }
+            }
+        }
+    }
+    else if (!isJumping && (newState == WALL_FLIP || newState == WALL_SLIDE || newState == WALL_GRAB)) {
+        // 특수 액션 중 땅에 안착해버리면 즉시 걷기/정지 판정으로 부드럽게 이행
+        if (isA || isD) newState = IDLE_TO_WALK;
+        else newState = WALK_TO_IDLE;
     }
 
-    // -------------------------------------------------------------
-    // 🌟 5. 애니메이션 상태 결정
-    // -------------------------------------------------------------
-    PlayerState newState = IDLE;
-
-    if (GetAsyncKeyState('S') & 0x8000) {
-        newState = ROLL_PREP;
-    }
-    else if (isJumping) {
-        newState = JUMP;
-    }
-    else if (fabs(currentVx) > 0.5f) { // 속도가 0이 아니고 실제로 걷고 있을 때만 WALK
-        newState = WALK;
-    }
-
-    // 상태가 변경되었을 때만 프레임 0으로 초기화
     if (pState != newState) {
         currentFrame = 0;
         pState = newState;
     }
 }
 
-// --- [충돌 맵 기반 검사] ---
-bool CheckCollision(int targetX, int targetY) {
-    if (imgColMap.IsNull()) return true;
-
-    if (targetX < 0 || targetY < 0 || targetX >= imgColMap.GetWidth() || targetY >= imgColMap.GetHeight())
-        return true;
-
-    COLORREF pixelColor = imgColMap.GetPixel(targetX, targetY);
-
-    if (GetRValue(pixelColor) == 0 && GetGValue(pixelColor) == 255 && GetBValue(pixelColor) == 0) {
-        return true;
-    }
-    return false;
-}
-
-// --- [애니메이션 프레임 갱신] ---
 void UpdateAnimation() {
     static DWORD lastTime = GetTickCount();
     DWORD currentTime = GetTickCount();
-
     DWORD targetDelayMs = aniDelayIdle;
 
     switch (pState) {
     case IDLE: targetDelayMs = aniDelayIdle; break;
+    case IDLE_TO_WALK: targetDelayMs = aniDelayIdleToWalk; break;
     case WALK: targetDelayMs = aniDelayWalk; break;
+    case WALK_TO_IDLE: targetDelayMs = aniDelayWalkToIdle; break;
     case RUN:  targetDelayMs = aniDelayRun;  break;
-    case JUMP: targetDelayMs = aniDelayIdle; break;
+    case JUMP_UP:
+    case FALL: targetDelayMs = aniDelayJumpFall; break;
+    case PREVDOWN:
+    case DOWN:
+    case POSTDOWN: targetDelayMs = aniDelayCrouch; break;
+    case ROLL: targetDelayMs = aniDelayRoll; break;
+    case ATTACK: targetDelayMs = aniDelayAttack; break;
+    case WALL_GRAB: targetDelayMs = aniDelayWallGrab; break;
+    case WALL_SLIDE: targetDelayMs = aniDelayWallSlide; break;
+    case WALL_FLIP: targetDelayMs = aniDelayWallFlip; break;
     }
 
     if (currentTime - lastTime >= targetDelayMs) {
         currentFrame++;
         lastTime = currentTime;
+
+        if (pState == IDLE && currentFrame >= 11) currentFrame = 0;
+        if (pState == IDLE_TO_WALK && currentFrame >= 4) currentFrame = 3;
+        if (pState == WALK && currentFrame >= 10) currentFrame = 0;
+        if (pState == WALK_TO_IDLE && currentFrame >= 5) currentFrame = 4;
+        if (pState == RUN && currentFrame >= 10) currentFrame = 0;
+        if (pState == JUMP_UP && currentFrame >= 4) currentFrame = 3;
+        if (pState == FALL && currentFrame >= 4) currentFrame = 3;
+        if (pState == DOWN && currentFrame >= 1) currentFrame = 0;
+        if (pState == ATTACK && currentFrame >= 7) currentFrame = 7;
+
+        if (pState == WALL_GRAB && currentFrame >= 2) currentFrame = 1;
+        if (pState == WALL_SLIDE && currentFrame >= 1) currentFrame = 0;
+        if (pState == WALL_FLIP && currentFrame >= 11) currentFrame = 10;
     }
 }
 
-// --- [카메라 로직] ---
 void UpdateCamera() {
     if (g_isFullMapView) return;
-
-    float mouseOffsetX = (float)(mouseX - (WIN_WIDTH / 2)) / (WIN_WIDTH / 2);
+    float mouseOffsetX = (float)(mouseX - (VIRTUAL_WIDTH / 2)) / (VIRTUAL_WIDTH / 2);
     float maxLookAhead = 350.0f;
-    float targetCamX = pX - (WIN_WIDTH / mapScale / 2.0f) + (mouseOffsetX * maxLookAhead);
+    float targetCamX = (pX + colW / 2.0f) - (VIRTUAL_WIDTH / g_renderMapScale / 2.0f) + (mouseOffsetX * maxLookAhead);
 
     camX += (targetCamX - camX) * 0.08f;
-    camY = camY_Fixed;
+    float targetCamY = camY_Fixed;
+    camY += (targetCamY - camY) * 0.08f;
 
     if (camX < 0) camX = 0;
+    if (camY < 0) camY = 0;
 
     if (!imgMap.IsNull()) {
-        float maxCamX = imgMap.GetWidth() - (WIN_WIDTH / mapScale);
+        float viewWidthInMap = VIRTUAL_WIDTH / g_renderMapScale;
+        float viewHeightInMap = VIRTUAL_HEIGHT / g_renderMapScale;
+        float maxCamX = (float)imgMap.GetWidth() - viewWidthInMap;
         if (camX > maxCamX) camX = maxCamX;
+        float maxCamY = (float)imgMap.GetHeight() - viewHeightInMap;
+        if (camY > maxCamY) camY = maxCamY;
+
+        if (camX < 0) camX = 0;
+        if (camY < 0) camY = 0;
     }
 }
 
-// --- [렌더링 함수] ---
 void Render(HDC hDC) {
     HDC hMemDC = CreateCompatibleDC(hDC);
-    HBITMAP hMemBmp = CreateCompatibleBitmap(hDC, WIN_WIDTH, WIN_HEIGHT);
+    float g_scaleX = (float)WIN_WIDTH / VIRTUAL_WIDTH;
+    float g_scaleY = (float)WIN_HEIGHT / VIRTUAL_HEIGHT;
+
+    HBITMAP hMemBmp = CreateCompatibleBitmap(hDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hMemBmp);
 
     SetGraphicsMode(hMemDC, GM_ADVANCED);
-    PatBlt(hMemDC, 0, 0, WIN_WIDTH, WIN_HEIGHT, BLACKNESS);
+    PatBlt(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, BLACKNESS);
 
-    float renderMapScale = mapScale;
-    float renderPlayerScale = playerScale;
-    float mapOffsetX = 0.0f;
-    float mapOffsetY = 0.0f;
-
-    int mapW = imgMap.IsNull() ? WIN_WIDTH : imgMap.GetWidth();
-    int mapH = imgMap.IsNull() ? WIN_HEIGHT : imgMap.GetHeight();
-
-    if (g_isFullMapView && !imgMap.IsNull()) {
-        float scaleX = (float)WIN_WIDTH / mapW;
-        float scaleY = (float)WIN_HEIGHT / mapH;
-        renderMapScale = (scaleX < scaleY) ? scaleX : scaleY;
-
-        renderPlayerScale = playerScale * (renderMapScale / mapScale);
-
-        mapOffsetX = (WIN_WIDTH - (mapW * renderMapScale)) / 2.0f;
-        mapOffsetY = (WIN_HEIGHT - (mapH * renderMapScale)) / 2.0f;
-    }
+    int mapW = imgMap.IsNull() ? VIRTUAL_WIDTH : imgMap.GetWidth();
+    int mapH = imgMap.IsNull() ? VIRTUAL_HEIGHT : imgMap.GetHeight();
 
     if (!imgMap.IsNull()) {
         if (g_isFullMapView) {
-            imgMap.Draw(hMemDC,
-                (int)mapOffsetX, (int)mapOffsetY,
-                (int)(mapW * renderMapScale), (int)(mapH * renderMapScale),
-                0, 0, mapW, mapH);
+            imgMap.Draw(hMemDC, (int)g_mapOffsetX, (int)g_mapOffsetY, (int)(mapW * g_renderMapScale), (int)(mapH * g_renderMapScale), 0, 0, mapW, mapH);
         }
         else {
-            imgMap.Draw(hMemDC,
-                0, 0, WIN_WIDTH, WIN_HEIGHT,
-                (int)camX, (int)camY,
-                (int)(WIN_WIDTH / mapScale), (int)(WIN_HEIGHT / mapScale)
-            );
+            imgMap.Draw(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, (int)camX, (int)camY, (int)(VIRTUAL_WIDTH / g_renderMapScale), (int)(VIRTUAL_HEIGHT / g_renderMapScale));
         }
     }
 
     CImage* currentImg = NULL;
     switch (pState) {
-    case IDLE:
-    case JUMP: currentImg = &imgIdle[currentFrame % 11]; break;
-    case WALK: currentImg = &imgWalk[currentFrame % 10]; break;
-    case RUN:  currentImg = &imgRun[currentFrame % 10]; break;
+    case IDLE:         currentImg = &imgIdle[currentFrame]; break;
+    case IDLE_TO_WALK: currentImg = &imgIdleToWalk[min(currentFrame, 3)]; break;
+    case WALK:         currentImg = &imgWalk[currentFrame]; break;
+    case WALK_TO_IDLE: currentImg = &imgWalkToIdle[min(currentFrame, 4)]; break;
+    case RUN:          currentImg = &imgRun[currentFrame]; break;
+    case JUMP_UP:      currentImg = &imgJumpUp[min(currentFrame, 3)]; break;
+    case FALL:         currentImg = &imgFall[min(currentFrame, 3)]; break;
+    case PREVDOWN:     currentImg = &imgPrevDown[min(currentFrame, 1)]; break;
+    case DOWN:         currentImg = &imgDown[0]; break;
+    case POSTDOWN:     currentImg = &imgPostDown[min(currentFrame, 1)]; break;
+    case ROLL:         currentImg = &imgRoll[min(currentFrame, 5)]; break;
+    case ATTACK:       currentImg = &imgAttack[min(currentFrame, 6)]; break;
+    case WALL_GRAB:    currentImg = &imgWallGrab[min(currentFrame, 1)]; break;
+    case WALL_SLIDE:   currentImg = &imgWallSlide[0]; break;
+    case WALL_FLIP:    currentImg = &imgWallFlip[min(currentFrame, 10)]; break;
     }
 
+    float vPX = 0.0f, vPY = 0.0f;
+    float pFitScale = mapScale;
+
+    if (g_isFullMapView) {
+        float fitScale = min((float)VIRTUAL_WIDTH / mapW, (float)VIRTUAL_HEIGHT / mapH);
+        float fitX = (VIRTUAL_WIDTH - mapW * fitScale) / 2.0f;
+        float fitY = (VIRTUAL_HEIGHT - mapH * fitScale) / 2.0f;
+        vPX = pX * fitScale + fitX;
+        vPY = pY * fitScale + fitY;
+        pFitScale = fitScale;
+    }
+    else {
+        vPX = (pX - camX) * mapScale;
+        vPY = (pY - camY) * mapScale;
+    }
+
+    float sPW = 0.0f, sPH = 0.0f, drawX = 0.0f, drawY = 0.0f;
+
     if (currentImg && !currentImg->IsNull()) {
-        int screenPX, screenPY;
+        sPW = currentImg->GetWidth() * playerScale * pFitScale;
+        sPH = currentImg->GetHeight() * playerScale * pFitScale;
 
-        if (g_isFullMapView) {
-            screenPX = (int)(pX * renderMapScale) + (int)mapOffsetX;
-            screenPY = (int)(pY * renderMapScale) + (int)mapOffsetY;
-        }
-        else {
-            screenPX = (int)((pX - camX) * mapScale);
-            screenPY = (int)((pY - camY) * mapScale);
-        }
-
-        int pW = (int)(currentImg->GetWidth() * renderPlayerScale);
-        int pH = (int)(currentImg->GetHeight() * renderPlayerScale);
+        drawX = vPX + (colW * pFitScale) / 2.0f - (sPW / 2.0f);
+        drawY = vPY + (colH * pFitScale) - sPH;
 
         if (isFacingRight) {
-            currentImg->Draw(hMemDC, screenPX, screenPY, pW, pH);
+            currentImg->Draw(hMemDC, (int)drawX, (int)drawY, (int)sPW, (int)sPH);
         }
         else {
-            XFORM xForm = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(screenPX + pW), (float)screenPY };
+            XFORM xForm = { -1.0f, 0.0f, 0.0f, 1.0f, drawX + sPW, drawY };
             SetWorldTransform(hMemDC, &xForm);
-            currentImg->Draw(hMemDC, 0, 0, pW, pH);
+            currentImg->Draw(hMemDC, 0, 0, (int)sPW, (int)sPH);
             XFORM xFormIdentity = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
             SetWorldTransform(hMemDC, &xFormIdentity);
         }
     }
 
-    BitBlt(hDC, 0, 0, WIN_WIDTH, WIN_HEIGHT, hMemDC, 0, 0, SRCCOPY);
+    if (pState == ATTACK && currentFrame < 5) {
+        CImage* slashImg = &imgSlashFX[currentFrame];
+        if (!slashImg->IsNull()) {
+            int sW = (int)(slashImg->GetWidth() * playerScale * pFitScale);
+            int sH = (int)(slashImg->GetHeight() * playerScale * pFitScale);
+
+            XFORM xForm;
+            xForm.eM11 = cos(attackAngle);
+            xForm.eM12 = sin(attackAngle);
+            xForm.eM21 = -sin(attackAngle);
+            xForm.eM22 = cos(attackAngle);
+            xForm.eDx = vPX + (colW * pFitScale) / 2.0f;
+            xForm.eDy = vPY + (colH * pFitScale) / 2.0f;
+            SetWorldTransform(hMemDC, &xForm);
+
+            slashImg->Draw(hMemDC, -sW / 2, -sH / 2, sW, sH);
+
+            XFORM xFormIdentity = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+            SetWorldTransform(hMemDC, &xFormIdentity);
+        }
+    }
+
+    if (g_showDebugRect) {
+        HBRUSH greenBrush = CreateSolidBrush(RGB(0, 255, 0));
+        RECT pRect = { (int)vPX, (int)vPY, (int)(vPX + colW * pFitScale), (int)(vPY + colH * pFitScale) };
+        FrameRect(hMemDC, &pRect, greenBrush);
+        DeleteObject(greenBrush);
+
+        if (pState == ATTACK) {
+            float hitW = 80.0f * pFitScale;
+            float hitH = 60.0f * pFitScale;
+            float hitX = vPX + (colW * pFitScale) / 2.0f + attackDirX * 40.0f * pFitScale - hitW / 2.0f;
+            float hitY = vPY + (colH * pFitScale) / 2.0f + attackDirY * 40.0f * pFitScale - hitH / 2.0f;
+            HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
+            RECT aRect = { (int)hitX, (int)hitY, (int)(hitX + hitW), (int)(hitY + hitH) };
+            FrameRect(hMemDC, &aRect, redBrush);
+            DeleteObject(redBrush);
+        }
+    }
+
+    if (!imgHudBase.IsNull()) {
+        int hW = imgHudBase.GetWidth();
+        int hH = imgHudBase.GetHeight();
+        imgHudBase.Draw(hMemDC, 0, 0, hW * 2, hH * 2);
+    }
+    if (!imgHudBattery.IsNull()) {
+        int bW = imgHudBattery.GetWidth();
+        int bH = imgHudBattery.GetHeight();
+        imgHudBattery.Draw(hMemDC, 10, 5, bW * 2, bH * 2);
+    }
+    if (!imgHudTimer.IsNull()) {
+        int tW = imgHudTimer.GetWidth();
+        int tH = imgHudTimer.GetHeight();
+        imgHudTimer.Draw(hMemDC, (VIRTUAL_WIDTH / 2 - tW - 10), 0, tW * 2, tH * 2);
+    }
+    if (!imgHudInven.IsNull()) {
+        int iW = imgHudInven.GetWidth();
+        int iH = imgHudInven.GetHeight();
+        imgHudInven.Draw(hMemDC, VIRTUAL_WIDTH - iW - 80, 0, iW * 2, iH * 2);
+    }
+
+    if (!imgCursor.IsNull()) {
+        int cW = imgCursor.GetWidth();
+        int cH = imgCursor.GetHeight();
+        imgCursor.Draw(hMemDC, mouseX - (cW / 2), mouseY - (cH / 2), cW * 2, cH * 2);
+    }
+
+    SetStretchBltMode(hDC, HALFTONE);
+    SetBrushOrgEx(hDC, 0, 0, NULL);
+    StretchBlt(hDC, 0, 0, WIN_WIDTH, WIN_HEIGHT, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY);
+
     SelectObject(hMemDC, hOldBmp);
     DeleteObject(hMemBmp);
     DeleteDC(hMemDC);
