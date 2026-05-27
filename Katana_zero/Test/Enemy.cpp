@@ -20,6 +20,9 @@ Enemy::Enemy(float startX, float startY, EnemyType type)
     m_State = EnemyState::IDLE;
     m_CurrentFrame = 0;
     m_LastTime = GetTickCount();
+
+    m_friction = 0.8f;
+    m_knockbackVx = 0.0f;
 }
 
 Enemy::~Enemy() {}
@@ -27,7 +30,26 @@ void Enemy::Init() {}
 
 void Enemy::Update()
 {
-    if (!m_isAlive) return;
+    if (!m_isAlive) {
+        // 죽었을 때도 넉백은 적용 (시체 날아가기 효과)
+        if (fabs(m_knockbackVx) > 0.1f) {
+            float nextX = m_x + m_knockbackVx;
+            if (!CheckCollision((int)(nextX + m_colW / 2), (int)(m_y + m_colH * 0.9f))) {
+                m_x = nextX;
+            }
+            m_knockbackVx *= m_friction;
+        }
+        return;
+    }
+
+    // 넉백 처리
+    if (fabs(m_knockbackVx) > 0.1f) {
+        float nextX = m_x + m_knockbackVx;
+        if (!CheckCollision((int)(nextX + m_colW / 2), (int)(m_y + m_colH * 0.9f))) {
+            m_x = nextX;
+        }
+        m_knockbackVx *= m_friction;
+    }
 
     m_vy += 2.0f;
     if (m_vy > 30.0f) m_vy = 30.0f;
@@ -73,6 +95,11 @@ void Enemy::OnTakeDamage(float damage)
 {
     m_isAlive = false;
     m_State = EnemyState::DEAD;
+}
+
+void Enemy::ApplyKnockback(float vx)
+{
+    m_knockbackVx = vx;
 }
 
 EnemyType Enemy::GetType() const { return m_Type; }

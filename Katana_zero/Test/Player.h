@@ -72,7 +72,13 @@ private:
     float m_attackTargetY;
     float m_attackDirX;
     float m_attackDirY;
+    float m_dashDirX;
+    float m_dashDirY;
     float m_attackAngle;
+
+    float m_attackHitW;
+    float m_attackHitH;
+    float m_attackHitOffset;
 
     // 이미지 에셋
     CImage imgIdle[11], imgWalk[10], imgRun[10], imgJumpUp[4], imgFall[4];
@@ -93,5 +99,13 @@ public:
     // Getters
     float GetX() const { return m_x; }
     float GetY() const { return m_y; }
+    float GetColW() const { return m_colW; }
+    float GetColH() const { return m_colH; }
+    float GetAttackDirX() const { return m_attackDirX; }
+    float GetAttackDirY() const { return m_attackDirY; }
+    float GetAttackHitW() const { return m_attackHitW; }
+    float GetAttackHitH() const { return m_attackHitH; }
+    float GetAttackHitOffset() const { return m_attackHitOffset; }
+    int GetCurrentFrame() const { return m_currentFrame; }
     PlayerState GetState() const { return m_state; }
 };

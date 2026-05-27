@@ -51,7 +51,12 @@ Player::Player() {
 
     m_attackTargetX = 0.0f; m_attackTargetY = 0.0f;
     m_attackDirX = 0.0f; m_attackDirY = 0.0f;
+    m_dashDirX = 0.0f; m_dashDirY = 0.0f;
     m_attackAngle = 0.0f;
+
+    m_attackHitW = 80.0f;
+    m_attackHitH = 60.0f;
+    m_attackHitOffset = 40.0f;
 }
 
 Player::~Player() {}
@@ -156,19 +161,22 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
                 m_attackDirX = 1.0f; m_attackDirY = 0.0f;
             }
 
+            m_dashDirX = m_attackDirX;
+            m_dashDirY = m_attackDirY;
+
             if (dy < 0) {
                 if (m_canAirYDash) {
                     m_canAirYDash = false;
                 }
                 else {
-                    m_attackDirY = 0.0f;
-                    m_attackDirX = (dx >= 0) ? 1.0f : -1.0f;
+                    m_dashDirY = 0.0f;
+                    m_dashDirX = (dx >= 0) ? 1.0f : -1.0f;
                 }
             }
 
             float dashDist = (std::min)(dist, m_dashRadius);
-            m_attackTargetX = m_x + m_attackDirX * dashDist;
-            m_attackTargetY = m_y + m_attackDirY * dashDist;
+            m_attackTargetX = m_x + m_dashDirX * dashDist;
+            m_attackTargetY = m_y + m_dashDirY * dashDist;
         }
     }
     prevLButton = currentLButton;
@@ -211,10 +219,10 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
     if (m_state == PlayerState::ATTACK) {
         float distToTarget = sqrt(pow(m_attackTargetX - m_x, 2) + pow(m_attackTargetY - m_y, 2));
         if (distToTarget > m_dashSpeed) {
-            float nextX = m_x + m_attackDirX * m_dashSpeed;
-            float nextY = m_y + m_attackDirY * m_dashSpeed;
-            if (!CheckMapCollision(nextX, m_y, m_colW, m_colH)) m_x += m_attackDirX * m_dashSpeed;
-            if (!CheckMapCollision(m_x, nextY, m_colW, m_colH)) m_y += m_attackDirY * m_dashSpeed;
+            float nextX = m_x + m_dashDirX * m_dashSpeed;
+            float nextY = m_y + m_dashDirY * m_dashSpeed;
+            if (!CheckMapCollision(nextX, m_y, m_colW, m_colH)) m_x += m_dashDirX * m_dashSpeed;
+            if (!CheckMapCollision(m_x, nextY, m_colW, m_colH)) m_y += m_dashDirY * m_dashSpeed;
         }
         else { m_x = m_attackTargetX; m_y = m_attackTargetY; }
         m_vy = 0.0f; m_vx = 0.0f;
@@ -564,10 +572,10 @@ void Player::Render(HDC hMemDC, float camX, float camY, float mapScale, float pl
         DeleteObject(greenBrush);
 
         if (m_state == PlayerState::ATTACK) {
-            float hitW = 80.0f * pFitScale;
-            float hitH = 60.0f * pFitScale;
-            float hitX = vPX + (m_colW * pFitScale) / 2.0f + m_attackDirX * 40.0f * pFitScale - hitW / 2.0f;
-            float hitY = vPY + (m_colH * pFitScale) / 2.0f + m_attackDirY * 40.0f * pFitScale - hitH / 2.0f;
+            float hitW = m_attackHitW * pFitScale;
+            float hitH = m_attackHitH * pFitScale;
+            float hitX = vPX + (m_colW * pFitScale) / 2.0f + m_attackDirX * m_attackHitOffset * pFitScale - hitW / 2.0f;
+            float hitY = vPY + (m_colH * pFitScale) / 2.0f + m_attackDirY * m_attackHitOffset * pFitScale - hitH / 2.0f;
             HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
             RECT aRect = { (int)hitX, (int)hitY, (int)(hitX + hitW), (int)(hitY + hitH) };
             FrameRect(hMemDC, &aRect, redBrush);

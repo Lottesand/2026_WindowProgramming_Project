@@ -77,6 +77,9 @@ protected:
     int m_CurrentFrame;
     DWORD m_LastTime;
 
+    float m_friction;
+    float m_knockbackVx;
+
 public:
     Enemy(float startX, float startY, EnemyType type);
     virtual ~Enemy();
@@ -85,9 +88,19 @@ public:
     virtual void Update() = 0;
     virtual void Render(HDC hdc) = 0;
     virtual void OnTakeDamage(float damage);
+    virtual void ApplyKnockback(float vx);
 
     EnemyType GetType() const;
     bool GetIsAlive() const;
+
+    float GetX() const { return m_x; }
+    float GetY() const { return m_y; }
+    float GetColW() const { return m_colW; }
+    float GetColH() const { return m_colH; }
+
+    RECT GetRect() const {
+        return { (int)m_x, (int)m_y, (int)(m_x + m_colW), (int)(m_y + m_colH) };
+    }
 };
 
 class Gangster : public Enemy
