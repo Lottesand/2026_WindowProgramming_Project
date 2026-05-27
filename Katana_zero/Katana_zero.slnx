@@ -3,7 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="Engine/Engine.vcxproj" Id="b0675dee-9be7-4209-b2e5-05253947dd83" />
-  <Project Path="Game/Game.vcxproj" Id="d205dc02-9e03-44e5-a89f-abcfdd1959d1" />
   <Project Path="Test/Test.vcxproj" Id="9162f9f4-2d4a-4a6e-9c52-3de680aad1f6" />
 </Solution>
