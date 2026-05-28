@@ -21,8 +21,9 @@ Enemy::Enemy(float startX, float startY, EnemyType type)
     m_CurrentFrame = 0;
     m_LastTime = GetTickCount();
 
-    m_friction = 0.8f;
+    m_friction = 0.92f;
     m_knockbackVx = 0.0f;
+    m_isImmortal = false;
 }
 
 Enemy::~Enemy() {}
@@ -93,6 +94,7 @@ void Enemy::Render(HDC hdc) {}
 
 void Enemy::OnTakeDamage(float damage)
 {
+    if (m_isImmortal) return;
     m_isAlive = false;
     m_State = EnemyState::DEAD;
 }
@@ -373,6 +375,7 @@ void Gangster::Render(HDC hdc)
 
 void Gangster::OnTakeDamage(float damage)
 {
+    if (m_isImmortal) return;
     m_isAlive = false;
     m_ActionState = GangsterAction::HURT_FLY;
     m_vy = -15.0f;
@@ -636,6 +639,7 @@ void Grunt::Render(HDC hdc)
 
 void Grunt::OnTakeDamage(float damage)
 {
+    if (m_isImmortal) return;
     m_isAlive = false;
     m_ActionState = GruntAction::HURT_FLY;
     m_vy = -15.0f;
@@ -906,6 +910,7 @@ void Pomp::Render(HDC hdc)
 
 void Pomp::OnTakeDamage(float damage)
 {
+    if (m_isImmortal) return;
     m_isAlive = false;
     m_ActionState = PompAction::HURT_FLY;
     m_vy = -15.0f;
@@ -1164,6 +1169,7 @@ void ShieldCop::Render(HDC hdc)
 
 void ShieldCop::OnTakeDamage(float damage)
 {
+    if (m_isImmortal) return;
     m_isAlive = false;
     m_ActionState = ShieldCopAction::HURT_FLY;
     m_vy = -15.0f;

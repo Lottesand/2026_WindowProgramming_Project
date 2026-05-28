@@ -31,7 +31,7 @@ Player::Player() {
     m_aniDelayWalkToIdle = 60;
 
     m_aniDelayIdle = 150;
-    m_aniDelayWalk = 100;
+    m_aniDelayWalk = 80;
     m_aniDelayRun = 80;
     m_aniDelayJumpFall = 100;
     m_aniDelayCrouch = 80;
@@ -140,7 +140,7 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
     float worldMouseY = (mouseY - g_mapOffsetY) / g_renderMapScale;
     if (!g_isFullMapView) { worldMouseX += camX; worldMouseY += camY; }
 
-    if (currentLButton && !prevLButton && m_state != PlayerState::ATTACK && m_state != PlayerState::ROLL && m_state != PlayerState::PREVDOWN && m_state != PlayerState::DOWN) {
+    if (currentLButton && !prevLButton && m_state != PlayerState::ATTACK && m_state != PlayerState::PREVDOWN && m_state != PlayerState::DOWN) {
         if (currentTime - m_lastAttackTime >= m_attackCooldown) {
             m_state = PlayerState::ATTACK;
             m_currentFrame = 0;

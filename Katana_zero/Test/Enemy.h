@@ -79,6 +79,7 @@ protected:
 
     float m_friction;
     float m_knockbackVx;
+    bool m_isImmortal;
 
 public:
     Enemy(float startX, float startY, EnemyType type);
@@ -92,6 +93,7 @@ public:
 
     EnemyType GetType() const;
     bool GetIsAlive() const;
+    void SetImmortal(bool immortal) { m_isImmortal = immortal; }
 
     float GetX() const { return m_x; }
     float GetY() const { return m_y; }
