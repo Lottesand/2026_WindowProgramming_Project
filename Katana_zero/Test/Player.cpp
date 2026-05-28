@@ -1,5 +1,8 @@
 #include "Player.h"
 
+extern int g_playerAttackCooldown;
+extern int g_playerAttackDuration;
+
 Player::Player() {
     m_x = 100.0f; m_y = 300.0f;
     m_vx = 0.0f; m_vy = 0.0f;
@@ -17,7 +20,7 @@ Player::Player() {
 
     m_dashRadius = 150.0f;
     m_dashSpeed = 15.0f;
-    m_attackCooldown = 350;
+    m_attackCooldown = (DWORD)g_playerAttackCooldown;
     m_lastAttackTime = 0;
 
     m_wallHangTime = 150;
@@ -366,7 +369,7 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
     // 4. 애니메이션 상태 머신
     PlayerState newState = m_state;
 
-    if (m_state == PlayerState::ATTACK && m_currentFrame >= 7) {
+    if (m_state == PlayerState::ATTACK && m_currentFrame >= 5) {
         newState = m_isJumping ? PlayerState::FALL : PlayerState::IDLE;
     }
     else if (m_state == PlayerState::WALL_FLIP && m_currentFrame >= 10) {
@@ -475,7 +478,7 @@ void Player::UpdateAnimation() {
         if (m_state == PlayerState::JUMP_UP && m_currentFrame >= 4) m_currentFrame = 3;
         if (m_state == PlayerState::FALL && m_currentFrame >= 4) m_currentFrame = 3;
         if (m_state == PlayerState::DOWN && m_currentFrame >= 1) m_currentFrame = 0;
-        if (m_state == PlayerState::ATTACK && m_currentFrame >= 7) m_currentFrame = 7;
+        if (m_state == PlayerState::ATTACK && m_currentFrame >= 5) m_currentFrame = 5;
 
         if (m_state == PlayerState::WALL_GRAB && m_currentFrame >= 2) m_currentFrame = 1;
         if (m_state == PlayerState::WALL_SLIDE && m_currentFrame >= 1) m_currentFrame = 0;

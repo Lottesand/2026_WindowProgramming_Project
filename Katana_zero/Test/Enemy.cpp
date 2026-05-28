@@ -121,48 +121,48 @@ void Gangster::Init()
 
     for (int i = 0; i < 8; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangsteridle/%d.png", i); m_ImgIdle_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangsteridle/%d.png", i); m_ImgIdle_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsteridle/%d.png", i); m_ImgIdle_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsteridle/%d.png", i); m_ImgIdle_L[i].Load(path);
     }
     for (int i = 0; i < 8; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangsterwalk/%d.png", i); m_ImgWalk_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangsterwalk/%d.png", i); m_ImgWalk_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterwalk/%d.png", i); m_ImgWalk_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterwalk/%d.png", i); m_ImgWalk_L[i].Load(path);
     }
     for (int i = 0; i < 7; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangster_aim/%d.png", i); m_ImgAim_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangster_aim/%d.png", i); m_ImgAim_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangster_aim/%d.png", i); m_ImgAim_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangster_aim/%d.png", i); m_ImgAim_L[i].Load(path);
     }
     for (int i = 0; i < 6; ++i)
     {
-        swprintf_s(path, L"assets/spr_fire_1/%d.png", i); m_ImgFire_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_fire_1/%d.png", i); m_ImgFire_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_fire_1/%d.png", i); m_ImgFire_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_fire_1/%d.png", i); m_ImgFire_L[i].Load(path);
     }
     for (int i = 0; i < 6; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangsterturn/%d.png", i); m_ImgTurn_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangsterturn/%d.png", i); m_ImgTurn_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterturn/%d.png", i); m_ImgTurn_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterturn/%d.png", i); m_ImgTurn_L[i].Load(path);
     }
     for (int i = 0; i < 12; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangsterfall/%d.png", i); m_ImgFall_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangsterfall/%d.png", i); m_ImgFall_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterfall/%d.png", i); m_ImgFall_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterfall/%d.png", i); m_ImgFall_L[i].Load(path);
     }
     for (int i = 0; i < 2; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangsterhurtfly/%d.png", i); m_ImgHurtFly_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangsterhurtfly/%d.png", i); m_ImgHurtFly_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterhurtfly/%d.png", i); m_ImgHurtFly_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterhurtfly/%d.png", i); m_ImgHurtFly_L[i].Load(path);
     }
     for (int i = 0; i < 14; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangsterhurtground/%d.png", i); m_ImgHurtGround_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangsterhurtground/%d.png", i); m_ImgHurtGround_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterhurtground/%d.png", i); m_ImgHurtGround_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterhurtground/%d.png", i); m_ImgHurtGround_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_gangsterrun/%d.png", i); m_ImgRun_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_gangsterrun/%d.png", i); m_ImgRun_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterrun/%d.png", i); m_ImgRun_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gangsterrun/%d.png", i); m_ImgRun_L[i].Load(path);
     }
 }
 
@@ -397,48 +397,48 @@ void Grunt::Init()
 
     for (int i = 0; i < 8; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_idle/%d.png", i); m_ImgIdle_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_idle/%d.png", i); m_ImgIdle_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_walk/%d.png", i); m_ImgWalk_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_walk/%d.png", i); m_ImgWalk_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_walk/%d.png", i); m_ImgWalk_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_walk/%d.png", i); m_ImgWalk_L[i].Load(path);
     }
     for (int i = 0; i < 8; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_attack/%d.png", i); m_ImgAttack_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_attack/%d.png", i); m_ImgAttack_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_attack/%d.png", i); m_ImgAttack_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_attack/%d.png", i); m_ImgAttack_L[i].Load(path);
     }
     for (int i = 0; i < 5; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_slash/%d.png", i); m_ImgSlash_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_slash/%d.png", i); m_ImgSlash_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gruntslash/%d.png", i); m_ImgSlash_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_gruntslash/%d.png", i); m_ImgSlash_L[i].Load(path);
     }
     for (int i = 0; i < 8; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_turn/%d.png", i); m_ImgTurn_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_turn/%d.png", i); m_ImgTurn_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_turn/%d.png", i); m_ImgTurn_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_turn/%d.png", i); m_ImgTurn_L[i].Load(path);
     }
     for (int i = 0; i < 13; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_fall/%d.png", i); m_ImgFall_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_fall/%d.png", i); m_ImgFall_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_fall/%d.png", i); m_ImgFall_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_fall/%d.png", i); m_ImgFall_L[i].Load(path);
     }
     for (int i = 0; i < 2; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_hurtfly/%d.png", i); m_ImgHurtFly_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_hurtfly/%d.png", i); m_ImgHurtFly_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_hurtfly/%d.png", i); m_ImgHurtFly_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_hurtfly/%d.png", i); m_ImgHurtFly_L[i].Load(path);
     }
     for (int i = 0; i < 16; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_hurtground/%d.png", i); m_ImgHurtGround_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_hurtground/%d.png", i); m_ImgHurtGround_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_hurtground/%d.png", i); m_ImgHurtGround_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_hurtground/%d.png", i); m_ImgHurtGround_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_grunt_run/%d.png", i); m_ImgRun_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_grunt_run/%d.png", i); m_ImgRun_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_run/%d.png", i); m_ImgRun_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_grunt_run/%d.png", i); m_ImgRun_L[i].Load(path);
     }
 }
 
@@ -661,53 +661,53 @@ void Pomp::Init()
 
     for (int i = 0; i < 8; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_idle/%d.png", i); m_ImgIdle_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_idle/%d.png", i); m_ImgIdle_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_walk/%d.png", i); m_ImgWalk_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_walk/%d.png", i); m_ImgWalk_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_walk/%d.png", i); m_ImgWalk_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_walk/%d.png", i); m_ImgWalk_L[i].Load(path);
     }
     for (int i = 0; i < 6; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_attack/%d.png", i); m_ImgAttack_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_attack/%d.png", i); m_ImgAttack_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_attack/%d.png", i); m_ImgAttack_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_attack/%d.png", i); m_ImgAttack_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_box_idle/%d.png", i); m_ImgBoxIdle_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_box_idle/%d.png", i); m_ImgBoxIdle_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_box_idle/%d.png", i); m_ImgBoxIdle_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_box_idle/%d.png", i); m_ImgBoxIdle_L[i].Load(path);
     }
     for (int i = 0; i < 14; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_box_hit/%d.png", i); m_ImgBoxHit_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_box_hit/%d.png", i); m_ImgBoxHit_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_box_hit/%d.png", i); m_ImgBoxHit_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_box_hit/%d.png", i); m_ImgBoxHit_L[i].Load(path);
     }
     for (int i = 0; i < 6; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_turn/%d.png", i); m_ImgTurn_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_turn/%d.png", i); m_ImgTurn_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_turn/%d.png", i); m_ImgTurn_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_turn/%d.png", i); m_ImgTurn_L[i].Load(path);
     }
     for (int i = 0; i < 13; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_fall/%d.png", i); m_ImgFall_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_fall/%d.png", i); m_ImgFall_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_fall/%d.png", i); m_ImgFall_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_fall/%d.png", i); m_ImgFall_L[i].Load(path);
     }
     for (int i = 0; i < 2; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_hurtfly/%d.png", i); m_ImgHurtFly_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_hurtfly/%d.png", i); m_ImgHurtFly_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_hurtfly/%d.png", i); m_ImgHurtFly_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_hurtfly/%d.png", i); m_ImgHurtFly_L[i].Load(path);
     }
     for (int i = 0; i < 15; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_hurtground/%d.png", i); m_ImgHurtGround_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_hurtground/%d.png", i); m_ImgHurtGround_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_hurtground/%d.png", i); m_ImgHurtGround_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_hurtground/%d.png", i); m_ImgHurtGround_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_pomp_run/%d.png", i); m_ImgRun_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_pomp_run/%d.png", i); m_ImgRun_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_run/%d.png", i); m_ImgRun_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_pomp_run/%d.png", i); m_ImgRun_L[i].Load(path);
     }
 }
 
@@ -932,43 +932,43 @@ void ShieldCop::Init()
 
     for (int i = 0; i < 6; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_idle/%d.png", i); m_ImgIdle_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_idle/%d.png", i); m_ImgIdle_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_walk/%d.png", i); m_ImgWalk_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_walk/%d.png", i); m_ImgWalk_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_walk/%d.png", i); m_ImgWalk_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_walk/%d.png", i); m_ImgWalk_L[i].Load(path);
     }
     for (int i = 0; i < 10; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_run/%d.png", i); m_ImgRun_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_run/%d.png", i); m_ImgRun_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_run/%d.png", i); m_ImgRun_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_run/%d.png", i); m_ImgRun_L[i].Load(path);
     }
     for (int i = 0; i < 8; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_turn/%d.png", i); m_ImgTurn_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_turn/%d.png", i); m_ImgTurn_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_turn/%d.png", i); m_ImgTurn_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_turn/%d.png", i); m_ImgTurn_L[i].Load(path);
     }
     for (int i = 0; i < 19; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_aim/%d.png", i); m_ImgAim_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_aim/%d.png", i); m_ImgAim_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_aim/%d.png", i); m_ImgAim_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_aim/%d.png", i); m_ImgAim_L[i].Load(path);
     }
     for (int i = 0; i < 6; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_bash/%d.png", i); m_ImgBash_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_bash/%d.png", i); m_ImgBash_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_bash/%d.png", i); m_ImgBash_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_bash/%d.png", i); m_ImgBash_L[i].Load(path);
     }
     for (int i = 0; i < 2; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_knockback/%d.png", i); m_ImgKnockback_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_knockback/%d.png", i); m_ImgKnockback_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_knockback/%d.png", i); m_ImgKnockback_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_knockback/%d.png", i); m_ImgKnockback_L[i].Load(path);
     }
     for (int i = 0; i < 15; ++i)
     {
-        swprintf_s(path, L"assets/spr_shieldcop_tragedy_die_1/%d.png", i); m_ImgTragedyDie_R[i].Load(path);
-        swprintf_s(path, L"assets/spr_shieldcop_tragedy_die_1/%d.png", i); m_ImgTragedyDie_L[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_tragedy_die_1/%d.png", i); m_ImgTragedyDie_R[i].Load(path);
+        swprintf_s(path, L"assets/enemy/spr_shieldcop_tragedy_die_1/%d.png", i); m_ImgTragedyDie_L[i].Load(path);
     }
 }
 
