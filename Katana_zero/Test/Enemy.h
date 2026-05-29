@@ -81,12 +81,17 @@ protected:
     float m_knockbackVx;
     bool m_isImmortal;
 
+    // 패턴 관련 (인스턴스별 상태 유지)
+    DWORD m_patternTimer;
+    bool m_isWaiting;
+    float m_walkDistance;
+
 public:
     Enemy(float startX, float startY, EnemyType type);
     virtual ~Enemy();
 
     virtual void Init() = 0;
-    virtual void Update() = 0;
+    virtual void Update(float timeScale) = 0;
     virtual void Render(HDC hdc) = 0;
     virtual void OnTakeDamage(float damage);
     virtual void ApplyKnockback(float vx);
@@ -124,7 +129,7 @@ public:
     virtual ~Gangster();
 
     virtual void Init() override;
-    virtual void Update() override;
+    virtual void Update(float timeScale) override;
     virtual void Render(HDC hdc) override;
     virtual void OnTakeDamage(float damage) override;
 };
@@ -148,7 +153,7 @@ public:
     virtual ~Grunt();
 
     virtual void Init() override;
-    virtual void Update() override;
+    virtual void Update(float timeScale) override;
     virtual void Render(HDC hdc) override;
     virtual void OnTakeDamage(float damage) override;
 };
@@ -173,7 +178,7 @@ public:
     virtual ~Pomp();
 
     virtual void Init() override;
-    virtual void Update() override;
+    virtual void Update(float timeScale) override;
     virtual void Render(HDC hdc) override;
     virtual void OnTakeDamage(float damage) override;
 };
@@ -196,7 +201,7 @@ public:
     virtual ~ShieldCop();
 
     virtual void Init() override;
-    virtual void Update() override;
+    virtual void Update(float timeScale) override;
     virtual void Render(HDC hdc) override;
     virtual void OnTakeDamage(float damage) override;
 };

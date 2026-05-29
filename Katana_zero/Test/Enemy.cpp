@@ -24,17 +24,20 @@ Enemy::Enemy(float startX, float startY, EnemyType type)
     m_friction = 0.92f;
     m_knockbackVx = 0.0f;
     m_isImmortal = false;
+
+    m_patternTimer = GetTickCount();
+    m_isWaiting = false;
+    m_walkDistance = 0.0f;
 }
 
 Enemy::~Enemy() {}
 void Enemy::Init() {}
 
-void Enemy::Update()
+void Enemy::Update(float timeScale)
 {
     if (!m_isAlive) {
-        // 죽었을 때도 넉백은 적용 (시체 날아가기 효과)
         if (fabs(m_knockbackVx) > 0.1f) {
-            float nextX = m_x + m_knockbackVx;
+            float nextX = m_x + m_knockbackVx * timeScale;
             if (!CheckCollision((int)(nextX + m_colW / 2), (int)(m_y + m_colH * 0.9f))) {
                 m_x = nextX;
             }
@@ -43,16 +46,15 @@ void Enemy::Update()
         return;
     }
 
-    // 넉백 처리
     if (fabs(m_knockbackVx) > 0.1f) {
-        float nextX = m_x + m_knockbackVx;
+        float nextX = m_x + m_knockbackVx * timeScale;
         if (!CheckCollision((int)(nextX + m_colW / 2), (int)(m_y + m_colH * 0.9f))) {
             m_x = nextX;
         }
         m_knockbackVx *= m_friction;
     }
 
-    m_vy += 2.0f;
+    m_vy += 2.0f * timeScale;
     if (m_vy > 30.0f) m_vy = 30.0f;
 
     int footX = (int)m_x + (int)(m_colW / 2);
@@ -68,10 +70,11 @@ void Enemy::Update()
         m_y += m_vy;
     }
 
-    int nextX = footX + (int)m_vx;
+    // 기본 이동 (서브클래스에서 덮어쓰지 않는 경우)
+    int nextX = footX + (int)(m_vx * timeScale);
     if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
     {
-        m_x += m_vx;
+        m_x += m_vx * timeScale;
         m_State = EnemyState::WALK;
     }
     else
@@ -83,7 +86,7 @@ void Enemy::Update()
     if (m_vy > 0.1f) { m_State = EnemyState::FALL; }
 
     DWORD currentTime = GetTickCount();
-    if (currentTime - m_LastTime >= 100)
+    if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
     {
         m_CurrentFrame++;
         m_LastTime = currentTime;
@@ -166,15 +169,15 @@ void Gangster::Init()
     }
 }
 
-void Gangster::Update()
+void Gangster::Update(float timeScale)
 {
     if (m_ActionState == GangsterAction::HURT_FLY || m_ActionState == GangsterAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == GangsterAction::HURT_FLY)
         {
-            m_vy += 1.5f;
+            m_vy += 1.5f * timeScale;
             m_y += m_vy;
-            m_x += m_vx;
+            m_x += m_vx * timeScale;
 
             if (CheckCollision((int)m_x + (int)(m_colW / 2), (int)m_y + (int)m_colH))
             {
@@ -187,7 +190,7 @@ void Gangster::Update()
         }
 
         DWORD currentTime = GetTickCount();
-        if (currentTime - m_LastTime >= 100)
+        if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
         {
             m_CurrentFrame++;
             m_LastTime = currentTime;
@@ -195,7 +198,7 @@ void Gangster::Update()
         return;
     }
 
-    m_vy += 2.0f;
+    m_vy += 2.0f * timeScale;
     if (m_vy > 30.0f) m_vy = 30.0f;
 
     int footX = (int)m_x + (int)(m_colW / 2);
@@ -211,23 +214,18 @@ void Gangster::Update()
         m_y += m_vy;
     }
 
-    static DWORD patternTimer = GetTickCount();
-    static bool isWaiting = false;
-    static float walkDistance = 0.0f;
-    const float MAX_WALK_DISTANCE = 150.0f;
-
     DWORD currentPatternTime = GetTickCount();
 
-    if (isWaiting)
+    if (m_isWaiting)
     {
         m_vx = 0.0f;
         m_State = EnemyState::IDLE;
 
-        if (currentPatternTime - patternTimer >= 2000)
+        if (currentPatternTime - m_patternTimer >= (DWORD)(2000 / timeScale))
         {
-            isWaiting = false;
-            patternTimer = currentPatternTime;
-            walkDistance = 0.0f;
+            m_isWaiting = false;
+            m_patternTimer = currentPatternTime;
+            m_walkDistance = 0.0f;
             m_isFacingLeft = !m_isFacingLeft;
             m_vx = m_isFacingLeft ? -2.0f : 2.0f;
         }
@@ -235,31 +233,31 @@ void Gangster::Update()
     else
     {
         m_State = EnemyState::WALK;
-        int nextX = footX + (int)m_vx;
+        int nextX = footX + (int)(m_vx * timeScale);
 
         if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
         {
-            m_x += m_vx;
-            walkDistance += fabs(m_vx);
+            m_x += m_vx * timeScale;
+            m_walkDistance += fabs(m_vx * timeScale);
             m_isFacingLeft = (m_vx < 0.0f);
 
-            if (walkDistance >= MAX_WALK_DISTANCE)
+            if (m_walkDistance >= 150.0f)
             {
-                isWaiting = true;
-                patternTimer = currentPatternTime;
+                m_isWaiting = true;
+                m_patternTimer = currentPatternTime;
             }
         }
         else
         {
-            isWaiting = true;
-            patternTimer = currentPatternTime;
+            m_isWaiting = true;
+            m_patternTimer = currentPatternTime;
         }
     }
 
     if (m_vy > 0.1f) { m_State = EnemyState::FALL; }
 
     DWORD currentTime = GetTickCount();
-    if (currentTime - m_LastTime >= 100)
+    if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
     {
         m_CurrentFrame++;
         m_LastTime = currentTime;
@@ -442,15 +440,15 @@ void Grunt::Init()
     }
 }
 
-void Grunt::Update()
+void Grunt::Update(float timeScale)
 {
     if (m_ActionState == GruntAction::HURT_FLY || m_ActionState == GruntAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == GruntAction::HURT_FLY)
         {
-            m_vy += 1.5f;
+            m_vy += 1.5f * timeScale;
             m_y += m_vy;
-            m_x += m_vx;
+            m_x += m_vx * timeScale;
 
             if (CheckCollision((int)m_x + (int)(m_colW / 2), (int)m_y + (int)m_colH))
             {
@@ -463,7 +461,7 @@ void Grunt::Update()
         }
 
         DWORD currentTime = GetTickCount();
-        if (currentTime - m_LastTime >= 100)
+        if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
         {
             m_CurrentFrame++;
             m_LastTime = currentTime;
@@ -471,7 +469,7 @@ void Grunt::Update()
         return;
     }
 
-    m_vy += 2.0f;
+    m_vy += 2.0f * timeScale;
     if (m_vy > 30.0f) m_vy = 30.0f;
 
     int footX = (int)m_x + (int)(m_colW / 2);
@@ -487,23 +485,18 @@ void Grunt::Update()
         m_y += m_vy;
     }
 
-    static DWORD patternTimer = GetTickCount();
-    static bool isWaiting = false;
-    static float walkDistance = 0.0f;
-    const float MAX_WALK_DISTANCE = 120.0f;
-
     DWORD currentPatternTime = GetTickCount();
 
-    if (isWaiting)
+    if (m_isWaiting)
     {
         m_vx = 0.0f;
         m_State = EnemyState::IDLE;
 
-        if (currentPatternTime - patternTimer >= 1500)
+        if (currentPatternTime - m_patternTimer >= (DWORD)(1500 / timeScale))
         {
-            isWaiting = false;
-            patternTimer = currentPatternTime;
-            walkDistance = 0.0f;
+            m_isWaiting = false;
+            m_patternTimer = currentPatternTime;
+            m_walkDistance = 0.0f;
             m_isFacingLeft = !m_isFacingLeft;
             m_vx = m_isFacingLeft ? -2.5f : 2.5f;
         }
@@ -511,31 +504,31 @@ void Grunt::Update()
     else
     {
         m_State = EnemyState::WALK;
-        int nextX = footX + (int)m_vx;
+        int nextX = footX + (int)(m_vx * timeScale);
 
         if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
         {
-            m_x += m_vx;
-            walkDistance += fabs(m_vx);
+            m_x += m_vx * timeScale;
+            m_walkDistance += fabs(m_vx * timeScale);
             m_isFacingLeft = (m_vx < 0.0f);
 
-            if (walkDistance >= MAX_WALK_DISTANCE)
+            if (m_walkDistance >= 120.0f)
             {
-                isWaiting = true;
-                patternTimer = currentPatternTime;
+                m_isWaiting = true;
+                m_patternTimer = currentPatternTime;
             }
         }
         else
         {
-            isWaiting = true;
-            patternTimer = currentPatternTime;
+            m_isWaiting = true;
+            m_patternTimer = currentPatternTime;
         }
     }
 
     if (m_vy > 0.1f) { m_State = EnemyState::FALL; }
 
     DWORD currentTime = GetTickCount();
-    if (currentTime - m_LastTime >= 100)
+    if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
     {
         m_CurrentFrame++;
         m_LastTime = currentTime;
@@ -711,15 +704,15 @@ void Pomp::Init()
     }
 }
 
-void Pomp::Update()
+void Pomp::Update(float timeScale)
 {
     if (m_ActionState == PompAction::HURT_FLY || m_ActionState == PompAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == PompAction::HURT_FLY)
         {
-            m_vy += 1.5f;
+            m_vy += 1.5f * timeScale;
             m_y += m_vy;
-            m_x += m_vx;
+            m_x += m_vx * timeScale;
 
             if (CheckCollision((int)m_x + (int)(m_colW / 2), (int)m_y + (int)m_colH))
             {
@@ -732,7 +725,7 @@ void Pomp::Update()
         }
 
         DWORD currentTime = GetTickCount();
-        if (currentTime - m_LastTime >= 100)
+        if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
         {
             m_CurrentFrame++;
             m_LastTime = currentTime;
@@ -740,7 +733,7 @@ void Pomp::Update()
         return;
     }
 
-    m_vy += 2.0f;
+    m_vy += 2.0f * timeScale;
     if (m_vy > 30.0f) m_vy = 30.0f;
 
     int footX = (int)m_x + (int)(m_colW / 2);
@@ -756,23 +749,18 @@ void Pomp::Update()
         m_y += m_vy;
     }
 
-    static DWORD patternTimer = GetTickCount();
-    static bool isWaiting = false;
-    static float walkDistance = 0.0f;
-    const float MAX_WALK_DISTANCE = 100.0f;
-
     DWORD currentPatternTime = GetTickCount();
 
-    if (isWaiting)
+    if (m_isWaiting)
     {
         m_vx = 0.0f;
         m_State = EnemyState::IDLE;
 
-        if (currentPatternTime - patternTimer >= 1800)
+        if (currentPatternTime - m_patternTimer >= (DWORD)(1800 / timeScale))
         {
-            isWaiting = false;
-            patternTimer = currentPatternTime;
-            walkDistance = 0.0f;
+            m_isWaiting = false;
+            m_patternTimer = currentPatternTime;
+            m_walkDistance = 0.0f;
             m_isFacingLeft = !m_isFacingLeft;
             m_vx = m_isFacingLeft ? -2.2f : 2.2f;
         }
@@ -780,31 +768,31 @@ void Pomp::Update()
     else
     {
         m_State = EnemyState::WALK;
-        int nextX = footX + (int)m_vx;
+        int nextX = footX + (int)(m_vx * timeScale);
 
         if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
         {
-            m_x += m_vx;
-            walkDistance += fabs(m_vx);
+            m_x += m_vx * timeScale;
+            m_walkDistance += fabs(m_vx * timeScale);
             m_isFacingLeft = (m_vx < 0.0f);
 
-            if (walkDistance >= MAX_WALK_DISTANCE)
+            if (m_walkDistance >= 100.0f)
             {
-                isWaiting = true;
-                patternTimer = currentPatternTime;
+                m_isWaiting = true;
+                m_patternTimer = currentPatternTime;
             }
         }
         else
         {
-            isWaiting = true;
-            patternTimer = currentPatternTime;
+            m_isWaiting = true;
+            m_patternTimer = currentPatternTime;
         }
     }
 
     if (m_vy > 0.1f) { m_State = EnemyState::FALL; }
 
     DWORD currentTime = GetTickCount();
-    if (currentTime - m_LastTime >= 100)
+    if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
     {
         m_CurrentFrame++;
         m_LastTime = currentTime;
@@ -972,15 +960,15 @@ void ShieldCop::Init()
     }
 }
 
-void ShieldCop::Update()
+void ShieldCop::Update(float timeScale)
 {
     if (m_ActionState == ShieldCopAction::HURT_FLY || m_ActionState == ShieldCopAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == ShieldCopAction::HURT_FLY)
         {
-            m_vy += 1.5f;
+            m_vy += 1.5f * timeScale;
             m_y += m_vy;
-            m_x += m_vx;
+            m_x += m_vx * timeScale;
 
             if (CheckCollision((int)m_x + (int)(m_colW / 2), (int)m_y + (int)m_colH))
             {
@@ -993,7 +981,7 @@ void ShieldCop::Update()
         }
 
         DWORD currentTime = GetTickCount();
-        if (currentTime - m_LastTime >= 100)
+        if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
         {
             m_CurrentFrame++;
             m_LastTime = currentTime;
@@ -1001,7 +989,7 @@ void ShieldCop::Update()
         return;
     }
 
-    m_vy += 2.0f;
+    m_vy += 2.0f * timeScale;
     if (m_vy > 30.0f) m_vy = 30.0f;
 
     int footX = (int)m_x + (int)(m_colW / 2);
@@ -1017,23 +1005,18 @@ void ShieldCop::Update()
         m_y += m_vy;
     }
 
-    static DWORD patternTimer = GetTickCount();
-    static bool isWaiting = false;
-    static float walkDistance = 0.0f;
-    const float MAX_WALK_DISTANCE = 140.0f;
-
     DWORD currentPatternTime = GetTickCount();
 
-    if (isWaiting)
+    if (m_isWaiting)
     {
         m_vx = 0.0f;
         m_State = EnemyState::IDLE;
 
-        if (currentPatternTime - patternTimer >= 2200)
+        if (currentPatternTime - m_patternTimer >= (DWORD)(2200 / timeScale))
         {
-            isWaiting = false;
-            patternTimer = currentPatternTime;
-            walkDistance = 0.0f;
+            m_isWaiting = false;
+            m_patternTimer = currentPatternTime;
+            m_walkDistance = 0.0f;
             m_isFacingLeft = !m_isFacingLeft;
             m_vx = m_isFacingLeft ? -1.8f : 1.8f;
         }
@@ -1041,31 +1024,31 @@ void ShieldCop::Update()
     else
     {
         m_State = EnemyState::WALK;
-        int nextX = footX + (int)m_vx;
+        int nextX = footX + (int)(m_vx * timeScale);
 
         if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
         {
-            m_x += m_vx;
-            walkDistance += fabs(m_vx);
+            m_x += m_vx * timeScale;
+            m_walkDistance += fabs(m_vx * timeScale);
             m_isFacingLeft = (m_vx < 0.0f);
 
-            if (walkDistance >= MAX_WALK_DISTANCE)
+            if (m_walkDistance >= 140.0f)
             {
-                isWaiting = true;
-                patternTimer = currentPatternTime;
+                m_isWaiting = true;
+                m_patternTimer = currentPatternTime;
             }
         }
         else
         {
-            isWaiting = true;
-            patternTimer = currentPatternTime;
+            m_isWaiting = true;
+            m_patternTimer = currentPatternTime;
         }
     }
 
     if (m_vy > 0.1f) { m_State = EnemyState::FALL; }
 
     DWORD currentTime = GetTickCount();
-    if (currentTime - m_LastTime >= 100)
+    if (currentTime - m_LastTime >= (DWORD)(100 / timeScale))
     {
         m_CurrentFrame++;
         m_LastTime = currentTime;

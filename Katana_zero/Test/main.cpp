@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <vector>
 #include <time.h>
+#include <objidl.h>
+#include <gdiplus.h>
+#pragma comment(lib, "Gdiplus.lib")
 #include "Enemy.h"
 #include "Player.h"
 #include "Physics.h"
@@ -75,7 +78,7 @@ float g_slashWidth = 10.0f;        // 네온 슬래시(공격 이펙트)의 궤�
 float g_shakeIntensity = 10.0f;    // 화면 흔들림(Shake)의 강도 (10px 이내)
 float g_hitShakeForce = 15.0f;     // 적 타격 시 공격 방향으로 카메라가 밀려나는 힘의 크기
 float g_shakeDecay = 0.85f;        // 흔들림 감쇄율 (매 프레임마다 강도가 줄어드는 비율)
-
+    
 // [실시간 카메라 상태 관리 변수]
 float g_curShakeX = 0.0f;          // 현재 프레임에 적용된 실제 흔들림 X 오프셋
 float g_curShakeY = 0.0f;          // 현재 프레임에 적용된 실제 흔들림 Y 오프셋
@@ -85,8 +88,15 @@ float g_shakeTrauma = 0.3f;        // 흔들림의 누적 강도 (0.0 ~ 1.0, 시
 
 // [타격 타이밍 및 수명 설정]
 int g_neonTrailLife = 6;           // 네온 궤적 및 역경직 지속 시간 (프레임)
-int g_playerAttackCooldown = 100;  // 플레이어 공격 재사용 대기시간 (ms)
+int g_playerAttackCooldown = 150;  // 플레이어 공격 재사용 대기시간 (ms)
 int g_playerAttackDuration = 2;    // 플레이어 공격 애니메이션 지속 프레임 (후딜 조절용)
+int g_playerAfterImageInterval = 15; // 잔상 생성 간격 (ms)
+float g_timeSlowScale = 0.3f;        // 슬로우 모션 시 시간 흐름 배율 (0.1 ~ 1.0)
+int g_slowMoDurationLimit = 5000;    // 슬로우 모션 지속 시간 (ms)
+float g_slowMoJumpForceScale = 1.2f;     // 슬로우 모션 시 점프 궤적 보정 (1.0이면 일반과 동일, 1.2면 약간 더 높게)
+float g_slowMoMoveForceScale = 1.0f;     // 슬로우 모션 시 이동 궤적 보정 (1.0이면 일반과 동일한 거리)
+int g_maxJumpHoldTime = 200;         // 점프 키 유지가 인정되는 최대 시간 (ms)
+
 
 // ==============================================================================
 // 🛠️ [전역 변수 및 상태 정의]
@@ -169,6 +179,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
     ShowWindow(g_hWnd, nCmdShow);
     srand((unsigned int)time(NULL));
 
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
     MSG msg;
     DWORD prevTime = GetTickCount();
 
@@ -182,7 +196,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
             DWORD currentTime = GetTickCount();
             if (currentTime - prevTime >= 16) {
                 UpdateScreenScale();
-                
+
                 bool curF = (GetAsyncKeyState('F') & 0x8000) != 0;
                 if (curF && !g_prevFState) g_isFullMapView = !g_isFullMapView;
                 g_prevFState = curF;
@@ -199,7 +213,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
                 if (!g_isTimePaused) {
                     g_Player.Update(mouseX, mouseY, camX, camY, g_renderMapScale, g_mapOffsetX, g_mapOffsetY, g_isFullMapView);
                 }
-                
+
+                float currentTimeScale = g_Player.GetIsSlowMo() ? g_timeSlowScale : 1.0f;
+
                 static int lastAttackFrame = -1;
                 if (!g_isTimePaused && g_Player.GetState() == PlayerState::ATTACK) {
                     int curFrame = g_Player.GetCurrentFrame();
@@ -232,18 +248,18 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
 
                                     // 1. Neon Trail 생성 (데이터 완전 초기화)
                                     NeonTrail trail;
-                                    trail.x = ex; 
+                                    trail.x = ex;
                                     trail.y = ey;
-                                    trail.startX = ex - ux * 1000.0f; 
+                                    trail.startX = ex - ux * 1000.0f;
                                     trail.startY = ey - uy * 1000.0f;
-                                    trail.endX = ex + ux * 3000.0f; 
+                                    trail.endX = ex + ux * 3000.0f;
                                     trail.endY = ey + uy * 3000.0f;
-                                    trail.dirX = ux; 
+                                    trail.dirX = ux;
                                     trail.dirY = uy;
                                     trail.angle = atan2(uy, ux);
                                     trail.length = 0.0f;
                                     trail.maxLength = 4000.0f;
-                                    trail.life = g_neonTrailLife; 
+                                    trail.life = g_neonTrailLife;
                                     trail.maxLife = g_neonTrailLife;
                                     g_NeonTrails.push_back(trail);
 
@@ -263,7 +279,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
                                     // 3. 카메라 흔들림 트리거
                                     g_camPushX = ux * g_hitShakeForce * 2.0f;
                                     g_camPushY = uy * g_hitShakeForce * 2.0f;
-                                    g_shakeTrauma = 1.0f; 
+                                    g_shakeTrauma = 1.0f;
 
                                     // 4. 지연된 타격 판정 (VFX 끝난 후)
                                     PendingHit ph;
@@ -278,28 +294,32 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
                     }
                 }
                 else if (!g_isTimePaused) lastAttackFrame = -1;
-
+                
                 if (!g_isTimePaused) {
-                    for (auto& enemyObj : g_Enemies) if (enemyObj) enemyObj->Update();
+                    for (auto& enemyObj : g_Enemies) if (enemyObj) {
+                        enemyObj->Update(currentTimeScale); 
+                    }
                 }
 
                 // --- [VFX 업데이트 로직] ---
                 bool hasActiveVFX = false;
 
-                // 네온 궤적 업데이트
+                // 네온 궤적 업데이트 (시간 배율 적용)
                 for (auto it = g_NeonTrails.begin(); it != g_NeonTrails.end(); ) {
-                    it->life--;
+                    it->life -= (int)(1.0f / currentTimeScale); // 슬로우 시 수명 천천히 감소
                     if (it->life <= 0) it = g_NeonTrails.erase(it);
                     else { 
-                        it->length += it->maxLength / (it->maxLife / 2.0f); 
+                        it->length += (it->maxLength / (it->maxLife / 2.0f)) * currentTimeScale; 
                         hasActiveVFX = true; 
                         it++; 
                     }
                 }
 
-                // 이미지 VFX 업데이트
+                // 이미지 VFX 업데이트 (시간 배율 적용)
                 for (auto it = g_HitVFXs.begin(); it != g_HitVFXs.end(); ) {
-                    if (currentTime - it->lastTime >= 40) { it->currentFrame++; it->lastTime = currentTime; }
+                    if (currentTime - it->lastTime >= (DWORD)(40 / currentTimeScale)) { 
+                        it->currentFrame++; it->lastTime = currentTime; 
+                    }
                     if (it->currentFrame >= it->maxFrame) it = g_HitVFXs.erase(it);
                     else { hasActiveVFX = true; it++; }
                 }
@@ -316,7 +336,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
                     }
                     else it++;
                 }
-                
+
                 if (g_isTimePaused && !hasActiveVFX) g_isTimePaused = false;
 
                 if (!g_isTimePaused) g_Player.UpdateAnimation();
@@ -326,6 +346,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
             }
         }
     }
+
+    Gdiplus::GdiplusShutdown(gdiplusToken);
     return (int)msg.wParam;
 }
 
@@ -441,28 +463,53 @@ void Render(HDC hDC) {
     float cFS = (scX < scY) ? scX : scY;
     float cFX = (fW - fCW * cFS) / 2.0f; float cFY = (fH - fCH * cFS) / 2.0f;
 
-    // 1. 네온 궤적 (Neon Trail) 렌더링
-    for (const auto& tr : g_NeonTrails) {
-        float pFS = g_isFullMapView ? g_renderMapScale : mapScale;
-        bool isP = (GetTickCount() / 50) % 2 == 0; 
-        COLORREF dC = isP ? RGB(255, 0, 255) : RGB(0, 255, 255);
-        int segs = 20; 
-        float sLen = tr.length / segs;
-        for (int i = 0; i < segs; ++i) {
-            float sD = i * sLen, eD = (i + 1) * sLen;
-            float eA = 1.0f, prog = (float)i / segs;
-            if (prog < 0.15f) eA = prog / 0.15f; else if (prog > 0.85f) eA = (1.0f - prog) / 0.15f;
-            float sX = tr.startX + tr.dirX * sD, sY = tr.startY + tr.dirY * sD;       
-            float eX = tr.startX + tr.dirX * eD, eY = tr.startY + tr.dirY * eD;
-            float vSX, vSY, vEX, vEY;
-            if (g_isFullMapView) { vSX = sX * cFS + cFX; vSY = sY * cFS + cFY; vEX = eX * cFS + cFX; vEY = eY * cFS + cFY; }
-            else { vSX = (sX - camX) * mapScale; vSY = (sY - camY) * mapScale; vEX = (eX - camX) * mapScale; vEY = (eY - camY) * mapScale; }
-            float bW = g_slashWidth * pFS * (tr.life / (float)tr.maxLife) * 1.5f; if (bW < 1.0f) bW = 1.0f;
-            COLORREF fC = RGB((int)(GetRValue(dC) * eA), (int)(GetGValue(dC) * eA), (int)(GetBValue(dC) * eA));
-            HPEN hP = CreatePen(PS_SOLID, (int)bW, fC); 
-            HPEN hOP = (HPEN)SelectObject(hMemDC, hP);
-            MoveToEx(hMemDC, (int)vSX, (int)vSY, NULL); LineTo(hMemDC, (int)vEX, (int)vEY);
-            SelectObject(hMemDC, hOP); DeleteObject(hP);
+    // --- [슬로우 모션 비네팅(Vignette) 효과] ---
+    // 플레이어와 VFX보다 먼저 그려서, 플레이어/VFX는 밝게 유지하고 배경/적만 어둡게 처리
+    if (g_Player.GetIsSlowMo()) {
+        Gdiplus::Graphics graphics(hMemDC);
+        Gdiplus::Rect fullRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        
+        Gdiplus::GraphicsPath path;
+        path.AddRectangle(fullRect);
+
+        Gdiplus::PathGradientBrush pgb(&path);
+        Gdiplus::Color centerColor(0, 0, 0, 0); // 중심은 투명
+        pgb.SetCenterColor(centerColor);
+        pgb.SetCenterPoint(Gdiplus::PointF(VIRTUAL_WIDTH / 2.0f, VIRTUAL_HEIGHT / 2.0f));
+
+        Gdiplus::Color edgeColors[] = { Gdiplus::Color(180, 0, 0, 0) }; // 가장자리는 불투명한 검정 (알파 180)
+        int count = 1;
+        pgb.SetSurroundColors(edgeColors, &count);
+        
+        pgb.SetFocusScales(0.2f, 0.2f); 
+
+        graphics.FillRectangle(&pgb, fullRect);
+    }
+
+    // 1. 네온 궤적 (Neon Trail) 렌더링 - 슬로우 모션 아닐 때만 렌더링
+    if (!g_Player.GetIsSlowMo()) {
+        for (const auto& tr : g_NeonTrails) {
+            float pFS = g_isFullMapView ? g_renderMapScale : mapScale;
+            bool isP = (GetTickCount() / 50) % 2 == 0; 
+            COLORREF dC = isP ? RGB(255, 0, 255) : RGB(0, 255, 255);
+            int segs = 20; 
+            float sLen = tr.length / segs;
+            for (int i = 0; i < segs; ++i) {
+                float sD = i * sLen, eD = (i + 1) * sLen;
+                float eA = 1.0f, prog = (float)i / segs;
+                if (prog < 0.15f) eA = prog / 0.15f; else if (prog > 0.85f) eA = (1.0f - prog) / 0.15f;
+                float sX = tr.startX + tr.dirX * sD, sY = tr.startY + tr.dirY * sD;       
+                float eX = tr.startX + tr.dirX * eD, eY = tr.startY + tr.dirY * eD;
+                float vSX, vSY, vEX, vEY;
+                if (g_isFullMapView) { vSX = sX * cFS + cFX; vSY = sY * cFS + cFY; vEX = eX * cFS + cFX; vEY = eY * cFS + cFY; }
+                else { vSX = (sX - camX) * mapScale; vSY = (sY - camY) * mapScale; vEX = (eX - camX) * mapScale; vEY = (eY - camY) * mapScale; }
+                float bW = g_slashWidth * pFS * (tr.life / (float)tr.maxLife) * 1.5f; if (bW < 1.0f) bW = 1.0f;
+                COLORREF fC = RGB((int)(GetRValue(dC) * eA), (int)(GetGValue(dC) * eA), (int)(GetBValue(dC) * eA));
+                HPEN hP = CreatePen(PS_SOLID, (int)bW, fC); 
+                HPEN hOP = (HPEN)SelectObject(hMemDC, hP);
+                MoveToEx(hMemDC, (int)vSX, (int)vSY, NULL); LineTo(hMemDC, (int)vEX, (int)vEY);
+                SelectObject(hMemDC, hOP); DeleteObject(hP);
+            }
         }
     }
 
@@ -484,6 +531,7 @@ void Render(HDC hDC) {
     }
 
     g_Player.Render(hMemDC, camX, camY, mapScale, playerScale, g_renderMapScale, g_mapOffsetX, g_mapOffsetY, g_isFullMapView, g_showDebugRect);
+
     if (!imgHudBase.IsNull()) imgHudBase.Draw(hMemDC, 0, 0, imgHudBase.GetWidth() * 2, imgHudBase.GetHeight() * 2);
     if (!imgHudBattery.IsNull()) imgHudBattery.Draw(hMemDC, 10, 5, imgHudBattery.GetWidth() * 2, imgHudBattery.GetHeight() * 2);
     if (!imgHudTimer.IsNull()) imgHudTimer.Draw(hMemDC, (VIRTUAL_WIDTH / 2 - imgHudTimer.GetWidth() - 10), 0, imgHudTimer.GetWidth() * 2, imgHudTimer.GetHeight() * 2);

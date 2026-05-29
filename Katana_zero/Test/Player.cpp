@@ -1,7 +1,15 @@
 #include "Player.h"
+#include <objidl.h>
+#include <gdiplus.h>
 
 extern int g_playerAttackCooldown;
 extern int g_playerAttackDuration;
+extern int g_playerAfterImageInterval;
+extern float g_timeSlowScale;
+extern int g_slowMoDurationLimit;
+extern float g_slowMoJumpForceScale;
+extern float g_slowMoMoveForceScale;
+extern int g_maxJumpHoldTime;
 
 Player::Player() {
     m_x = 100.0f; m_y = 300.0f;
@@ -49,6 +57,9 @@ Player::Player() {
     m_canJump = true;
     m_canAirYDash = true;
 
+    m_jumpHoldTimer = 0;
+    m_maxJumpHoldTime = 200; // 최대 0.2초 동안만 점프 키 유지 효과 적용
+
     m_wallGrabTime = 0;
     m_wallDir = 0;
 
@@ -60,6 +71,14 @@ Player::Player() {
     m_attackHitW = 80.0f;
     m_attackHitH = 60.0f;
     m_attackHitOffset = 40.0f;
+
+    for (int i = 0; i < 2; i++) {
+        m_afterImages[i].active = false;
+    }
+    m_lastAfterImageTime = GetTickCount();
+
+    m_isSlowMo = false;
+    m_slowMoStartTime = 0;
 }
 
 Player::~Player() {}
@@ -101,6 +120,53 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
     if (CheckSpecificCollision(m_x - 3.0f, m_y, m_colW, m_colH, 3)) touchWallDir = -1;
     else if (CheckSpecificCollision(m_x + 3.0f, m_y, m_colW, m_colH, 3)) touchWallDir = 1;
 
+    // 슬로우 모션 (Shift 키) 처리: 누르고 있는 동안 활성화, 5초 제한 시 키를 떼야 재사용 가능
+    bool isShiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    
+    if (isShiftPressed) {
+        if (m_canSlowMo && !m_isSlowMo) {
+            // 처음 누르기 시작했을 때
+            m_isSlowMo = true;
+            m_slowMoStartTime = currentTime;
+        }
+        else if (m_isSlowMo) {
+            // 계속 누르고 있는 중, 5초 제한 체크
+            if (currentTime - m_slowMoStartTime >= (DWORD)g_slowMoDurationLimit) {
+                m_isSlowMo = false; 
+                m_canSlowMo = false; // 5초 경과 시 키를 떼기 전까지 재발동 금지
+            }
+        }
+    }
+    else {
+        // 키를 떼면 해제 및 재사용 가능 상태로 변경
+        m_isSlowMo = false;
+        m_canSlowMo = true;
+    }
+
+    // 시간 배율 결정
+    float timeScale = m_isSlowMo ? g_timeSlowScale : 1.0f;
+
+    // 슬로우 모션 시 시간 배율에 따른 물리 법칙 보정 (v' = v*dt, g' = g*dt^2 => 동일 궤적 유지)
+    float dt = timeScale;
+    float dtSq = dt * dt;
+
+    // --- [속도 변수들에 시간 배율 적용] ---
+    float currentAccel = m_accelRate * dtSq;     // 가속도: dt^2 비례
+    float currentFriction = m_frictionRate * dtSq; // 마찰력: dt^2 비례
+    float currentDashSpeed = m_dashSpeed * dt;    // 대시 속도: dt 비례
+    float currentRollSpeed = m_moveSpeedRoll * dt; // 구르기 속도: dt 비례
+    float currentWalkSpeed = m_moveSpeedWalk * dt; // 걷기 속도: dt 비례
+    float currentGravityHold = m_gravityHold * dtSq;   // 중력: dt^2 비례
+    float currentGravityNormal = m_gravityNormal * dtSq; // 중력: dt^2 비례
+
+    // 사용자가 조정 가능한 튜닝 변수 적용 (기본 1.0)
+    float jumpScale = dt * g_slowMoJumpForceScale;
+    float wallJumpScale = dt * g_slowMoJumpForceScale; // 벽 점프도 일반 점프 배율 공유
+
+    float currentJumpPower = m_jumpPower * jumpScale;
+    float currentWallJumpPowerY = m_wallJumpPowerY * wallJumpScale;
+    float currentWallJumpPowerX = m_wallJumpPowerX * (m_isSlowMo ? (dt * g_slowMoMoveForceScale) : 1.0f);
+
     bool inAir = m_isJumping || (m_vy != 0.0f);
     bool isJumpKeyPressed = isW || isSpace;
     if (!isJumpKeyPressed) m_canJump = true;
@@ -110,29 +176,32 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
         if (m_state == PlayerState::WALL_GRAB || m_state == PlayerState::WALL_SLIDE) {
             m_state = PlayerState::WALL_FLIP;
             m_currentFrame = 0;
-            m_vy = m_wallJumpPowerY;
-            m_vx = (m_wallDir == 1) ? -m_wallJumpPowerX : m_wallJumpPowerX;
+            m_vy = currentWallJumpPowerY;
+            m_vx = (m_wallDir == 1) ? -currentWallJumpPowerX : currentWallJumpPowerX;
             m_isFacingRight = (m_wallDir == -1);
             m_isJumping = true;
             m_canJump = false;
 
             m_x += (m_wallDir == 1) ? -2.0f : 2.0f;
             touchWallDir = 0;
+            m_jumpHoldTimer = currentTime; // 점프 유지 타이머 시작
         }
         else if (!inAir && touchWallDir != 0 && ((touchWallDir == -1 && isA) || (touchWallDir == 1 && isD))) {
             m_state = PlayerState::WALL_SLIDE;
             m_currentFrame = 0;
             m_wallDir = touchWallDir;
             m_isFacingRight = (m_wallDir == 1);
-            m_vy = m_jumpPower;
+            m_vy = currentJumpPower;
             m_isJumping = true;
             m_canJump = false;
             m_canAirYDash = true;
+            m_jumpHoldTimer = currentTime; // 점프 유지 타이머 시작
         }
         else if (!inAir && m_state != PlayerState::ROLL && m_state != PlayerState::ATTACK && m_state != PlayerState::WALL_FLIP) {
-            m_vy = m_jumpPower;
+            m_vy = currentJumpPower;
             m_isJumping = true;
             m_canJump = false;
+            m_jumpHoldTimer = currentTime; // 점프 유지 타이머 시작
         }
     }
 
@@ -221,17 +290,17 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
 
     if (m_state == PlayerState::ATTACK) {
         float distToTarget = sqrt(pow(m_attackTargetX - m_x, 2) + pow(m_attackTargetY - m_y, 2));
-        if (distToTarget > m_dashSpeed) {
-            float nextX = m_x + m_dashDirX * m_dashSpeed;
-            float nextY = m_y + m_dashDirY * m_dashSpeed;
-            if (!CheckMapCollision(nextX, m_y, m_colW, m_colH)) m_x += m_dashDirX * m_dashSpeed;
-            if (!CheckMapCollision(m_x, nextY, m_colW, m_colH)) m_y += m_dashDirY * m_dashSpeed;
+        if (distToTarget > currentDashSpeed) {
+            float nextX = m_x + m_dashDirX * currentDashSpeed;
+            float nextY = m_y + m_dashDirY * currentDashSpeed;
+            if (!CheckMapCollision(nextX, m_y, m_colW, m_colH)) m_x += m_dashDirX * currentDashSpeed;
+            if (!CheckMapCollision(m_x, nextY, m_colW, m_colH)) m_y += m_dashDirY * currentDashSpeed;
         }
         else { m_x = m_attackTargetX; m_y = m_attackTargetY; }
         m_vy = 0.0f; m_vx = 0.0f;
     }
     else if (m_state == PlayerState::ROLL) {
-        m_vx = m_isFacingRight ? m_moveSpeedRoll : -m_moveSpeedRoll;
+        m_vx = m_isFacingRight ? currentRollSpeed : -currentRollSpeed;
     }
     else if (m_state == PlayerState::WALL_GRAB || m_state == PlayerState::WALL_SLIDE) {
         m_vx = 0.0f;
@@ -240,23 +309,23 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
         // 유저 입력 무시하고 날아가기
     }
     else if (m_state == PlayerState::IDLE_TO_WALK) {
-        if (isA) { targetVx = -m_speedIdleToWalk; m_isFacingRight = false; }
-        if (isD) { targetVx = m_speedIdleToWalk; m_isFacingRight = true; }
+        if (isA) { targetVx = -m_speedIdleToWalk * timeScale; m_isFacingRight = false; }
+        if (isD) { targetVx = m_speedIdleToWalk * timeScale; m_isFacingRight = true; }
     }
     else if (m_state == PlayerState::WALK_TO_IDLE) {
         targetVx = 0.0f;
     }
     else if ((m_state == PlayerState::PREVDOWN || m_state == PlayerState::DOWN || m_state == PlayerState::POSTDOWN) && !isWalkAfterRoll) {}
     else {
-        if (isA) { targetVx = -currentSpeedLimit; m_isFacingRight = false; }
-        if (isD) { targetVx = currentSpeedLimit; m_isFacingRight = true; }
+        if (isA) { targetVx = -currentWalkSpeed; m_isFacingRight = false; }
+        if (isD) { targetVx = currentWalkSpeed; m_isFacingRight = true; }
     }
 
     if (targetVx != 0.0f && m_state != PlayerState::ROLL && m_state != PlayerState::ATTACK && m_state != PlayerState::WALL_GRAB && m_state != PlayerState::WALL_SLIDE && m_state != PlayerState::WALL_FLIP) {
-        m_vx += (targetVx - m_vx) * m_accelRate;
+        m_vx += (targetVx - m_vx) * currentAccel;
     }
     else if (m_state != PlayerState::ROLL && m_state != PlayerState::ATTACK && m_state != PlayerState::WALL_GRAB && m_state != PlayerState::WALL_SLIDE && m_state != PlayerState::WALL_FLIP) {
-        m_vx += (0.0f - m_vx) * m_frictionRate;
+        m_vx += (0.0f - m_vx) * currentFriction;
         if (fabs(m_vx) < 0.1f) m_vx = 0.0f;
     }
 
@@ -301,12 +370,15 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
             }
         }
         else {
-            float currentGravity = (isJumpKeyPressed && m_vy < 0.0f) ? m_gravityHold : m_gravityNormal;
+            // 점프 키 유지 시간 체크 (슬로우 모션 배율 고려)
+            bool isJumpHoldValid = isJumpKeyPressed && (currentTime - m_jumpHoldTimer < (DWORD)(g_maxJumpHoldTime));
+            
+            float currentGravity = (isJumpHoldValid && m_vy < 0.0f) ? currentGravityHold : currentGravityNormal;
             m_vy += currentGravity;
 
-            float maxFall = m_maxFallSpeed;
+            float maxFall = m_maxFallSpeed * timeScale;
             if (m_state == PlayerState::WALL_SLIDE && m_vy >= 0.0f) {
-                maxFall = isS ? m_wallSlideFastSpeed : m_wallSlideSpeed;
+                maxFall = isS ? m_wallSlideFastSpeed * timeScale : m_wallSlideSpeed * timeScale;
                 m_vy = maxFall;
             }
             else if (m_vy > maxFall) {
@@ -441,6 +513,29 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float g_rend
         m_currentFrame = 0;
         m_state = newState;
     }
+
+    // 잔상 기록 로직: ATTACK, ROLL, WALL_FLIP 상태이거나 슬로우 모션 중일 때 기록
+    if (m_state == PlayerState::ATTACK || m_state == PlayerState::ROLL || m_state == PlayerState::WALL_FLIP || m_isSlowMo) {
+        if (currentTime - m_lastAfterImageTime >= (DWORD)g_playerAfterImageInterval) { // 튜닝 변수 적용
+            m_afterImages[1] = m_afterImages[0]; // 이전 잔상을 뒤로 밀기
+            m_afterImages[0].x = m_x;
+            m_afterImages[0].y = m_y;
+            m_afterImages[0].state = m_state;
+            m_afterImages[0].frame = m_currentFrame;
+            m_afterImages[0].isFacingRight = m_isFacingRight;
+            m_afterImages[0].attackAngle = m_attackAngle;
+            m_afterImages[0].active = true;
+            m_lastAfterImageTime = currentTime;
+        }
+    }
+    else {
+        // 해당 상태가 아니고 슬로우 모션도 아니면 점진적으로 비활성화
+        if (currentTime - m_lastAfterImageTime >= (DWORD)g_playerAfterImageInterval) {
+            m_afterImages[1] = m_afterImages[0];
+            m_afterImages[0].active = false;
+            m_lastAfterImageTime = currentTime;
+        }
+    }
 }
 
 void Player::UpdateAnimation() {
@@ -466,6 +561,11 @@ void Player::UpdateAnimation() {
     case PlayerState::WALL_FLIP: targetDelayMs = m_aniDelayWallFlip; break;
     }
 
+    // 슬로우 모션 시 애니메이션 지연 시간을 늘림 (속도를 늦춤)
+    if (m_isSlowMo) {
+        targetDelayMs = (DWORD)(targetDelayMs / g_timeSlowScale);
+    }
+
     if (currentTime - lastTime >= targetDelayMs) {
         m_currentFrame++;
         lastTime = currentTime;
@@ -487,88 +587,174 @@ void Player::UpdateAnimation() {
 }
 
 void Player::Render(HDC hMemDC, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect) {
-    CImage* currentImg = NULL;
-    switch (m_state) {
-    case PlayerState::IDLE:         currentImg = &imgIdle[m_currentFrame]; break;
-    case PlayerState::IDLE_TO_WALK: currentImg = &imgIdleToWalk[(std::min)(m_currentFrame, 3)]; break;
-    case PlayerState::WALK:         currentImg = &imgWalk[m_currentFrame]; break;
-    case PlayerState::WALK_TO_IDLE: currentImg = &imgWalkToIdle[(std::min)(m_currentFrame, 4)]; break;
-    case PlayerState::RUN:          currentImg = &imgRun[m_currentFrame]; break;
-    case PlayerState::JUMP_UP:      currentImg = &imgJumpUp[(std::min)(m_currentFrame, 3)]; break;
-    case PlayerState::FALL:         currentImg = &imgFall[(std::min)(m_currentFrame, 3)]; break;
-    case PlayerState::PREVDOWN:     currentImg = &imgPrevDown[(std::min)(m_currentFrame, 1)]; break;
-    case PlayerState::DOWN:         currentImg = &imgDown[0]; break;
-    case PlayerState::POSTDOWN:     currentImg = &imgPostDown[(std::min)(m_currentFrame, 1)]; break;
-    case PlayerState::ROLL:         currentImg = &imgRoll[(std::min)(m_currentFrame, 5)]; break;
-    case PlayerState::ATTACK:       currentImg = &imgAttack[(std::min)(m_currentFrame, 6)]; break;
-    case PlayerState::WALL_GRAB:    currentImg = &imgWallGrab[(std::min)(m_currentFrame, 1)]; break;
-    case PlayerState::WALL_SLIDE:   currentImg = &imgWallSlide[0]; break;
-    case PlayerState::WALL_FLIP:    currentImg = &imgWallFlip[(std::min)(m_currentFrame, 10)]; break;
-    }
-
-    float vPX = 0.0f, vPY = 0.0f;
-    float pFitScale = mapScale;
-
     int mapW = imgMap.IsNull() ? VIRTUAL_WIDTH : imgMap.GetWidth();
     int mapH = imgMap.IsNull() ? VIRTUAL_HEIGHT : imgMap.GetHeight();
+    float pFitScale = mapScale;
 
-    if (g_isFullMapView) {
-        float fitScale = (std::min)((float)VIRTUAL_WIDTH / mapW, (float)VIRTUAL_HEIGHT / mapH);
-        float fitX = (VIRTUAL_WIDTH - mapW * fitScale) / 2.0f;
-        float fitY = (VIRTUAL_HEIGHT - mapH * fitScale) / 2.0f;
-        vPX = m_x * fitScale + fitX;
-        vPY = m_y * fitScale + fitY;
-        pFitScale = fitScale;
-    }
-    else {
-        vPX = (m_x - camX) * mapScale;
-        vPY = (m_y - camY) * mapScale;
-    }
+    Gdiplus::Graphics graphics(hMemDC);
 
-    float sPW = 0.0f, sPH = 0.0f, drawX = 0.0f, drawY = 0.0f;
+    // --- 잔상 및 본체 렌더링 통합 관리 ---
+    // i = 1 (오래된 잔상: 핑크), i = 0 (최신 잔상: 민트), i = -1 (플레이어 본체)
+    for (int i = 1; i >= -1; i--) {
+        CImage* img = NULL;
+        float curX, curY;
+        PlayerState curState;
+        int curFrame;
+        bool curFacing;
+        float curAngle;
+        bool isActive = false;
 
-    if (currentImg && !currentImg->IsNull()) {
-        sPW = currentImg->GetWidth() * playerScale * pFitScale;
-        sPH = currentImg->GetHeight() * playerScale * pFitScale;
+        if (i >= 0) { // 잔상
+            if (!m_afterImages[i].active) continue;
+            isActive = true;
+            curX = m_afterImages[i].x;
+            curY = m_afterImages[i].y;
+            curState = m_afterImages[i].state;
+            curFrame = m_afterImages[i].frame;
+            curFacing = m_afterImages[i].isFacingRight;
+            curAngle = m_afterImages[i].attackAngle;
 
-        drawX = vPX + (m_colW * pFitScale) / 2.0f - (sPW / 2.0f);
-        drawY = vPY + (m_colH * pFitScale) - sPH;
-
-        if (m_isFacingRight) {
-            currentImg->Draw(hMemDC, (int)drawX, (int)drawY, (int)sPW, (int)sPH);
+            switch (curState) {
+            case PlayerState::IDLE:         img = &imgIdle[curFrame]; break;
+            case PlayerState::IDLE_TO_WALK: img = &imgIdleToWalk[(std::min)(curFrame, 3)]; break;
+            case PlayerState::WALK:         img = &imgWalk[curFrame]; break;
+            case PlayerState::WALK_TO_IDLE: img = &imgWalkToIdle[(std::min)(curFrame, 4)]; break;
+            case PlayerState::RUN:          img = &imgRun[curFrame]; break;
+            case PlayerState::JUMP_UP:      img = &imgJumpUp[(std::min)(curFrame, 3)]; break;
+            case PlayerState::FALL:         img = &imgFall[(std::min)(curFrame, 3)]; break;
+            case PlayerState::PREVDOWN:     img = &imgPrevDown[(std::min)(curFrame, 1)]; break;
+            case PlayerState::DOWN:         img = &imgDown[0]; break;
+            case PlayerState::POSTDOWN:     img = &imgPostDown[(std::min)(curFrame, 1)]; break;
+            case PlayerState::ROLL:         img = &imgRoll[(std::min)(curFrame, 5)]; break;
+            case PlayerState::ATTACK:       img = &imgAttack[(std::min)(curFrame, 6)]; break;
+            case PlayerState::WALL_GRAB:    img = &imgWallGrab[(std::min)(curFrame, 1)]; break;
+            case PlayerState::WALL_SLIDE:   img = &imgWallSlide[0]; break;
+            case PlayerState::WALL_FLIP:    img = &imgWallFlip[(std::min)(curFrame, 10)]; break;
+            }
         }
-        else {
-            XFORM xForm = { -1.0f, 0.0f, 0.0f, 1.0f, drawX + sPW, drawY };
-            SetWorldTransform(hMemDC, &xForm);
-            currentImg->Draw(hMemDC, 0, 0, (int)sPW, (int)sPH);
-            XFORM xFormIdentity = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-            SetWorldTransform(hMemDC, &xFormIdentity);
+        else { // 플레이어 본체 (i == -1)
+            isActive = true;
+            curX = m_x;
+            curY = m_y;
+            curState = m_state;
+            curFrame = m_currentFrame;
+            curFacing = m_isFacingRight;
+            curAngle = m_attackAngle;
+
+            switch (curState) {
+            case PlayerState::IDLE:         img = &imgIdle[curFrame]; break;
+            case PlayerState::IDLE_TO_WALK: img = &imgIdleToWalk[(std::min)(curFrame, 3)]; break;
+            case PlayerState::WALK:         img = &imgWalk[curFrame]; break;
+            case PlayerState::WALK_TO_IDLE: img = &imgWalkToIdle[(std::min)(curFrame, 4)]; break;
+            case PlayerState::RUN:          img = &imgRun[curFrame]; break;
+            case PlayerState::JUMP_UP:      img = &imgJumpUp[(std::min)(curFrame, 3)]; break;
+            case PlayerState::FALL:         img = &imgFall[(std::min)(curFrame, 3)]; break;
+            case PlayerState::PREVDOWN:     img = &imgPrevDown[(std::min)(curFrame, 1)]; break;
+            case PlayerState::DOWN:         img = &imgDown[0]; break;
+            case PlayerState::POSTDOWN:     img = &imgPostDown[(std::min)(curFrame, 1)]; break;
+            case PlayerState::ROLL:         img = &imgRoll[(std::min)(curFrame, 5)]; break;
+            case PlayerState::ATTACK:       img = &imgAttack[(std::min)(curFrame, 6)]; break;
+            case PlayerState::WALL_GRAB:    img = &imgWallGrab[(std::min)(curFrame, 1)]; break;
+            case PlayerState::WALL_SLIDE:   img = &imgWallSlide[0]; break;
+            case PlayerState::WALL_FLIP:    img = &imgWallFlip[(std::min)(curFrame, 10)]; break;
+            }
         }
-    }
 
-    if (m_state == PlayerState::ATTACK && m_currentFrame < 5) {
-        CImage* slashImg = &imgSlashFX[m_currentFrame];
-        if (!slashImg->IsNull()) {
-            int sW = (int)(slashImg->GetWidth() * playerScale * pFitScale);
-            int sH = (int)(slashImg->GetHeight() * playerScale * pFitScale);
+        if (img && !img->IsNull()) {
+            float avPX, avPY;
+            if (g_isFullMapView) {
+                float fitScale = (std::min)((float)VIRTUAL_WIDTH / mapW, (float)VIRTUAL_HEIGHT / mapH);
+                float fitX = (VIRTUAL_WIDTH - mapW * fitScale) / 2.0f;
+                float fitY = (VIRTUAL_HEIGHT - mapH * fitScale) / 2.0f;
+                avPX = curX * fitScale + fitX;
+                avPY = curY * fitScale + fitY;
+                pFitScale = fitScale;
+            }
+            else {
+                avPX = (curX - camX) * mapScale;
+                avPY = (curY - camY) * mapScale;
+                pFitScale = mapScale;
+            }
 
-            XFORM xForm;
-            xForm.eM11 = cos(m_attackAngle);
-            xForm.eM12 = sin(m_attackAngle);
-            xForm.eM21 = -sin(m_attackAngle);
-            xForm.eM22 = cos(m_attackAngle);
-            xForm.eDx = vPX + (m_colW * pFitScale) / 2.0f;
-            xForm.eDy = vPY + (m_colH * pFitScale) / 2.0f;
-            SetWorldTransform(hMemDC, &xForm);
+            float asPW = img->GetWidth() * playerScale * pFitScale;
+            float asPH = img->GetHeight() * playerScale * pFitScale;
+            float adrawX = avPX + (m_colW * pFitScale) / 2.0f - (asPW / 2.0f);
+            float adrawY = avPY + (m_colH * pFitScale) - asPH;
 
-            slashImg->Draw(hMemDC, -sW / 2, -sH / 2, sW, sH);
+            Gdiplus::Bitmap gdiImg(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)img->GetBits());
+            Gdiplus::ImageAttributes attr;
+            Gdiplus::ColorMatrix matrix;
 
-            XFORM xFormIdentity = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-            SetWorldTransform(hMemDC, &xFormIdentity);
+            bool isMintTint = (m_isSlowMo || (i == 0)); // 슬로우 모션 중이거나 첫 번째 잔상
+
+            if (isMintTint) { // 민트 틴트
+                float alpha = (i == -1) ? 1.0f : 0.6f; // 본체는 불투명, 잔상은 반투명
+                matrix = {
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 1.0f, 1.0f, alpha, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+                };
+            }
+            else if (i == 1) { // 핑크 틴트 (두 번째 잔상)
+                matrix = {
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    1.0f, 0.0f, 1.0f, 0.4f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+                };
+            }
+            else { // 일반 렌더링 (슬로우 모션 아닐 때 본체)
+                matrix = {
+                    1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+                };
+            }
+            attr.SetColorMatrix(&matrix, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
+
+            if (curFacing) {
+                graphics.DrawImage(&gdiImg, Gdiplus::RectF(adrawX, adrawY, asPW, asPH), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr);
+            }
+            else {
+                graphics.ScaleTransform(-1.0f, 1.0f);
+                graphics.TranslateTransform(-(adrawX * 2 + asPW), 0);
+                graphics.DrawImage(&gdiImg, Gdiplus::RectF(adrawX, adrawY, asPW, asPH), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr);
+                graphics.ResetTransform();
+            }
+
+            // 공격 시 슬래시 이펙트 (본체 그릴 때만)
+            if (i == -1 && curState == PlayerState::ATTACK && curFrame < 5) {
+                CImage* slashImg = &imgSlashFX[curFrame];
+                if (!slashImg->IsNull()) {
+                    int sW = (int)(slashImg->GetWidth() * playerScale * pFitScale);
+                    int sH = (int)(slashImg->GetHeight() * playerScale * pFitScale);
+                    Gdiplus::Bitmap gdiSlash(slashImg->GetWidth(), slashImg->GetHeight(), slashImg->GetPitch(), PixelFormat32bppARGB, (BYTE*)slashImg->GetBits());
+                    
+                    graphics.TranslateTransform(avPX + (m_colW * pFitScale) / 2.0f, avPY + (m_colH * pFitScale) / 2.0f);
+                    graphics.RotateTransform(curAngle * 180.0f / 3.14159f);
+                    graphics.DrawImage(&gdiSlash, Gdiplus::RectF(-sW / 2.0f, -sH / 2.0f, (float)sW, (float)sH), 0, 0, (float)slashImg->GetWidth(), (float)slashImg->GetHeight(), Gdiplus::UnitPixel, &attr);
+                    graphics.ResetTransform();
+                }
+            }
         }
     }
 
     if (g_showDebugRect) {
+        float vPX = (m_x - camX) * mapScale;
+        float vPY = (m_y - camY) * mapScale;
+        if (g_isFullMapView) {
+            float fitScale = (std::min)((float)VIRTUAL_WIDTH / mapW, (float)VIRTUAL_HEIGHT / mapH);
+            float fitX = (VIRTUAL_WIDTH - mapW * fitScale) / 2.0f;
+            float fitY = (VIRTUAL_HEIGHT - mapH * fitScale) / 2.0f;
+            vPX = m_x * fitScale + fitX;
+            vPY = m_y * fitScale + fitY;
+            pFitScale = fitScale;
+        }
         HBRUSH greenBrush = CreateSolidBrush(RGB(0, 255, 0));
         RECT pRect = { (int)vPX, (int)vPY, (int)(vPX + m_colW * pFitScale), (int)(vPY + m_colH * pFitScale) };
         FrameRect(hMemDC, &pRect, greenBrush);

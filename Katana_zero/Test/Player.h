@@ -64,6 +64,9 @@ private:
     bool m_canRoll;
     bool m_canJump;
     bool m_canAirYDash;
+    
+    DWORD m_jumpHoldTimer;    // 점프 키 유지 시간 측정
+    DWORD m_maxJumpHoldTime;  // 점프 키 입력을 인정하는 최대 시간
 
     DWORD m_wallGrabTime;
     int m_wallDir;
@@ -79,6 +82,22 @@ private:
     float m_attackHitW;
     float m_attackHitH;
     float m_attackHitOffset;
+
+    // 잔상(AfterImage) 구조체
+    struct AfterImageData {
+        float x, y;
+        PlayerState state;
+        int frame;
+        bool isFacingRight;
+        float attackAngle;
+        bool active;
+    };
+    AfterImageData m_afterImages[2];
+    DWORD m_lastAfterImageTime;
+
+    bool m_isSlowMo;
+    bool m_canSlowMo; // Shift 키 재입력 확인용
+    DWORD m_slowMoStartTime;
 
     // 이미지 에셋
     CImage imgIdle[11], imgWalk[10], imgRun[10], imgJumpUp[4], imgFall[4];
@@ -96,6 +115,7 @@ public:
     void UpdateAnimation();
     void Render(HDC hMemDC, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect);
 
+public:
     // Getters
     float GetX() const { return m_x; }
     float GetY() const { return m_y; }
@@ -108,4 +128,5 @@ public:
     float GetAttackHitOffset() const { return m_attackHitOffset; }
     int GetCurrentFrame() const { return m_currentFrame; }
     PlayerState GetState() const { return m_state; }
+    bool GetIsSlowMo() const { return m_isSlowMo; }
 };
