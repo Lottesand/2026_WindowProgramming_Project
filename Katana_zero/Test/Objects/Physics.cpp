@@ -1,13 +1,18 @@
-#include "Physics.h"
+﻿#include "Physics.h"
 
 int GetCollisionType(int targetX, int targetY) {
+    CImage& imgColMap = StageManager::GetColMap();
     if (imgColMap.IsNull()) return 1;
     if (targetX < 0 || targetY < 0 || targetX >= imgColMap.GetWidth() || targetY >= imgColMap.GetHeight()) return 1;
-    COLORREF pixelColor = imgColMap.GetPixel(targetX, targetY);
-    int r = GetRValue(pixelColor); int g = GetGValue(pixelColor); int b = GetBValue(pixelColor);
-    if (r == 0 && g == 255 && b == 0) return 1;
-    if (r == 255 && g == 0 && b == 0) return 2;
-    if (r == 0 && g == 0 && b == 255) return 3;
+    
+    COLORREF pixelColor = imgColMap.GetPixel(targetX, targetY) & 0x00FFFFFF;
+    int r = GetRValue(pixelColor); 
+    int g = GetGValue(pixelColor); 
+    int b = GetBValue(pixelColor);
+    
+    if (g > 200 && r < 50 && b < 50) return 1; // Green
+    if (r > 200 && g < 50 && b < 50) return 2; // Red
+    if (b > 200 && r < 50 && g < 50) return 3; // Blue
     return 0;
 }
 
@@ -40,3 +45,4 @@ bool CheckSpecificCollision(float x, float y, float w, float h, int targetType) 
     if (GetCollisionType((int)(x + w), (int)(y + h)) == targetType) return true;
     return false;
 }
+

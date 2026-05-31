@@ -127,15 +127,29 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Enemy.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="Physics.cpp" />
-    <ClCompile Include="Player.cpp" />
+    <ClCompile Include="Core\Game.cpp" />
+    <ClCompile Include="Core\Input.cpp" />
+    <ClCompile Include="Core\main.cpp" />
+    <ClCompile Include="Effects\EffectManager.cpp" />
+    <ClCompile Include="Objects\Door.cpp" />
+    <ClCompile Include="Objects\Enemy.cpp" />
+    <ClCompile Include="Objects\Physics.cpp" />
+    <ClCompile Include="Objects\Player.cpp" />
+    <ClCompile Include="SceneAndMap\Camera.cpp" />
+    <ClCompile Include="SceneAndMap\StageManager.cpp" />
+    <ClCompile Include="UI\UIManager.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Enemy.h" />
-    <ClInclude Include="Physics.h" />
-    <ClInclude Include="Player.h" />
+    <ClInclude Include="Core\Game.h" />
+    <ClInclude Include="Core\Input.h" />
+    <ClInclude Include="Effects\EffectManager.h" />
+    <ClInclude Include="Objects\Door.h" />
+    <ClInclude Include="Objects\Enemy.h" />
+    <ClInclude Include="Objects\Physics.h" />
+    <ClInclude Include="Objects\Player.h" />
+    <ClInclude Include="SceneAndMap\Camera.h" />
+    <ClInclude Include="SceneAndMap\StageManager.h" />
+    <ClInclude Include="UI\UIManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,0 +1,93 @@
+﻿#pragma once
+#include <windows.h>
+#include <atlimage.h>
+#include <vector>
+#include "../Objects/Enemy.h"
+
+struct NeonTrail {
+    float x, y;
+    float startX, startY;
+    float endX, endY;
+    float dirX, dirY;
+    float angle;
+    float length;
+    float maxLength;
+    int life;
+    int maxLife;
+};
+
+struct HitVFX {
+    float x, y;
+    float angle;
+    int currentFrame;
+    int maxFrame;
+    DWORD lastTime;
+    bool isSlash;
+};
+
+struct JumpCloudVFX {
+    float x, y;
+    float angle;
+    int currentFrame;
+    int maxFrame;
+    DWORD lastTime;
+};
+
+struct DustCloudVFX {
+    float x, y;
+    int currentFrame;
+    int maxFrame;
+    DWORD lastTime;
+    DWORD startTick; // ?ㅼ젣 ?좊땲硫붿씠???쒖옉 ?쒓컙 (?쒕젅?댁슜)
+    bool isFacingRight;
+};
+
+struct LandCloudVFX {
+    float x, y;
+    int currentFrame;
+    int maxFrame;
+    DWORD lastTime;
+};
+
+struct PendingHit {
+    Enemy* target;
+    float kbForce;
+    int remainingFrames;
+};
+
+class EffectManager {
+public:
+    static void Init();
+    static void LoadAssets();
+    static void ReleaseAssets();
+    static void Update(float timeScale, DWORD currentTime);
+    static void Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMapView, float cFS, float cFX, float cFY);
+
+    static void AddNeonTrail(float x, float y, float ux, float uy, float angle);
+    static void AddHitVFX(float x, float y, float angle, DWORD currentTime);
+    static void AddJumpCloudVFX(float x, float y, DWORD currentTime, float angle = 0.0f);
+    static void AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime);
+    static void AddLandCloudVFX(float x, float y, DWORD currentTime);
+    static void AddPendingHit(Enemy* target, float kbForce);
+
+    static bool HasActiveVFX();
+    static bool HasActiveHitVFX();
+
+private:
+    static std::vector<NeonTrail> m_neonTrails;
+    static std::vector<HitVFX> m_hitVFXs;
+    static std::vector<JumpCloudVFX> m_jumpCloudVFXs;
+    static std::vector<DustCloudVFX> m_dustCloudVFXs;
+    static std::vector<LandCloudVFX> m_landCloudVFXs;
+    static std::vector<PendingHit> m_pendingHits;
+
+    static CImage m_imgVfxSlash[5];
+    static CImage m_imgVfxHit[6];
+    static CImage m_imgVfxJumpCloud[4];
+    static CImage m_imgVfxDustCloud[7];
+    static CImage m_imgVfxLandCloud[7];
+
+    static constexpr int m_neonTrailLife = 6;
+    static constexpr float m_slashWidth = 10.0f;
+};
+

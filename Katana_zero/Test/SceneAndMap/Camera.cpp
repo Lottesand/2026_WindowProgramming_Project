@@ -1,0 +1,72 @@
+﻿#include "Camera.h"
+#include <math.h>
+#include <stdlib.h>
+
+float Camera::m_camX = 0.0f;
+float Camera::m_camY = 60.0f;
+float Camera::m_curShakeX = 0.0f;
+float Camera::m_curShakeY = 0.0f;
+float Camera::m_camPushX = 0.0f;
+float Camera::m_camPushY = 0.0f;
+float Camera::m_shakeTrauma = 0.0f;
+
+void Camera::Init() {
+    m_camX = 0.0f;
+    m_camY = 60.0f;
+}
+
+void Camera::Update(float playerX, float playerY, float playerColW, float playerColH, int mouseX, int mouseY, float renderMapScale, int mapWidth, int mapHeight, bool isFullMapView) {
+    if (isFullMapView) return;
+
+    float mOffX = (float)(mouseX - (VIRTUAL_WIDTH / 2)) / (VIRTUAL_WIDTH / 2);
+    float pMidX = playerX + playerColW / 2.0f;
+    float vHW = (VIRTUAL_WIDTH / renderMapScale) / 2.0f;
+    float tCamX = pMidX - vHW + (mOffX * m_camLookAheadX);
+    
+    m_camX += (tCamX - m_camX) * m_camLerpSpeedX;
+    m_camY += (m_camY_Fixed - m_camY) * m_camLerpSpeedY;
+
+    m_camPushX *= m_shakeDecay;
+    m_camPushY *= m_shakeDecay;
+
+    float trSq = m_shakeTrauma * m_shakeTrauma;
+    if (trSq > 0.001f) {
+        m_curShakeX = ((float)(rand() % 100) / 50.0f - 1.0f) * m_shakeIntensity * trSq;
+        m_curShakeY = ((float)(rand() % 100) / 50.0f - 1.0f) * m_shakeIntensity * trSq;
+    } else {
+        m_curShakeX = 0;
+        m_curShakeY = 0;
+    }
+
+    m_shakeTrauma *= m_shakeDecay;
+    if (m_shakeTrauma < 0.01f) m_shakeTrauma = 0;
+
+    if (m_camX < 0) m_camX = 0;
+    if (m_camY < 0) m_camY = 0;
+
+    if (mapWidth > 0 && mapHeight > 0) {
+        float vW = VIRTUAL_WIDTH / renderMapScale;
+        float vH = VIRTUAL_HEIGHT / renderMapScale;
+        float maxCX = (float)mapWidth - vW;
+        if (m_camX > maxCX) m_camX = maxCX;
+        float maxCY = (float)mapHeight - vH;
+        if (m_camY > maxCY) m_camY = maxCY;
+        if (m_camX < 0) m_camX = 0;
+        if (m_camY < 0) m_camY = 0;
+    }
+}
+
+void Camera::AddShake(float intensity) {
+    m_shakeTrauma = intensity;
+}
+
+void Camera::AddPush(float x, float y) {
+    m_camPushX = x;
+    m_camPushY = y;
+}
+
+void Camera::ApplyShake(float& x, float& y) {
+    x += (m_curShakeX + m_camPushX);
+    y += (m_curShakeY + m_camPushY);
+}
+
