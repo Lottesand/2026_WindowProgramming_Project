@@ -4,13 +4,17 @@
 class Camera {
 public:
     static void Init();
-    static void Update(float playerX, float playerY, float playerColW, float playerColH, int mouseX, int mouseY, float renderMapScale, int mapWidth, int mapHeight, bool isFullMapView);
+    static void Update(float playerX, float playerY, float playerColW, float playerColH, int mouseX, int mouseY, float renderMapScale, int mapWidth, int mapHeight, bool isFullMapView, bool forceSnap = false);
     
     static float GetCamX() { return m_camX; }
     static float GetCamY() { return m_camY; }
     static void AddShake(float intensity);
     static void AddPush(float x, float y);
     static void ApplyShake(float& x, float& y);
+    
+    static void StartRewindEffect();
+    static bool IsRewindEffectActive() { return m_rewindTimer > 0; }
+    static float GetRewindYOffset() { return m_rewindYOffset; }
 
 private:
     static float m_camX;
@@ -20,6 +24,9 @@ private:
     static float m_camPushX;
     static float m_camPushY;
     static float m_shakeTrauma;
+    
+    static float m_rewindTimer;
+    static float m_rewindYOffset;
 
     // Constants (from main.cpp)
     static constexpr float m_camLookAheadX = 150.0f;

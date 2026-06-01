@@ -146,7 +146,11 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             int oldMode = SetGraphicsMode(hDC, GM_ADVANCED);
             XFORM xF; xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
             SetWorldTransform(hDC, &xF); 
-            vI->Draw(hDC, -vW / 2, -vH / 2, vW, vH);
+            
+            if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) {
+                vI->Draw(hDC, -vW / 2, -vH / 2, vW, vH);
+            }
+
             XFORM xFI = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f }; SetWorldTransform(hDC, &xFI);
             SetGraphicsMode(hDC, oldMode);
         }
@@ -164,9 +168,12 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             if (v.angle != 0.0f) {
                 XFORM xF, oldXF; int oldMode = GetGraphicsMode(hDC); SetGraphicsMode(hDC, GM_ADVANCED); GetWorldTransform(hDC, &oldXF);
                 xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
-                SetWorldTransform(hDC, &xF); vI->Draw(hDC, -vW / 2, -vH, vW, vH);
+                SetWorldTransform(hDC, &xF); 
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, -vW / 2, -vH, vW, vH);
                 SetWorldTransform(hDC, &oldXF); SetGraphicsMode(hDC, oldMode);
-            } else vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
+            } else {
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
+            }
         }
     }
     for (const auto& v : m_dustCloudVFXs) {
@@ -181,11 +188,14 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             float dX, dY;
             if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
             else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
-            if (v.isFacingRight) vI->Draw(hDC, (int)(dX - vW - driftOffset), (int)dY - vH, vW, vH);
+            if (v.isFacingRight) {
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, (int)(dX - vW - driftOffset), (int)dY - vH, vW, vH);
+            }
             else {
                 XFORM xF, oldXF; int oldMode = GetGraphicsMode(hDC); SetGraphicsMode(hDC, GM_ADVANCED); GetWorldTransform(hDC, &oldXF);
                 xF.eM11 = -1.0f; xF.eM12 = 0.0f; xF.eM21 = 0.0f; xF.eM22 = 1.0f; xF.eDx = dX + driftOffset; xF.eDy = 0.0f;
-                SetWorldTransform(hDC, &xF); vI->Draw(hDC, 0, (int)dY - vH, vW, vH);
+                SetWorldTransform(hDC, &xF); 
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, 0, (int)dY - vH, vW, vH);
                 SetWorldTransform(hDC, &oldXF); SetGraphicsMode(hDC, oldMode);
             }
         }
@@ -199,7 +209,7 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             float dX, dY;
             if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
             else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
-            vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
+            if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
         }
     }
 

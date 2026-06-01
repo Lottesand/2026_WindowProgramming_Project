@@ -122,6 +122,7 @@ void Game::Update() {
         m_player.StartRewind(m_rewindSpeed); 
         StageManager::Reset(); 
         m_stageTimer = StageManager::GetStageLimitTime(); // 타이머 리셋
+        Camera::StartRewindEffect(); // 카메라 리와인드 효과 시작
         EffectManager::Init(); // 리와인드 시작 시 기존 이펙트(먼지, 잔상 등) 제거
         for (auto& e : m_enemies) if (e) e->Reset(); 
     }
@@ -137,7 +138,19 @@ void Game::Update() {
     if (m_player.IsRewinding()) {
         m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
         m_player.UpdateAnimation();
-        Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
+        
+        bool forceSnap = (m_player.GetHistorySize() == 0);
+        Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, forceSnap);
+        
+        // 카메라 리와인드 효과가 종료되었는데도 아직 리와인드 중인 경우 강제 중단 및 초기 위치 이동
+        if (!Camera::IsRewindEffectActive()) {
+            m_player.StopRewind();
+            m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH());
+            m_player.ClearHistory();
+            // 스냅된 위치로 카메라 즉시 갱신
+            Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, true);
+        }
+        
         m_prevTime = ct; return;
     }
     if (!m_isTimePaused) {
@@ -188,6 +201,17 @@ void Game::Render(HDC hDC) {
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hMemBmp);
     PatBlt(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, BLACKNESS);
     float cX = Camera::GetCamX(), cY = Camera::GetCamY(); Camera::ApplyShake(cX, cY);
+    
+    // 리와인드 효과 중일 때 맵 높이에 맞춰 카메라 Y좌표를 래핑 (필름 효과)
+    if (Camera::IsRewindEffectActive()) {
+        int mapH = StageManager::GetMapHeight();
+        if (mapH > 0) {
+            float wrappedY = fmod(cY, (float)mapH);
+            if (wrappedY < 0) wrappedY += (float)mapH;
+            cY = wrappedY;
+        }
+    }
+
     StageManager::Render(hMemDC, m_isFullMapView, m_showDebugRect, mapScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, cX, cY, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     if (m_showGrid) {
         HPEN hGP = CreatePen(PS_SOLID, 1, RGB(100, 100, 100)); HPEN hOP = (HPEN)SelectObject(hMemDC, hGP);
@@ -208,7 +232,10 @@ void Game::Render(HDC hDC) {
     float cFX = (fW - fCW * cFS) / 2.0f, cFY = (fH - fCH * cFS) / 2.0f;
     EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
     m_player.Render(hMemDC, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect);
-    if (!m_player.IsRewinding()) UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted);
+    if (!m_player.IsRewinding()) {
+        bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift);
+    }
     SetStretchBltMode(hDC, HALFTONE);
     StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY);
     SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC);

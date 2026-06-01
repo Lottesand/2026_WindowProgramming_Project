@@ -77,7 +77,11 @@ void Player::Init() {
 void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
     DWORD ct = GetTickCount();
     if (m_isRewinding) {
-        if (m_history.empty()) { m_isRewinding = false; return; }
+        if (m_history.empty()) { 
+            m_x = StageManager::GetPlayerStartX();
+            m_y = StageManager::GetPlayerStartY() - m_colH;
+            return; 
+        }
         for (int i = 0; i < m_rewindSpeed; i++) {
             if (m_history.empty()) break;
             RewindData d = m_history.back(); m_history.pop_back();
@@ -257,7 +261,7 @@ void Player::Render(HDC hMemDC, float camX, float camY, float mapScale, float pl
         case PlayerState::DOOR_KICK: img = &imgDoorKick[(std::min)(safeF, 5)]; break; 
         case PlayerState::DOOR_KICK_FULL: img = &imgDoorKickFull[(std::min)(safeF, 9)]; break;
         }
-        if (img && !img->IsNull() && img->IsDIBSection()) {
+        if (img && !img->IsNull() && img->IsDIBSection() && img->GetWidth() > 0 && img->GetHeight() > 0) {
             float vx, vy; if (g_isFullMapView) { float fs = (std::min)(1280.0f / (float)(mapW > 0 ? mapW : 1), 720.0f / (float)(mapH > 0 ? mapH : 1)); vx = px * fs + (1280.0f - mapW * fs) / 2.0f; vy = py * fs + (720.0f - mapH * fs) / 2.0f; pFS = fs; }
             else { vx = (px - camX) * mapScale; vy = (py - camY) * mapScale; pFS = mapScale; }
             float sw = img->GetWidth() * playerScale * pFS, sh = img->GetHeight() * playerScale * pFS;
@@ -271,13 +275,17 @@ void Player::Render(HDC hMemDC, float camX, float camY, float mapScale, float pl
             if (i == -1) { if (m_isSlowMo) mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,1,0, 0,0,0,0,1 }; else mat = { 1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,1,0, 0,0,0,0,1 }; }
             else { float al = (1.0f - ((float)i / (float)m_afterImages.size())); if (m_isSlowMo) { al *= 0.4f; mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,al,0, 0,0,0,0,1 }; } else { if (i % 2 == 0) { al *= 0.8f; mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,al,0, 0,0,0,0,1 }; } else { al *= 0.6f; mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,0,1,al,0, 0,0,0,0,1 }; } } }
             at.SetColorMatrix(&mat, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
-            if (fac) graphics.DrawImage(&gb, Gdiplus::RectF(dx, dy, sw, sh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &at);
-            else { graphics.ScaleTransform(-1.0f, 1.0f); graphics.TranslateTransform(-(dx * 2 + sw), 0); graphics.DrawImage(&gb, Gdiplus::RectF(dx, dy, sw, sh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &at); graphics.ResetTransform(); }
+            
+            if (sw > 0 && sh > 0) {
+                if (fac) graphics.DrawImage(&gb, Gdiplus::RectF(dx, dy, sw, sh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &at);
+                else { graphics.ScaleTransform(-1.0f, 1.0f); graphics.TranslateTransform(-(dx * 2 + sw), 0); graphics.DrawImage(&gb, Gdiplus::RectF(dx, dy, sw, sh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &at); graphics.ResetTransform(); }
+            }
+
             if (i == -1 && s == PlayerState::ATTACK && f < 5) {
-                CImage* si = &imgSlashFX[(std::min)(safeF, 4)]; if (si && !si->IsNull() && si->IsDIBSection()) {
+                CImage* si = &imgSlashFX[(std::min)(safeF, 4)]; if (si && !si->IsNull() && si->IsDIBSection() && si->GetWidth() > 0 && si->GetHeight() > 0) {
                     int slw = (int)(si->GetWidth() * playerScale * pFS), slh = (int)(si->GetHeight() * playerScale * pFS);
                     void* sbits = si->GetBits();
-                    if (sbits) {
+                    if (sbits && slw > 0 && slh > 0) {
                         Gdiplus::Bitmap gs(si->GetWidth(), si->GetHeight(), si->GetPitch(), PixelFormat32bppARGB, (BYTE*)sbits);
                         graphics.TranslateTransform(vx + (40.0f * pFS) / 2.0f, vy + (64.0f * pFS) / 2.0f); graphics.RotateTransform(a * 180.0f / 3.14159f);
                         graphics.DrawImage(&gs, Gdiplus::RectF(-slw / 2.0f, -slh / 2.0f, (float)slw, (float)slh), 0, 0, (float)si->GetWidth(), (float)si->GetHeight(), Gdiplus::UnitPixel, &at);

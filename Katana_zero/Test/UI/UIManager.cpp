@@ -1,4 +1,5 @@
 ﻿#include "UIManager.h"
+#include "../Objects/Enemy.h"
 #include <gdiplus.h>
 #include <algorithm>
 
@@ -10,6 +11,9 @@ CImage UIManager::m_imgHudTimer;
 CImage UIManager::m_imgHudTimerGauge;
 CImage UIManager::m_imgHudInven;
 CImage UIManager::m_imgCursor;
+CImage UIManager::m_imgHudShift[2];
+CImage UIManager::m_imgLeftClick;
+CImage UIManager::m_imgRightClick;
 
 void UIManager::Init() {
 }
@@ -23,9 +27,14 @@ void UIManager::LoadAssets() {
     m_imgHudTimerGauge.Load(TEXT("assets/hud/timer_gauge.png"));
     m_imgHudInven.Load(TEXT("assets/hud/inven.png"));
     m_imgCursor.Load(TEXT("assets/cursor.png"));
+    m_imgHudShift[0].Load(TEXT("assets/hud/keyboard_shift_0.png"));
+    m_imgHudShift[1].Load(TEXT("assets/hud/keyboard_shift_1.png"));
+    m_imgLeftClick.Load(TEXT("assets/hud/left_click.png"));
+    m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
 }
 
 void UIManager::ReleaseAssets() {
+    Enemy::ReleaseAll();
     m_imgHudBase.Destroy();
     m_imgHudBattery.Destroy();
     m_imgHudBatteryPart.Destroy();
@@ -34,8 +43,12 @@ void UIManager::ReleaseAssets() {
     m_imgHudTimerGauge.Destroy();
     m_imgHudInven.Destroy();
     m_imgCursor.Destroy();
+    m_imgHudShift[0].Destroy();
+    m_imgHudShift[1].Destroy();
+    m_imgLeftClick.Destroy();
+    m_imgRightClick.Destroy();
 }
-void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted) {
+void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed) {
     if (!hDC) return;
 
     // 게임 시작 전 메시지 출력
@@ -55,17 +68,29 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
     }
 
     // HUD 요소 렌더링
-    if (!m_imgHudBase.IsNull())
+    if (!m_imgHudBase.IsNull() && m_imgHudBase.GetWidth() > 0 && m_imgHudBase.GetHeight() > 0)
         m_imgHudBase.Draw(hDC, 0, 0, m_imgHudBase.GetWidth() * 2, m_imgHudBase.GetHeight() * 2);
 
-    if (!m_imgHudBattery.IsNull())
+    if (!m_imgHudBattery.IsNull() && m_imgHudBattery.GetWidth() > 0 && m_imgHudBattery.GetHeight() > 0)
         m_imgHudBattery.Draw(hDC, 10, 4, m_imgHudBattery.GetWidth() * 2, m_imgHudBattery.GetHeight() * 2);
+
+    // [Shift 아이콘 렌더링]
+    // battery_part가 시작되는 startX(32)보다 왼쪽이나 배터리 프레임(10,4) 옆에 배치
+    int shiftIconX = 165; // 배터리 칸 끝나는 지점 근처 혹은 옆 좌표 (조정 가능)
+    int shiftIconY = 7.5;   // 상하 좌표 (조정 가능)
+    float shiftScale = 2.0f; // 크기 배율 (조정 가능)
+    
+    CImage* imgShift = isShiftPressed ? &m_imgHudShift[1] : &m_imgHudShift[0];
+    if (imgShift && !imgShift->IsNull() && imgShift->GetWidth() > 0 && imgShift->GetHeight() > 0) {
+        imgShift->Draw(hDC, shiftIconX, shiftIconY, 
+            (int)(imgShift->GetWidth() * shiftScale), (int)(imgShift->GetHeight() * shiftScale));
+    }
 
     // 배터리 칸 렌더링
     int startX = 32; 
-    int startY = 10;
+    int startY = 12;
     int gap = 10;    
-    float partScale = 2.2f; 
+    float partScale = 2.0f; 
 
     for (int i = 0; i < 11; i++) {
         CImage* targetImg = &m_imgHudBatteryPart;
@@ -73,7 +98,7 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
             targetImg = &m_imgHudBatteryUsed;
         }
 
-        if (targetImg && !targetImg->IsNull()) {
+        if (targetImg && !targetImg->IsNull() && targetImg->GetWidth() > 0 && targetImg->GetHeight() > 0) {
             targetImg->Draw(hDC, 
                 (int)(startX + i * gap), 
                 startY, 
@@ -82,7 +107,7 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         }
     }
 
-    if (!m_imgHudTimer.IsNull()) {
+    if (!m_imgHudTimer.IsNull() && m_imgHudTimer.GetWidth() > 0 && m_imgHudTimer.GetHeight() > 0) {
         float timerScale = 2.0f; // 프레임은 원래대로 (2.0)
         int timerW = (int)(m_imgHudTimer.GetWidth() * timerScale);
         int timerH = (int)(m_imgHudTimer.GetHeight() * timerScale);
@@ -90,7 +115,8 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         int timerY = 0; 
         
         // 프레임을 먼저 그립니다
-        m_imgHudTimer.Draw(hDC, timerX, timerY, timerW, timerH);
+        if (timerW > 0 && timerH > 0)
+            m_imgHudTimer.Draw(hDC, timerX, timerY, timerW, timerH);
 
         // [타이머 게이지 로직] 
         float timeRatio = stageTimer / (stageLimitTime > 0 ? stageLimitTime : 1.0f);
@@ -109,19 +135,34 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         if (!m_imgHudTimerGauge.IsNull()) {
             int currentGaugeW = (int)(gaugeW * timeRatio);
             int srcW = (int)(m_imgHudTimerGauge.GetWidth() * timeRatio);
+            int srcH = m_imgHudTimerGauge.GetHeight();
             
-            // CImage::Draw의 assertion 오류를 방지하기 위해 너비가 0보다 클 때만 그립니다.
-            if (currentGaugeW > 0 && srcW > 0) {
+            // CImage::Draw의 assertion 오류를 방지하기 위해 모든 수치가 0보다 클 때만 그립니다.
+            if (currentGaugeW > 0 && gaugeH > 0 && srcW > 0 && srcH > 0) {
                 m_imgHudTimerGauge.Draw(hDC, gaugeX, gaugeY, currentGaugeW, gaugeH,
-                    0, 0, srcW, m_imgHudTimerGauge.GetHeight());
+                    0, 0, srcW, srcH);
             }
         }
     }
 
-    if (!m_imgHudInven.IsNull())
+    if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
         m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
 
-    if (!m_imgCursor.IsNull()) 
+    // [마우스 클릭 아이콘 렌더링]
+    int mouseIconScale = 2;
+    int mouseIconY = 30; // Inven 아래쪽 위치
+    int mouseIconX = virtualWidth - 110; // 우측 끝 기준
+
+    if (!m_imgLeftClick.IsNull()) {
+        m_imgLeftClick.Draw(hDC, mouseIconX, mouseIconY, 
+            m_imgLeftClick.GetWidth() * mouseIconScale, m_imgLeftClick.GetHeight() * mouseIconScale);
+    }
+    if (!m_imgRightClick.IsNull()) {
+        m_imgRightClick.Draw(hDC, mouseIconX + 70, mouseIconY, 
+            m_imgRightClick.GetWidth() * mouseIconScale, m_imgRightClick.GetHeight() * mouseIconScale);
+    }
+
+    if (!m_imgCursor.IsNull() && m_imgCursor.GetWidth() > 0 && m_imgCursor.GetHeight() > 0) 
         m_imgCursor.Draw(hDC, mouseX - m_imgCursor.GetWidth(), mouseY - m_imgCursor.GetHeight(), m_imgCursor.GetWidth() * 2, m_imgCursor.GetHeight() * 2);
 }
 

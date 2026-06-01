@@ -138,7 +138,10 @@ void Door::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMa
         float drawW = img->GetWidth() * scaleX * pFS - 20.0f;
         float drawH = img->GetHeight() * scaleY * pFS;
         float drawY = dY + (m_h * pFS) - drawH;
-        img->Draw(hDC, (int)drawX, (int)drawY, (int)drawW, (int)drawH);
+        
+        if (drawW > 0 && drawH > 0 && img->GetWidth() > 0 && img->GetHeight() > 0) {
+            img->Draw(hDC, (int)drawX, (int)drawY, (int)drawW, (int)drawH);
+        }
         if (m_state == DoorState::CLOSED) {
             // 더 밝은 하늘색 (Sky Blue: 135, 206, 235)
             COLORREF skyBlue = RGB(135, 206, 235);

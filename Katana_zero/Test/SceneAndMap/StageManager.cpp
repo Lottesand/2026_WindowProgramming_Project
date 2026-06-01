@@ -19,50 +19,50 @@ void StageManager::Init() {
         int w = m_imgColMap.GetWidth();
         int h = m_imgColMap.GetHeight();
 
+        // 처리된 픽셀을 기록하기 위한 마스크 (최적화)
+        std::vector<bool> visited(w * h, false);
+
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
+                if (visited[y * w + x]) continue;
+
                 COLORREF color = m_imgColMap.GetPixel(x, y);
                 BYTE r = GetRValue(color);
                 BYTE g = GetGValue(color);
                 BYTE b = GetBValue(color);
 
+                // Magenta (255, 0, 255) - Door
                 if (r == 255 && g == 0 && b == 255) {
-                    bool alreadyCovered = false;
-                    for (const auto& d : m_doors) {
-                        if (x >= d.GetX() && x < d.GetX() + d.GetW() &&
-                            y >= d.GetY() && y < d.GetY() + d.GetH()) {
-                            alreadyCovered = true;
-                            break;
-                        }
-                    }
-
-                    if (!alreadyCovered) {
-                        int rectW = 0, rectH = 0;
-                        while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FF00FF) rectW++;
-                        while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FF00FF) rectH++;
-                        if (rectW > 0 && rectH > 0) m_doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                    int rectW = 0, rectH = 0;
+                    while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FF00FF) rectW++;
+                    while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FF00FF) rectH++;
+                    
+                    if (rectW > 0 && rectH > 0) {
+                        m_doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                        // 방문 기록 업데이트
+                        for (int ry = y; ry < y + rectH; ry++)
+                            for (int rx = x; rx < x + rectW; rx++)
+                                visited[ry * w + rx] = true;
                     }
                 }
                 // White (255, 255, 255) - Player Start
                 else if (r == 255 && g == 255 && b == 255) {
-                    if (m_playerStart.x == 100 && m_playerStart.y == 100) { // Only set if still default
+                    if (m_playerStart.x == 100 && m_playerStart.y == 100) { 
                         m_playerStart = { x, y };
                     }
+                    visited[y * w + x] = true;
                 }
                 // Cyan (0, 255, 255) - Clear Zone
                 else if (r == 0 && g == 255 && b == 255) {
-                    bool alreadyCovered = false;
-                    for (const auto& rect : m_clearZones) {
-                        if (x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom) {
-                            alreadyCovered = true;
-                            break;
-                        }
-                    }
-                    if (!alreadyCovered) {
-                        int rectW = 0, rectH = 0;
-                        while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FFFF00) rectW++;
-                        while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FFFF00) rectH++;
-                        if (rectW > 0 && rectH > 0) m_clearZones.push_back({ x, y, x + rectW, y + rectH });
+                    int rectW = 0, rectH = 0;
+                    while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FFFF00) rectW++;
+                    while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FFFF00) rectH++;
+                    
+                    if (rectW > 0 && rectH > 0) {
+                        m_clearZones.push_back({ x, y, x + rectW, y + rectH });
+                        for (int ry = y; ry < y + rectH; ry++)
+                            for (int rx = x; rx < x + rectW; rx++)
+                                visited[ry * w + rx] = true;
                     }
                 }
             }
@@ -134,7 +134,8 @@ void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float
             float maxCamX = (float)(mapW - (virtualWidth / renderMapScale));
             float ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0;
             float pX = -ratioX * (cW - virtualWidth);
-            m_imgSkylineClouds.Draw(hDC, (int)pX, 0, cW, cH, 0, 0, m_imgSkylineClouds.GetWidth(), m_imgSkylineClouds.GetHeight());
+            if (cW > 0 && cH > 0 && m_imgSkylineClouds.GetWidth() > 0 && m_imgSkylineClouds.GetHeight() > 0)
+                m_imgSkylineClouds.Draw(hDC, (int)pX, 0, cW, cH, 0, 0, m_imgSkylineClouds.GetWidth(), m_imgSkylineClouds.GetHeight());
         }
 
         // --- 2. Skyline Black Layer ---
@@ -147,7 +148,8 @@ void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float
             float ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0;
             float pX = -ratioX * (sW - virtualWidth);
             int pY = (virtualHeight / 2) - (sH / 2) - 150;
-            m_imgSkylineBlack.Draw(hDC, (int)pX, pY, sW, sH, 0, 0, m_imgSkylineBlack.GetWidth(), m_imgSkylineBlack.GetHeight());
+            if (sW > 0 && sH > 0 && m_imgSkylineBlack.GetWidth() > 0 && m_imgSkylineBlack.GetHeight() > 0)
+                m_imgSkylineBlack.Draw(hDC, (int)pX, pY, sW, sH, 0, 0, m_imgSkylineBlack.GetWidth(), m_imgSkylineBlack.GetHeight());
         }
     }
 
@@ -161,10 +163,29 @@ void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float
             if (isFullMapView) {
                 tMap->Draw(hDC, (int)mapOffsetX, (int)mapOffsetY, (int)(cMW * renderMapScale), (int)(cMH * renderMapScale), 0, 0, cMW, cMH);
             } else {
-                if (camX >= 0 && camY >= 0 && camX + (virtualWidth / renderMapScale) <= cMW && camY + (virtualHeight / renderMapScale) <= cMH) {
-                    tMap->Draw(hDC, 0, 0, virtualWidth, virtualHeight, (int)camX, (int)camY, (int)(virtualWidth / renderMapScale), (int)(virtualHeight / renderMapScale));
+                // 리와인드 시의 필름 효과를 위해 Y좌표를 맵 높이로 래핑합니다.
+                float vW = virtualWidth / renderMapScale;
+                float vH = virtualHeight / renderMapScale;
+                
+                int drawCamY = (int)camY % cMH;
+                if (drawCamY < 0) drawCamY += cMH;
+
+                if (drawCamY + vH <= cMH) {
+                    // 한 번에 그려지는 경우
+                    if (virtualWidth > 0 && virtualHeight > 0 && vW > 0 && vH > 0)
+                        tMap->Draw(hDC, 0, 0, virtualWidth, virtualHeight, (int)camX, drawCamY, (int)vW, (int)vH);
                 } else {
-                    tMap->Draw(hDC, 0, 0, virtualWidth, virtualHeight, (int)camX, (int)camY, (int)(virtualWidth / renderMapScale), (int)(virtualHeight / renderMapScale));
+                    // 경계에 걸쳐서 두 번 나눠 그려야 하는 경우 (필름 스트립 효과)
+                    int firstPartH = cMH - drawCamY;
+                    int firstPartDrawH = (int)(firstPartH * (virtualHeight / vH));
+                    
+                    if (virtualWidth > 0 && firstPartDrawH > 0 && vW > 0 && firstPartH > 0)
+                        tMap->Draw(hDC, 0, 0, virtualWidth, firstPartDrawH, (int)camX, drawCamY, (int)vW, firstPartH);
+                    
+                    int secondPartDrawH = virtualHeight - firstPartDrawH;
+                    int secondPartSrcH = (int)vH - firstPartH;
+                    if (virtualWidth > 0 && secondPartDrawH > 0 && vW > 0 && secondPartSrcH > 0)
+                        tMap->Draw(hDC, 0, firstPartDrawH, virtualWidth, secondPartDrawH, (int)camX, 0, (int)vW, secondPartSrcH);
                 }
             }
         }
