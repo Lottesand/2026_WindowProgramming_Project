@@ -1,11 +1,13 @@
 #include "Enemy.h"
 #include "Physics.h"
+#include "Player.h"
 //커밋, 푸시
 
 extern float camX;
 extern float camY;
 extern float mapScale;
 extern bool g_showDebugRect;
+extern Player g_Player;
 
 Enemy::Enemy(float startX, float startY, EnemyType type)
 {
@@ -24,10 +26,69 @@ Enemy::Enemy(float startX, float startY, EnemyType type)
 
     m_friction = 0.8f;
     m_knockbackVx = 0.0f;
+
+    m_detectionRange = 200.0f; // 기본 감지 범위 (10칸 정도)
+    m_isPlayerDetected = false;
 }
 
 Enemy::~Enemy() {}
 void Enemy::Init() {}
+
+void Enemy::CheckPlayerDetection()
+{
+    if (!m_isAlive)
+    {
+        m_isPlayerDetected = false;
+        return;
+    }
+
+    // 플레이어의 중심점
+    float playerCenterX = g_Player.GetX() + g_Player.GetColW() / 2.0f;
+    float playerCenterY = g_Player.GetY() + g_Player.GetColH() / 2.0f;
+
+    // 적의 중심점
+    float enemyCenterX = m_x + m_colW / 2.0f;
+    float enemyCenterY = m_y + m_colH / 2.0f;
+
+    // 가로 거리 계산
+    float dx = fabs(playerCenterX - enemyCenterX);
+    // 세로 거리 계산 (직선 감지이므로 세로 오차 범위 제한)
+    float dy = fabs(playerCenterY - enemyCenterY);
+
+    // 가로 범위 내에 있고, 세로 높이가 비슷할 때 (오차 50픽셀 이내) 감지
+    m_isPlayerDetected = (dx <= m_detectionRange && dy <= 50.0f);
+}
+
+void Enemy::RenderDebug(HDC hdc)
+{
+    if (!g_showDebugRect) return;
+
+    int screenX = (int)((m_x - camX) * mapScale);
+    int screenY = (int)((m_y - camY) * mapScale);
+
+    // 충돌 박스 (빨간색)
+    HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
+    RECT rect = { screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale) };
+    FrameRect(hdc, &rect, redBrush);
+    DeleteObject(redBrush);
+
+    // 감지 범위 시각화 (빨간색 가로 직선)
+    // 감지 여부에 따라 선 굵기나 스타일 변경 가능 (여기서는 감지 시 진한 빨간색)
+    COLORREF detectColor = m_isPlayerDetected ? RGB(255, 0, 0) : RGB(150, 0, 0);
+    HPEN hPen = CreatePen(PS_SOLID, m_isPlayerDetected ? 3 : 1, detectColor);
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+
+    int range = (int)(m_detectionRange * mapScale);
+    int centerX = screenX + (int)(m_colW * mapScale / 2);
+    int centerY = screenY + (int)(m_colH * mapScale / 2);
+
+    // 가로로 뻗는 빨간색 직선 그리기
+    MoveToEx(hdc, centerX - range, centerY, NULL);
+    LineTo(hdc, centerX + range, centerY);
+
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hPen);
+}
 
 void Enemy::Update()
 {
@@ -167,6 +228,8 @@ void Gangster::Init()
 
 void Gangster::Update()
 {
+    CheckPlayerDetection(); // 플레이어 감지 체크 추가
+
     if (m_ActionState == GangsterAction::HURT_FLY || m_ActionState == GangsterAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == GangsterAction::HURT_FLY)
@@ -363,13 +426,7 @@ void Gangster::Render(HDC hdc)
         }
     }
 
-    if (g_showDebugRect)
-    {
-        HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
-        RECT rect = { screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale) };
-        FrameRect(hdc, &rect, redBrush);
-        DeleteObject(redBrush);
-    }
+    RenderDebug(hdc);
 }
 
 void Gangster::OnTakeDamage(float damage)
@@ -442,6 +499,7 @@ void Grunt::Init()
 
 void Grunt::Update()
 {
+    CheckPlayerDetection();
     if (m_ActionState == GruntAction::HURT_FLY || m_ActionState == GruntAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == GruntAction::HURT_FLY)
@@ -612,13 +670,7 @@ void Grunt::Render(HDC hdc)
         }
     }
 
-    if (g_showDebugRect)
-    {
-        HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
-        RECT rect = { screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale) };
-        FrameRect(hdc, &rect, redBrush);
-        DeleteObject(redBrush);
-    }
+    RenderDebug(hdc);
 }
 
 void Grunt::OnTakeDamage(float damage)
@@ -695,6 +747,7 @@ void Pomp::Init()
 
 void Pomp::Update()
 {
+    CheckPlayerDetection();
     if (m_ActionState == PompAction::HURT_FLY || m_ActionState == PompAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == PompAction::HURT_FLY)
@@ -863,13 +916,7 @@ void Pomp::Render(HDC hdc)
         }
     }
 
-    if (g_showDebugRect)
-    {
-        HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
-        RECT rect = { screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale) };
-        FrameRect(hdc, &rect, redBrush);
-        DeleteObject(redBrush);
-    }
+    RenderDebug(hdc);
 }
 
 void Pomp::OnTakeDamage(float damage)
@@ -936,6 +983,7 @@ void ShieldCop::Init()
 
 void ShieldCop::Update()
 {
+    CheckPlayerDetection();
     if (m_ActionState == ShieldCopAction::HURT_FLY || m_ActionState == ShieldCopAction::HURT_GROUND || m_State == EnemyState::DEAD)
     {
         if (m_ActionState == ShieldCopAction::HURT_FLY)
@@ -1102,13 +1150,7 @@ void ShieldCop::Render(HDC hdc)
         }
     }
 
-    if (g_showDebugRect)
-    {
-        HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
-        RECT rect = { screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale) };
-        FrameRect(hdc, &rect, redBrush);
-        DeleteObject(redBrush);
-    }
+    RenderDebug(hdc);
 }
 
 void ShieldCop::OnTakeDamage(float damage)

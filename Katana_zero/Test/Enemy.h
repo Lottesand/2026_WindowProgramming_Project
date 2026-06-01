@@ -80,6 +80,9 @@ protected:
     float m_friction;
     float m_knockbackVx;
 
+    // 감지 시스템
+    float m_detectionRange;    // 감지 범위 (픽셀 단위)
+    bool m_isPlayerDetected;   // 플레이어 감지 여부
 
 public:
     Enemy(float startX, float startY, EnemyType type);
@@ -90,6 +93,10 @@ public:
     virtual void Render(HDC hdc) = 0;
     virtual void OnTakeDamage(float damage);
     virtual void ApplyKnockback(float vx);
+
+    // 감지 로직
+    void CheckPlayerDetection();
+    void RenderDebug(HDC hdc);
 
     EnemyType GetType() const;
     bool GetIsAlive() const;
