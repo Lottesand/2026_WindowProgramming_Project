@@ -7,7 +7,7 @@ public:
     static void Init();
     static void LoadAssets();
     static void ReleaseAssets();
-    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel);
+    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted);
 
 private:
     static CImage m_imgHudBase;
@@ -15,6 +15,7 @@ private:
     static CImage m_imgHudBatteryPart;
     static CImage m_imgHudBatteryUsed;
     static CImage m_imgHudTimer;
+    static CImage m_imgHudTimerGauge;
     static CImage m_imgHudInven;
     static CImage m_imgCursor;
 };

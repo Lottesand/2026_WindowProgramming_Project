@@ -123,10 +123,18 @@ public:
     int m_rewindSpeed = 1;
     int m_maxHistorySize = 600;
 
-    void StartRewind(int speed = 2) { m_isRewinding = true; m_rewindSpeed = speed; }
+    void StartRewind(int speed = 2) { 
+        m_isRewinding = true; 
+        m_rewindSpeed = speed; 
+        m_isSlowMo = false; // 리와인드 시작 시 슬로우 모션 강제 종료
+        m_batteryLevel = m_batteryMax; // 배터리(슬로우 모드 게이지) 풀 회복
+        for (auto& img : m_afterImages) img.active = false; 
+    }
     void StopRewind() { m_isRewinding = false; }
     bool IsRewinding() const { return m_isRewinding; }
-    void SetMaxHistory(int seconds) { m_maxHistorySize = seconds * 60; m_history.clear(); }
+    void SetMaxHistory(int seconds) { m_maxHistorySize = seconds * 60; ClearHistory(); }
     void ClearHistory() { m_history.clear(); }
+    void SetPos(float x, float y) { m_x = x; m_y = y; m_vx = 0; m_vy = 0; }
+    int GetHistorySize() const { return (int)m_history.size(); }
 };
 

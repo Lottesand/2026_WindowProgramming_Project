@@ -1,4 +1,4 @@
-﻿#include "Game.h"
+#include "Game.h"
 #include "Input.h"
 #include "../SceneAndMap/Camera.h"
 #include "../SceneAndMap/StageManager.h"
@@ -12,7 +12,7 @@
 Game::Game() : m_hWnd(NULL), m_hInst(NULL), m_winWidth(1280), m_winHeight(720),
     m_isTimePaused(false), m_showDebugRect(false), m_showGrid(false), m_isFullMapView(false),
     m_renderMapScale(1.0f), m_renderPlayerScale(2.0f), m_mapOffsetX(0.0f), m_mapOffsetY(0.0f),
-    m_prevTime(0) {
+    m_prevTime(0), m_currentStage(1), m_isStageCleared(false), m_stageTimer(0.0f), m_bGameStarted(false) {
 }
 
 Game::~Game() {
@@ -22,33 +22,118 @@ Game::~Game() {
 
 void Game::Init(HWND hWnd, HINSTANCE hInst) {
     m_hWnd = hWnd; m_hInst = hInst; m_prevTime = GetTickCount();
-    StageManager::LoadAssets(); EffectManager::LoadAssets(); UIManager::LoadAssets();
+    EffectManager::LoadAssets(); UIManager::LoadAssets();
     m_player.Init(); m_player.SetMaxHistory(m_maxRewindTime);
-    SpawnEnemies(); Camera::Init();
+    
+    LoadStage(1);
+}
 
+void Game::LoadStage(int stage) {
+    m_currentStage = stage;
+    m_isStageCleared = false; // Reset clear flag
+    m_bGameStarted = false;   // 스테이지 로드 시 게임 시작 대기 상태로 설정
+    StageManager::LoadAssets(m_currentStage);
+    
+    // Stage-specific Rewind Time (Control rewind time here)
+    if (m_currentStage == 1) {
+        m_maxRewindTime = 20; // 10 seconds for Stage 1
+    } else {
+        m_maxRewindTime = 5;  // 5 seconds for Stage 2+
+    }
+    
     // Verify critical assets
     if (StageManager::GetMap().IsNull() || StageManager::GetColMap().IsNull()) {
-        MessageBox(hWnd, TEXT("Critical assets (map.png or colmap.png) failed to load!"), TEXT("Error"), MB_ICONERROR);
+        if (stage == 1) {
+            MessageBox(m_hWnd, TEXT("Stage 1 assets failed to load!"), TEXT("Error"), MB_ICONERROR);
+        }
+        return; 
     }
+
+    StageManager::Init();
+    SpawnEnemies();
+    
+    m_stageTimer = StageManager::GetStageLimitTime();
+    m_player.SetMaxHistory((int)m_stageTimer); // 리와인드 저장 시간을 스테이지 제한 시간으로 설정
+    m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH());
+    Camera::Init();
+    Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
 }
 
 
 void Game::SpawnEnemies() {
     for (auto& e : m_enemies) if (e) delete e;
     m_enemies.clear();
-    Enemy* n = new Pomp(800.0f, 200.0f);
-    if (n) { n->Init(); m_enemies.push_back(n); }
+    
+    if (m_currentStage == 1) {
+        Enemy* n = new Pomp(800.0f, 200.0f);
+        if (n) { n->Init(); m_enemies.push_back(n); }
+    } else {
+        Enemy* n = new Pomp(500.0f, 200.0f);
+        if (n) { n->Init(); m_enemies.push_back(n); }
+        Enemy* n2 = new Pomp(900.0f, 300.0f);
+        if (n2) { n2->Init(); m_enemies.push_back(n2); }
+    }
 }
 
 void Game::Update() {
     DWORD ct = GetTickCount();
     if (ct - m_prevTime < 16) return;
     Input::Update(); UpdateScreenScale();
+
+    // 게임 시작 대기 중인 경우
+    if (!m_bGameStarted) {
+        if (Input::GetKeyDown(VK_LBUTTON)) {
+            m_bGameStarted = true;
+            m_prevTime = GetTickCount(); // 시작 시점의 시간으로 갱신하여 타이머 급감 방지
+        }
+        // 시작 전에는 카메라와 기본적인 애니메이션만 업데이트 (필요 시)
+        Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
+        m_prevTime = ct;
+        return;
+    }
+    
+    // 1. Enemy All Dead Check
+    if (!m_isStageCleared) {
+        bool anyAlive = false;
+        for (auto& e : m_enemies) {
+            if (e && e->GetIsAlive()) {
+                anyAlive = true;
+                break;
+            }
+        }
+        if (!anyAlive) {
+            m_isStageCleared = true;
+        }
+    }
+
+    // 2. Stage Clear Zone Check
+    if (m_isStageCleared) {
+        if (StageManager::IsInClearZone(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH())) {
+            LoadStage(m_currentStage + 1);
+            m_prevTime = GetTickCount();
+            return;
+        }
+    }
+
     if (Input::GetKeyDown('F')) m_isFullMapView = !m_isFullMapView;
     if (Input::GetKeyDown('E')) { m_showDebugRect = !m_showDebugRect; m_showGrid = !m_showGrid; }
     static bool prR = false; bool cuR = GetAsyncKeyState('R') & 0x8000;
-    if (cuR && !prR) { m_player.StartRewind(m_rewindSpeed); StageManager::Reset(); for (auto& e : m_enemies) if (e) e->Reset(); }
+    if (cuR && !prR) { 
+        m_player.StartRewind(m_rewindSpeed); 
+        StageManager::Reset(); 
+        m_stageTimer = StageManager::GetStageLimitTime(); // 타이머 리셋
+        EffectManager::Init(); // 리와인드 시작 시 기존 이펙트(먼지, 잔상 등) 제거
+        for (auto& e : m_enemies) if (e) e->Reset(); 
+    }
     prR = cuR;
+
+    // 타이머 업데이트 (리와인드 중이 아니고 슬로우 모션이 아닐 때만 감소)
+    if (!m_player.IsRewinding() && !m_player.GetIsSlowMo() && !m_isTimePaused) {
+        float dT = (ct - m_prevTime) / 1000.0f;
+        m_stageTimer -= dT;
+        if (m_stageTimer < 0) m_stageTimer = 0;
+    }
+
     if (m_player.IsRewinding()) {
         m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
         m_player.UpdateAnimation();
@@ -123,7 +208,7 @@ void Game::Render(HDC hDC) {
     float cFX = (fW - fCW * cFS) / 2.0f, cFY = (fH - fCH * cFS) / 2.0f;
     EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
     m_player.Render(hMemDC, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect);
-    if (!m_player.IsRewinding()) UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel());
+    if (!m_player.IsRewinding()) UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted);
     SetStretchBltMode(hDC, HALFTONE);
     StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY);
     SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC);
@@ -141,4 +226,3 @@ void Game::UpdateScreenScale() {
         m_mapOffsetY = (VIRTUAL_HEIGHT - (mapH * m_renderMapScale)) / 2.0f;
     }
 }
-

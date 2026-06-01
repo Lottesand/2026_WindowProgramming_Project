@@ -45,6 +45,7 @@ Gangster::Gangster(float x, float y) : Enemy(x, y, EnemyType::GANGSTER) { m_Acti
 Gangster::~Gangster() {}
 void Gangster::Reset() { Enemy::Reset(); m_ActionState = GangsterAction::NONE; }
 void Gangster::Init() {
+    if (!m_ImgIdle_R[0].IsNull()) return;
     TCHAR path[256];
     for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_gangsteridle/%d.png"), i); m_ImgIdle_R[i].Load(path); m_ImgIdle_L[i].Load(path); }
     for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_gangsterwalk/%d.png"), i); m_ImgWalk_R[i].Load(path); m_ImgWalk_L[i].Load(path); }
@@ -119,7 +120,18 @@ void Grunt::Render(HDC h, float cx, float cy, float ms, bool dr) {
     int safeF = (std::max)(0, m_CurrentFrame);
     if (m_isFacingLeft) { if (m_ActionState == GruntAction::HURT_FLY) img = &m_ImgHurtFly_L[safeF % 2]; else if (m_ActionState == GruntAction::HURT_GROUND || m_State == EnemyState::DEAD) img = &m_ImgHurtGround_L[safeF % 16]; else if (m_State == EnemyState::FALL) img = &m_ImgFall_L[safeF % 13]; else { switch (m_ActionState) { case GruntAction::NONE: if (m_State == EnemyState::IDLE) img = &m_ImgIdle_L[safeF % 8]; else img = &m_ImgWalk_L[safeF % 10]; break; case GruntAction::ATTACK: img = &m_ImgAttack_L[safeF % 8]; break; case GruntAction::SLASH: img = &m_ImgSlash_L[safeF % 5]; break; case GruntAction::TURN: img = &m_ImgTurn_L[safeF % 8]; break; case GruntAction::RUN: img = &m_ImgRun_L[safeF % 10]; break; } } }
     else { if (m_ActionState == GruntAction::HURT_FLY) img = &m_ImgHurtFly_R[safeF % 2]; else if (m_ActionState == GruntAction::HURT_GROUND || m_State == EnemyState::DEAD) img = &m_ImgHurtGround_R[safeF % 16]; else if (m_State == EnemyState::FALL) img = &m_ImgFall_R[safeF % 13]; else { switch (m_ActionState) { case GruntAction::NONE: if (m_State == EnemyState::IDLE) img = &m_ImgIdle_R[safeF % 8]; else img = &m_ImgWalk_R[safeF % 10]; break; case GruntAction::ATTACK: img = &m_ImgAttack_R[safeF % 8]; break; case GruntAction::SLASH: img = &m_ImgSlash_R[safeF % 5]; break; case GruntAction::TURN: img = &m_ImgTurn_R[safeF % 8]; break; case GruntAction::RUN: img = &m_ImgRun_R[safeF % 10]; break; } } }
-    if (img && !img->IsNull()) { int fw = (int)(40 * ms), fh = (int)(60 * ms); if (m_isFacingLeft) { int om = SetGraphicsMode(h, GM_ADVANCED); XFORM xfO; GetWorldTransform(h, &xfO); XFORM xfL; xfL.eM11 = -1.0f; xfL.eM12 = 0.0f; xfL.eM21 = 0.0f; xfL.eM22 = 1.0f; xfL.eDx = (float)(2 * sx + fw); xfL.eDy = 0.0f; SetWorldTransform(h, &xfL); img->Draw(h, sx, sy, fw, fh); SetWorldTransform(h, &xfO); SetGraphicsMode(h, om); } else img->Draw(h, sx, sy, fw, fh); }
+    if (img && !img->IsNull()) { 
+        int fw = (int)(40 * ms), fh = (int)(60 * ms); 
+        if (m_isFacingLeft) { 
+            int om = SetGraphicsMode(h, GM_ADVANCED); 
+            XFORM xfO; GetWorldTransform(h, &xfO); 
+            XFORM xfL; xfL.eM11 = -1.0f; xfL.eM12 = 0.0f; xfL.eM21 = 0.0f; xfL.eM22 = 1.0f; xfL.eDx = (float)(2 * sx + fw); xfL.eDy = 0.0f; 
+            SetWorldTransform(h, &xfL); 
+            img->Draw(h, sx, sy, fw, fh); 
+            SetWorldTransform(h, &xfO); 
+            SetGraphicsMode(h, om); 
+        } else img->Draw(h, sx, sy, fw, fh); 
+    }
     else Rectangle(h, sx, sy, sx + (int)(m_colW * ms), sy + (int)(m_colH * ms));
     if (dr) { HBRUSH rb = CreateSolidBrush(RGB(255, 0, 0)); RECT r = { sx, sy, sx + (int)(m_colW * ms), sy + (int)(m_colH * ms) }; FrameRect(h, &r, rb); DeleteObject(rb); }
 }
@@ -163,7 +175,18 @@ void Pomp::Render(HDC h, float cx, float cy, float ms, bool dr) {
     int safeF = (std::max)(0, m_CurrentFrame);
     if (m_isFacingLeft) { if (m_ActionState == PompAction::HURT_FLY) img = &m_ImgHurtFly_L[safeF % 2]; else if (m_ActionState == PompAction::HURT_GROUND || m_State == EnemyState::DEAD) img = &m_ImgHurtGround_L[safeF % 15]; else if (m_State == EnemyState::FALL) img = &m_ImgFall_L[safeF % 13]; else { switch (m_ActionState) { case PompAction::NONE: if (m_State == EnemyState::IDLE) img = &m_ImgIdle_L[safeF % 8]; else img = &m_ImgWalk_L[safeF % 10]; break; case PompAction::ATTACK: img = &m_ImgAttack_L[safeF % 6]; break; case PompAction::BOX_IDLE: img = &m_ImgBoxIdle_L[safeF % 10]; break; case PompAction::BOX_HIT: img = &m_ImgBoxHit_L[safeF % 14]; break; case PompAction::TURN: img = &m_ImgTurn_L[safeF % 6]; break; case PompAction::RUN: img = &m_ImgRun_L[safeF % 10]; break; } } }
     else { if (m_ActionState == PompAction::HURT_FLY) img = &m_ImgHurtFly_R[safeF % 2]; else if (m_ActionState == PompAction::HURT_GROUND || m_State == EnemyState::DEAD) img = &m_ImgHurtGround_R[safeF % 15]; else if (m_State == EnemyState::FALL) img = &m_ImgFall_R[safeF % 13]; else { switch (m_ActionState) { case PompAction::NONE: if (m_State == EnemyState::IDLE) img = &m_ImgIdle_R[safeF % 8]; else img = &m_ImgWalk_R[safeF % 10]; break; case PompAction::ATTACK: img = &m_ImgAttack_R[safeF % 6]; break; case PompAction::BOX_IDLE: img = &m_ImgBoxIdle_R[safeF % 10]; break; case PompAction::BOX_HIT: img = &m_ImgBoxHit_R[safeF % 14]; break; case PompAction::TURN: img = &m_ImgTurn_R[safeF % 6]; break; case PompAction::RUN: img = &m_ImgRun_R[safeF % 10]; break; } } }
-    if (img && !img->IsNull()) { int fw = (int)(40 * ms), fh = (int)(60 * ms); if (m_isFacingLeft) { int om = SetGraphicsMode(h, GM_ADVANCED); XFORM xfO; GetWorldTransform(h, &xfO); XFORM xfL; xfL.eM11 = -1.0f; xfL.eM12 = 0.0f; xfL.eM21 = 0.0f; xfL.eM22 = 1.0f; xfL.eDx = (float)(2 * sx + fw); xfL.eDy = 0.0f; SetWorldTransform(h, &xfL); img->Draw(h, sx, sy, fw, fh); SetWorldTransform(h, &xfO); SetGraphicsMode(h, om); } else img->Draw(h, sx, sy, fw, fh); }
+    if (img && !img->IsNull()) { 
+        int fw = (int)(40 * ms), fh = (int)(60 * ms); 
+        if (m_isFacingLeft) { 
+            int om = SetGraphicsMode(h, GM_ADVANCED); 
+            XFORM xfO; GetWorldTransform(h, &xfO); 
+            XFORM xfL; xfL.eM11 = -1.0f; xfL.eM12 = 0.0f; xfL.eM21 = 0.0f; xfL.eM22 = 1.0f; xfL.eDx = (float)(2 * sx + fw); xfL.eDy = 0.0f; 
+            SetWorldTransform(h, &xfL); 
+            img->Draw(h, sx, sy, fw, fh); 
+            SetWorldTransform(h, &xfO); 
+            SetGraphicsMode(h, om); 
+        } else img->Draw(h, sx, sy, fw, fh); 
+    }
     else Rectangle(h, sx, sy, sx + (int)(m_colW * ms), sy + (int)(m_colH * ms));
     if (dr) { HBRUSH rb = CreateSolidBrush(RGB(255, 0, 0)); RECT r = { sx, sy, sx + (int)(m_colW * ms), sy + (int)(m_colH * ms) }; FrameRect(h, &r, rb); DeleteObject(rb); }
 }
@@ -205,7 +228,18 @@ void ShieldCop::Render(HDC h, float cx, float cy, float ms, bool dr) {
     int safeF = (std::max)(0, m_CurrentFrame);
     if (m_isFacingLeft) { if (m_ActionState == ShieldCopAction::HURT_FLY) img = &m_ImgKnockback_L[safeF % 2]; else if (m_ActionState == ShieldCopAction::HURT_GROUND || m_State == EnemyState::DEAD) img = &m_ImgTragedyDie_L[safeF % 15]; else if (m_State == EnemyState::FALL) img = &m_ImgIdle_L[safeF % 6]; else { switch (m_ActionState) { case ShieldCopAction::NONE: if (m_State == EnemyState::IDLE) img = &m_ImgIdle_L[safeF % 6]; else img = &m_ImgWalk_L[safeF % 10]; break; case ShieldCopAction::AIM: img = &m_ImgAim_L[safeF % 19]; break; case ShieldCopAction::BASH: img = &m_ImgBash_L[safeF % 6]; break; case ShieldCopAction::TURN: img = &m_ImgTurn_L[safeF % 8]; break; case ShieldCopAction::RUN: img = &m_ImgRun_L[safeF % 10]; break; } } }
     else { if (m_ActionState == ShieldCopAction::HURT_FLY) img = &m_ImgKnockback_R[safeF % 2]; else if (m_ActionState == ShieldCopAction::HURT_GROUND || m_State == EnemyState::DEAD) img = &m_ImgTragedyDie_R[safeF % 15]; else if (m_State == EnemyState::FALL) img = &m_ImgIdle_R[safeF % 6]; else { switch (m_ActionState) { case ShieldCopAction::NONE: if (m_State == EnemyState::IDLE) img = &m_ImgIdle_R[safeF % 6]; else img = &m_ImgWalk_R[safeF % 10]; break; case ShieldCopAction::AIM: img = &m_ImgAim_R[safeF % 19]; break; case ShieldCopAction::BASH: img = &m_ImgBash_R[safeF % 6]; break; case ShieldCopAction::TURN: img = &m_ImgTurn_R[safeF % 8]; break; case ShieldCopAction::RUN: img = &m_ImgRun_R[safeF % 10]; break; } } }
-    if (img && !img->IsNull()) { int fw = (int)(40 * ms), fh = (int)(60 * ms); if (m_isFacingLeft) { int om = SetGraphicsMode(h, GM_ADVANCED); XFORM xfO; GetWorldTransform(h, &xfO); XFORM xfL; xfL.eM11 = -1.0f; xfL.eM12 = 0.0f; xfL.eM21 = 0.0f; xfL.eM22 = 1.0f; xfL.eDx = (float)(2 * sx + fw); xfL.eDy = 0.0f; SetWorldTransform(h, &xfL); img->Draw(h, sx, sy, fw, fh); SetWorldTransform(h, &xfO); SetGraphicsMode(h, om); } else img->Draw(h, sx, sy, fw, fh); }
+    if (img && !img->IsNull()) { 
+        int fw = (int)(40 * ms), fh = (int)(60 * ms); 
+        if (m_isFacingLeft) { 
+            int om = SetGraphicsMode(h, GM_ADVANCED); 
+            XFORM xfO; GetWorldTransform(h, &xfO); 
+            XFORM xfL; xfL.eM11 = -1.0f; xfL.eM12 = 0.0f; xfL.eM21 = 0.0f; xfL.eM22 = 1.0f; xfL.eDx = (float)(2 * sx + fw); xfL.eDy = 0.0f; 
+            SetWorldTransform(h, &xfL); 
+            img->Draw(h, sx, sy, fw, fh); 
+            SetWorldTransform(h, &xfO); 
+            SetGraphicsMode(h, om); 
+        } else img->Draw(h, sx, sy, fw, fh); 
+    }
     else Rectangle(h, sx, sy, sx + (int)(m_colW * ms), sy + (int)(m_colH * ms));
     if (dr) { HBRUSH rb = CreateSolidBrush(RGB(255, 0, 0)); RECT r = { sx, sy, sx + (int)(m_colW * ms), sy + (int)(m_colH * ms) }; FrameRect(h, &r, rb); DeleteObject(rb); }
 }

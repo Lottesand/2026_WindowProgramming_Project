@@ -52,6 +52,7 @@ Player::Player() {
 Player::~Player() {}
 
 void Player::Init() {
+    if (!imgIdle[0].IsNull()) return; // Already loaded
     TCHAR path[256];
     for (int i = 0; i < 11; i++) { wsprintf(path, TEXT("assets/idle/%d.png"), i); imgIdle[i].Load(path); }
     for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/walk/%d.png"), i); imgWalk[i].Load(path); }
@@ -85,8 +86,12 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         }
         return;
     }
-    m_history.push_back({ m_x, m_y, m_state, m_currentFrame, m_isFacingRight, m_attackAngle });
-    if (m_history.size() > (size_t)m_maxHistorySize) m_history.erase(m_history.begin());
+    
+    // 슬로우 모션 중에는 히스토리를 저장하지 않음
+    if (!m_isSlowMo) {
+        m_history.push_back({ m_x, m_y, m_state, m_currentFrame, m_isFacingRight, m_attackAngle });
+        if (m_history.size() > (size_t)m_maxHistorySize) m_history.erase(m_history.begin());
+    }
 
     bool isW = GetAsyncKeyState('W') & 0x8000, isA = GetAsyncKeyState('A') & 0x8000, isS = GetAsyncKeyState('S') & 0x8000, isD = GetAsyncKeyState('D') & 0x8000, isJ = (GetAsyncKeyState('W') & 0x8000) || (GetAsyncKeyState(VK_SPACE) & 0x8000);
     int twd = 0; if (CheckSpecificCollision(m_x - 3.0f, m_y, m_colW, m_colH, 3)) twd = -1; else if (CheckSpecificCollision(m_x + 3.0f, m_y, m_colW, m_colH, 3)) twd = 1;
@@ -257,7 +262,11 @@ void Player::Render(HDC hMemDC, float camX, float camY, float mapScale, float pl
             else { vx = (px - camX) * mapScale; vy = (py - camY) * mapScale; pFS = mapScale; }
             float sw = img->GetWidth() * playerScale * pFS, sh = img->GetHeight() * playerScale * pFS;
             float dx = vx + (40.0f * pFS) / 2.0f - (sw / 2.0f), dy = vy + (64.0f * pFS) - sh;
-            Gdiplus::Bitmap gb(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)img->GetBits());
+
+            void* bits = img->GetBits();
+            if (!bits) continue;
+
+            Gdiplus::Bitmap gb(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
             Gdiplus::ImageAttributes at; Gdiplus::ColorMatrix mat;
             if (i == -1) { if (m_isSlowMo) mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,1,0, 0,0,0,0,1 }; else mat = { 1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,1,0, 0,0,0,0,1 }; }
             else { float al = (1.0f - ((float)i / (float)m_afterImages.size())); if (m_isSlowMo) { al *= 0.4f; mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,al,0, 0,0,0,0,1 }; } else { if (i % 2 == 0) { al *= 0.8f; mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,al,0, 0,0,0,0,1 }; } else { al *= 0.6f; mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,0,1,al,0, 0,0,0,0,1 }; } } }
@@ -267,10 +276,13 @@ void Player::Render(HDC hMemDC, float camX, float camY, float mapScale, float pl
             if (i == -1 && s == PlayerState::ATTACK && f < 5) {
                 CImage* si = &imgSlashFX[(std::min)(safeF, 4)]; if (si && !si->IsNull() && si->IsDIBSection()) {
                     int slw = (int)(si->GetWidth() * playerScale * pFS), slh = (int)(si->GetHeight() * playerScale * pFS);
-                    Gdiplus::Bitmap gs(si->GetWidth(), si->GetHeight(), si->GetPitch(), PixelFormat32bppARGB, (BYTE*)si->GetBits());
-                    graphics.TranslateTransform(vx + (40.0f * pFS) / 2.0f, vy + (64.0f * pFS) / 2.0f); graphics.RotateTransform(a * 180.0f / 3.14159f);
-                    graphics.DrawImage(&gs, Gdiplus::RectF(-slw / 2.0f, -slh / 2.0f, (float)slw, (float)slh), 0, 0, (float)si->GetWidth(), (float)si->GetHeight(), Gdiplus::UnitPixel, &at);
-                    graphics.ResetTransform();
+                    void* sbits = si->GetBits();
+                    if (sbits) {
+                        Gdiplus::Bitmap gs(si->GetWidth(), si->GetHeight(), si->GetPitch(), PixelFormat32bppARGB, (BYTE*)sbits);
+                        graphics.TranslateTransform(vx + (40.0f * pFS) / 2.0f, vy + (64.0f * pFS) / 2.0f); graphics.RotateTransform(a * 180.0f / 3.14159f);
+                        graphics.DrawImage(&gs, Gdiplus::RectF(-slw / 2.0f, -slh / 2.0f, (float)slw, (float)slh), 0, 0, (float)si->GetWidth(), (float)si->GetHeight(), Gdiplus::UnitPixel, &at);
+                        graphics.ResetTransform();
+                    }
                 }
             }
         }

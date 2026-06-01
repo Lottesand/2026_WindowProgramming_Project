@@ -14,6 +14,7 @@ public:
     void Render(HDC hDC);
 
     void SpawnEnemies();
+    void LoadStage(int stage);
 
     int GetWinWidth() const { return m_winWidth; }
     int GetWinHeight() const { return m_winHeight; }
@@ -30,6 +31,9 @@ private:
 
     int m_winWidth;
     int m_winHeight;
+    int m_currentStage;
+    bool m_isStageCleared;
+    bool m_bGameStarted;
 
     bool m_isTimePaused;
     bool m_showDebugRect;
@@ -42,6 +46,7 @@ private:
     float m_mapOffsetY;
 
     DWORD m_prevTime;
+    float m_stageTimer; // 현재 스테이지 남은 시간
 
     int m_maxRewindTime = 10; 
     int m_rewindSpeed = 4;    

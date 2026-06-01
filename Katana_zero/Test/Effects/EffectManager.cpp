@@ -142,9 +142,13 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             float dX, dY;
             if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
             else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            
+            int oldMode = SetGraphicsMode(hDC, GM_ADVANCED);
             XFORM xF; xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
-            SetWorldTransform(hDC, &xF); vI->Draw(hDC, -vW / 2, -vH / 2, vW, vH);
+            SetWorldTransform(hDC, &xF); 
+            vI->Draw(hDC, -vW / 2, -vH / 2, vW, vH);
             XFORM xFI = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f }; SetWorldTransform(hDC, &xFI);
+            SetGraphicsMode(hDC, oldMode);
         }
     }
 

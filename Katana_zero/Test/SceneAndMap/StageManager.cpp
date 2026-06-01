@@ -6,20 +6,27 @@ CImage StageManager::m_imgColMap;
 CImage StageManager::m_imgSkylineBlack;
 CImage StageManager::m_imgSkylineClouds;
 std::vector<Door> StageManager::m_doors;
+POINT StageManager::m_playerStart = { 0, 0 };
+std::vector<RECT> StageManager::m_clearZones;
+float StageManager::m_stageLimitTime = 60.0f;
 
 void StageManager::Init() {
     m_doors.clear();
+    m_clearZones.clear();
+    m_playerStart = { 100, 100 }; 
     
     if (!m_imgColMap.IsNull()) {
         int w = m_imgColMap.GetWidth();
         int h = m_imgColMap.GetHeight();
 
-        // ?묓겕??R:255, G:0, B:255) ?곸뿭 ?ㅼ틪
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 COLORREF color = m_imgColMap.GetPixel(x, y);
-                if (GetRValue(color) == 255 && GetGValue(color) == 0 && GetBValue(color) == 255) {
-                    // ?대? ?대떦 ?꾩튂媛 湲곗〈 臾??곸뿭???ы븿?섎뒗吏 ?뺤씤
+                BYTE r = GetRValue(color);
+                BYTE g = GetGValue(color);
+                BYTE b = GetBValue(color);
+
+                if (r == 255 && g == 0 && b == 255) {
                     bool alreadyCovered = false;
                     for (const auto& d : m_doors) {
                         if (x >= d.GetX() && x < d.GetX() + d.GetW() &&
@@ -30,32 +37,46 @@ void StageManager::Init() {
                     }
 
                     if (!alreadyCovered) {
-                        // ?덈줈???묓겕 ?곸뿭 諛쒓껄 - 媛濡??몃줈 ?ш린 痢≪젙
-                        int rectW = 0;
-                        int rectH = 0;
-
-                        // 媛濡??ш린 痢≪젙
-                        while (x + rectW < w) {
-                            COLORREF c = m_imgColMap.GetPixel(x + rectW, y);
-                            if (GetRValue(c) == 255 && GetGValue(c) == 0 && GetBValue(c) == 255) rectW++;
-                            else break;
+                        int rectW = 0, rectH = 0;
+                        while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FF00FF) rectW++;
+                        while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FF00FF) rectH++;
+                        if (rectW > 0 && rectH > 0) m_doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                    }
+                }
+                // White (255, 255, 255) - Player Start
+                else if (r == 255 && g == 255 && b == 255) {
+                    if (m_playerStart.x == 100 && m_playerStart.y == 100) { // Only set if still default
+                        m_playerStart = { x, y };
+                    }
+                }
+                // Cyan (0, 255, 255) - Clear Zone
+                else if (r == 0 && g == 255 && b == 255) {
+                    bool alreadyCovered = false;
+                    for (const auto& rect : m_clearZones) {
+                        if (x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom) {
+                            alreadyCovered = true;
+                            break;
                         }
-
-                        // ?몃줈 ?ш린 痢≪젙
-                        while (y + rectH < h) {
-                            COLORREF c = m_imgColMap.GetPixel(x, y + rectH);
-                            if (GetRValue(c) == 255 && GetGValue(c) == 0 && GetBValue(c) == 255) rectH++;
-                            else break;
-                        }
-
-                        if (rectW > 0 && rectH > 0) {
-                            m_doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
-                        }
+                    }
+                    if (!alreadyCovered) {
+                        int rectW = 0, rectH = 0;
+                        while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FFFF00) rectW++;
+                        while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FFFF00) rectH++;
+                        if (rectW > 0 && rectH > 0) m_clearZones.push_back({ x, y, x + rectW, y + rectH });
                     }
                 }
             }
         }
     }
+}
+
+bool StageManager::IsInClearZone(float x, float y, float w, float h) {
+    RECT r = { (int)x, (int)y, (int)(x + w), (int)(y + h) };
+    for (const auto& zone : m_clearZones) {
+        RECT intersect;
+        if (IntersectRect(&intersect, &r, &zone)) return true;
+    }
+    return false;
 }
 
 void StageManager::Reset() {
@@ -64,11 +85,23 @@ void StageManager::Reset() {
     }
 }
 
-void StageManager::LoadAssets() {
-    m_imgMap.Load(TEXT("assets/map.png"));
-    m_imgColMap.Load(TEXT("assets/colmap.png"));
-    m_imgSkylineBlack.Load(TEXT("assets/spr_skyline_black.png"));
-    m_imgSkylineClouds.Load(TEXT("assets/spr_skyline_clouds.png"));
+void StageManager::LoadAssets(int stage) {
+    TCHAR mapPath[256], colPath[256];
+    wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), stage, stage);
+    wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), stage, stage);
+
+    m_imgMap.Destroy();
+    m_imgColMap.Destroy();
+    
+    m_imgMap.Load(mapPath);
+    m_imgColMap.Load(colPath);
+    
+    // 스테이지별 제한 시간 설정
+    if (stage == 1) m_stageLimitTime = 30.0f; // 1스테이지 30초
+    else m_stageLimitTime = 60.0f;
+
+    if (m_imgSkylineBlack.IsNull()) m_imgSkylineBlack.Load(TEXT("assets/spr_skyline_black.png"));
+    if (m_imgSkylineClouds.IsNull()) m_imgSkylineClouds.Load(TEXT("assets/spr_skyline_clouds.png"));
     Door::LoadAssets();
 }
 
@@ -128,7 +161,11 @@ void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float
             if (isFullMapView) {
                 tMap->Draw(hDC, (int)mapOffsetX, (int)mapOffsetY, (int)(cMW * renderMapScale), (int)(cMH * renderMapScale), 0, 0, cMW, cMH);
             } else {
-                tMap->Draw(hDC, 0, 0, virtualWidth, virtualHeight, (int)camX, (int)camY, (int)(virtualWidth / renderMapScale), (int)(virtualHeight / renderMapScale));
+                if (camX >= 0 && camY >= 0 && camX + (virtualWidth / renderMapScale) <= cMW && camY + (virtualHeight / renderMapScale) <= cMH) {
+                    tMap->Draw(hDC, 0, 0, virtualWidth, virtualHeight, (int)camX, (int)camY, (int)(virtualWidth / renderMapScale), (int)(virtualHeight / renderMapScale));
+                } else {
+                    tMap->Draw(hDC, 0, 0, virtualWidth, virtualHeight, (int)camX, (int)camY, (int)(virtualWidth / renderMapScale), (int)(virtualHeight / renderMapScale));
+                }
             }
         }
     }
@@ -136,7 +173,7 @@ void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float
 
     // --- 4. Doors ---
     for (auto& d : m_doors) {
-        float cFS = 0, cFX = 0, cFY = 0; // FullMapView 怨꾩궛??(Game ?대옒?ㅼ뿉???섍꺼諛쏆븘???섏?留??쇰떒 StageManager???꾩슂??媛믩뱾 ?덉쓬)
+        float cFS = 0, cFX = 0, cFY = 0;
         if (isFullMapView) {
             int mapW = GetMapWidth();
             int mapH = GetMapHeight();
