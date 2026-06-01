@@ -188,7 +188,21 @@ void Gangster::Update()
         DWORD currentTime = GetTickCount();
         if (currentTime - m_LastTime >= 100)
         {
-            m_CurrentFrame++;
+            // 쓰러지는 모션(HURT_GROUND)일 때
+            if (m_ActionState == GangsterAction::HURT_GROUND || m_State == EnemyState::DEAD)
+            {
+                // 마지막 프레임 전까지만 증가시킴 (14프레임이면 인덱스 13까지)
+                if (m_CurrentFrame < 13)
+                {
+                    m_CurrentFrame++;
+                }
+                // m_CurrentFrame이 13이 되면 여기서 멈추므로 루프되지 않음
+            }
+            else
+            {
+                // 일반 상태(WALK, IDLE 등)는 계속 루프
+                m_CurrentFrame++;
+            }
             m_LastTime = currentTime;
         }
         return;
@@ -273,8 +287,7 @@ void Gangster::Render(HDC hdc)
     CImage* targetImg = nullptr;
     float motionScaleX = 1.0f;
     float motionScaleY = 1.0f;
-    int offsetY = 0;
-
+    float enemyScale = 1.8f; 
     if (m_isFacingLeft)
     {
         if (m_ActionState == GangsterAction::HURT_FLY) { targetImg = &m_ImgHurtFly_L[m_CurrentFrame % 2]; }
@@ -288,9 +301,8 @@ void Gangster::Render(HDC hdc)
                 if (m_State == EnemyState::IDLE)
                 {
                     targetImg = &m_ImgIdle_L[m_CurrentFrame % 8];
-                    motionScaleX = 1.6f;
-                    motionScaleY = 1.6f;
-                    offsetY = -35;
+                    motionScaleX = 1.1f;
+                    motionScaleY = 1.1f;
                 }
                 else if (m_State == EnemyState::WALK) { targetImg = &m_ImgWalk_L[m_CurrentFrame % 8]; }
                 break;
@@ -314,9 +326,8 @@ void Gangster::Render(HDC hdc)
                 if (m_State == EnemyState::IDLE)
                 {
                     targetImg = &m_ImgIdle_R[m_CurrentFrame % 8];
-                    motionScaleX = 1.6f;
-                    motionScaleY = 1.6f;
-                    offsetY = -35;
+                    motionScaleX = 1.1f;
+                    motionScaleY = 1.1f;
                 }
                 else if (m_State == EnemyState::WALK) { targetImg = &m_ImgWalk_R[m_CurrentFrame % 8]; }
                 break;
@@ -330,37 +341,26 @@ void Gangster::Render(HDC hdc)
 
     if (targetImg && !targetImg->IsNull())
     {
-        int finalW = (int)(40 * motionScaleX * mapScale);
-        int finalH = (int)(60 * motionScaleY * mapScale);
-        int finalY = screenY + (int)(offsetY * mapScale);
+        int finalW = (int)(targetImg->GetWidth() * enemyScale * motionScaleX * mapScale);
+        int finalH = (int)(targetImg->GetHeight() * enemyScale * motionScaleY * mapScale);
+        int finalY = screenY + (int)(m_colH * mapScale) - finalH;
+        int drawX = screenX + (int)(m_colW * mapScale / 2) - (finalW / 2);
 
         if (m_isFacingLeft)
         {
             int oldMode = SetGraphicsMode(hdc, GM_ADVANCED);
             XFORM xFormOld;
             GetWorldTransform(hdc, &xFormOld);
-
-            XFORM xFormLeft;
-            xFormLeft.eM11 = -1.0f;
-            xFormLeft.eM12 = 0.0f;
-            xFormLeft.eM21 = 0.0f;
-            xFormLeft.eM22 = 1.0f;
-            xFormLeft.eDx = (float)(2 * screenX + finalW);
-            xFormLeft.eDy = 0.0f;
-
+            XFORM xFormLeft = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * drawX + finalW), 0.0f };
             SetWorldTransform(hdc, &xFormLeft);
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
             SetWorldTransform(hdc, &xFormOld);
             SetGraphicsMode(hdc, oldMode);
         }
         else
         {
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
         }
-    }
-    else
-    {
-        Rectangle(hdc, screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale));
     }
 
     if (g_showDebugRect)
@@ -463,7 +463,11 @@ void Grunt::Update()
         DWORD currentTime = GetTickCount();
         if (currentTime - m_LastTime >= 100)
         {
-            m_CurrentFrame++;
+            if (m_ActionState == GruntAction::HURT_GROUND || m_State == EnemyState::DEAD)
+            {
+                if (m_CurrentFrame < 15) { m_CurrentFrame++; }
+            }
+            else { m_CurrentFrame++; }
             m_LastTime = currentTime;
         }
         return;
@@ -480,10 +484,7 @@ void Grunt::Update()
         m_vy = 0.0f;
         while (CheckCollision(footX, (int)m_y + (int)m_colH)) { m_y -= 1.0f; }
     }
-    else
-    {
-        m_y += m_vy;
-    }
+    else { m_y += m_vy; }
 
     static DWORD patternTimer = GetTickCount();
     static bool isWaiting = false;
@@ -496,7 +497,6 @@ void Grunt::Update()
     {
         m_vx = 0.0f;
         m_State = EnemyState::IDLE;
-
         if (currentPatternTime - patternTimer >= 1500)
         {
             isWaiting = false;
@@ -510,13 +510,11 @@ void Grunt::Update()
     {
         m_State = EnemyState::WALK;
         int nextX = footX + (int)m_vx;
-
         if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
         {
             m_x += m_vx;
             walkDistance += fabs(m_vx);
             m_isFacingLeft = (m_vx < 0.0f);
-
             if (walkDistance >= MAX_WALK_DISTANCE)
             {
                 isWaiting = true;
@@ -540,7 +538,7 @@ void Grunt::Update()
     }
 }
 
-void Grunt::Render(HDC hdc)
+void Grunt::Render(HDC hdc) 
 {
     int screenX = (int)((m_x - camX) * mapScale);
     int screenY = (int)((m_y - camY) * mapScale);
@@ -548,8 +546,7 @@ void Grunt::Render(HDC hdc)
     CImage* targetImg = nullptr;
     float motionScaleX = 1.0f;
     float motionScaleY = 1.0f;
-    int offsetY = 0;
-
+    float enemyScale = 1.8f; 
     if (m_isFacingLeft)
     {
         if (m_ActionState == GruntAction::HURT_FLY) { targetImg = &m_ImgHurtFly_L[m_CurrentFrame % 2]; }
@@ -593,37 +590,26 @@ void Grunt::Render(HDC hdc)
 
     if (targetImg && !targetImg->IsNull())
     {
-        int finalW = (int)(40 * motionScaleX * mapScale);
-        int finalH = (int)(60 * motionScaleY * mapScale);
-        int finalY = screenY + (int)(offsetY * mapScale);
+        int finalW = (int)(targetImg->GetWidth() * enemyScale * motionScaleX * mapScale);
+        int finalH = (int)(targetImg->GetHeight() * enemyScale * motionScaleY * mapScale);
+        int finalY = screenY + (int)(m_colH * mapScale) - finalH;
+        int drawX = screenX + (int)(m_colW * mapScale / 2) - (finalW / 2);
 
         if (m_isFacingLeft)
         {
             int oldMode = SetGraphicsMode(hdc, GM_ADVANCED);
             XFORM xFormOld;
             GetWorldTransform(hdc, &xFormOld);
-
-            XFORM xFormLeft;
-            xFormLeft.eM11 = -1.0f;
-            xFormLeft.eM12 = 0.0f;
-            xFormLeft.eM21 = 0.0f;
-            xFormLeft.eM22 = 1.0f;
-            xFormLeft.eDx = (float)(2 * screenX + finalW);
-            xFormLeft.eDy = 0.0f;
-
+            XFORM xFormLeft = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * drawX + finalW), 0.0f };
             SetWorldTransform(hdc, &xFormLeft);
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
             SetWorldTransform(hdc, &xFormOld);
             SetGraphicsMode(hdc, oldMode);
         }
         else
         {
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
         }
-    }
-    else
-    {
-        Rectangle(hdc, screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale));
     }
 
     if (g_showDebugRect)
@@ -655,7 +641,6 @@ Pomp::~Pomp() {}
 void Pomp::Init()
 {
     wchar_t path[256];
-
     for (int i = 0; i < 8; ++i)
     {
         swprintf_s(path, L"assets/spr_pomp_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
@@ -717,21 +702,21 @@ void Pomp::Update()
             m_vy += 1.5f;
             m_y += m_vy;
             m_x += m_vx;
-
             if (CheckCollision((int)m_x + (int)(m_colW / 2), (int)m_y + (int)m_colH))
             {
                 m_ActionState = PompAction::HURT_GROUND;
                 m_State = EnemyState::DEAD;
-                m_vx = 0;
-                m_vy = 0;
-                m_CurrentFrame = 0;
+                m_vx = 0; m_vy = 0; m_CurrentFrame = 0;
             }
         }
-
         DWORD currentTime = GetTickCount();
         if (currentTime - m_LastTime >= 100)
         {
-            m_CurrentFrame++;
+            if (m_ActionState == PompAction::HURT_GROUND || m_State == EnemyState::DEAD)
+            {
+                if (m_CurrentFrame < 14) { m_CurrentFrame++; }
+            }
+            else { m_CurrentFrame++; }
             m_LastTime = currentTime;
         }
         return;
@@ -748,10 +733,7 @@ void Pomp::Update()
         m_vy = 0.0f;
         while (CheckCollision(footX, (int)m_y + (int)m_colH)) { m_y -= 1.0f; }
     }
-    else
-    {
-        m_y += m_vy;
-    }
+    else { m_y += m_vy; }
 
     static DWORD patternTimer = GetTickCount();
     static bool isWaiting = false;
@@ -764,7 +746,6 @@ void Pomp::Update()
     {
         m_vx = 0.0f;
         m_State = EnemyState::IDLE;
-
         if (currentPatternTime - patternTimer >= 1800)
         {
             isWaiting = false;
@@ -778,13 +759,11 @@ void Pomp::Update()
     {
         m_State = EnemyState::WALK;
         int nextX = footX + (int)m_vx;
-
         if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
         {
             m_x += m_vx;
             walkDistance += fabs(m_vx);
             m_isFacingLeft = (m_vx < 0.0f);
-
             if (walkDistance >= MAX_WALK_DISTANCE)
             {
                 isWaiting = true;
@@ -816,8 +795,7 @@ void Pomp::Render(HDC hdc)
     CImage* targetImg = nullptr;
     float motionScaleX = 1.0f;
     float motionScaleY = 1.0f;
-    int offsetY = 0;
-
+    float enemyScale = 1.8f; 
     if (m_isFacingLeft)
     {
         if (m_ActionState == PompAction::HURT_FLY) { targetImg = &m_ImgHurtFly_L[m_CurrentFrame % 2]; }
@@ -863,37 +841,26 @@ void Pomp::Render(HDC hdc)
 
     if (targetImg && !targetImg->IsNull())
     {
-        int finalW = (int)(40 * motionScaleX * mapScale);
-        int finalH = (int)(60 * motionScaleY * mapScale);
-        int finalY = screenY + (int)(offsetY * mapScale);
+        int finalW = (int)(targetImg->GetWidth() * enemyScale * motionScaleX * mapScale);
+        int finalH = (int)(targetImg->GetHeight() * enemyScale * motionScaleY * mapScale);
+        int finalY = screenY + (int)(m_colH * mapScale) - finalH;
+        int drawX = screenX + (int)(m_colW * mapScale / 2) - (finalW / 2);
 
         if (m_isFacingLeft)
         {
             int oldMode = SetGraphicsMode(hdc, GM_ADVANCED);
             XFORM xFormOld;
             GetWorldTransform(hdc, &xFormOld);
-
-            XFORM xFormLeft;
-            xFormLeft.eM11 = -1.0f;
-            xFormLeft.eM12 = 0.0f;
-            xFormLeft.eM21 = 0.0f;
-            xFormLeft.eM22 = 1.0f;
-            xFormLeft.eDx = (float)(2 * screenX + finalW);
-            xFormLeft.eDy = 0.0f;
-
+            XFORM xFormLeft = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * drawX + finalW), 0.0f };
             SetWorldTransform(hdc, &xFormLeft);
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
             SetWorldTransform(hdc, &xFormOld);
             SetGraphicsMode(hdc, oldMode);
         }
         else
         {
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
         }
-    }
-    else
-    {
-        Rectangle(hdc, screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale));
     }
 
     if (g_showDebugRect)
@@ -925,7 +892,6 @@ ShieldCop::~ShieldCop() {}
 void ShieldCop::Init()
 {
     wchar_t path[256];
-
     for (int i = 0; i < 6; ++i)
     {
         swprintf_s(path, L"assets/spr_shieldcop_idle/%d.png", i); m_ImgIdle_R[i].Load(path);
@@ -977,21 +943,21 @@ void ShieldCop::Update()
             m_vy += 1.5f;
             m_y += m_vy;
             m_x += m_vx;
-
             if (CheckCollision((int)m_x + (int)(m_colW / 2), (int)m_y + (int)m_colH))
             {
                 m_ActionState = ShieldCopAction::HURT_GROUND;
                 m_State = EnemyState::DEAD;
-                m_vx = 0;
-                m_vy = 0;
-                m_CurrentFrame = 0;
+                m_vx = 0; m_vy = 0; m_CurrentFrame = 0;
             }
         }
-
         DWORD currentTime = GetTickCount();
         if (currentTime - m_LastTime >= 100)
         {
-            m_CurrentFrame++;
+            if (m_ActionState == ShieldCopAction::HURT_GROUND || m_State == EnemyState::DEAD)
+            {
+                if (m_CurrentFrame < 14) { m_CurrentFrame++; }
+            }
+            else { m_CurrentFrame++; }
             m_LastTime = currentTime;
         }
         return;
@@ -1008,10 +974,7 @@ void ShieldCop::Update()
         m_vy = 0.0f;
         while (CheckCollision(footX, (int)m_y + (int)m_colH)) { m_y -= 1.0f; }
     }
-    else
-    {
-        m_y += m_vy;
-    }
+    else { m_y += m_vy; }
 
     static DWORD patternTimer = GetTickCount();
     static bool isWaiting = false;
@@ -1024,7 +987,6 @@ void ShieldCop::Update()
     {
         m_vx = 0.0f;
         m_State = EnemyState::IDLE;
-
         if (currentPatternTime - patternTimer >= 2200)
         {
             isWaiting = false;
@@ -1038,13 +1000,11 @@ void ShieldCop::Update()
     {
         m_State = EnemyState::WALK;
         int nextX = footX + (int)m_vx;
-
         if (!CheckCollision(nextX, (int)m_y + (int)(m_colH * 0.9f)))
         {
             m_x += m_vx;
             walkDistance += fabs(m_vx);
             m_isFacingLeft = (m_vx < 0.0f);
-
             if (walkDistance >= MAX_WALK_DISTANCE)
             {
                 isWaiting = true;
@@ -1076,8 +1036,7 @@ void ShieldCop::Render(HDC hdc)
     CImage* targetImg = nullptr;
     float motionScaleX = 1.0f;
     float motionScaleY = 1.0f;
-    int offsetY = 0;
-
+    float enemyScale = 1.8f; 
     if (m_isFacingLeft)
     {
         if (m_ActionState == ShieldCopAction::HURT_FLY) { targetImg = &m_ImgKnockback_L[m_CurrentFrame % 2]; }
@@ -1121,37 +1080,26 @@ void ShieldCop::Render(HDC hdc)
 
     if (targetImg && !targetImg->IsNull())
     {
-        int finalW = (int)(40 * motionScaleX * mapScale);
-        int finalH = (int)(60 * motionScaleY * mapScale);
-        int finalY = screenY + (int)(offsetY * mapScale);
+        int finalW = (int)(targetImg->GetWidth() * enemyScale * motionScaleX * mapScale);
+        int finalH = (int)(targetImg->GetHeight() * enemyScale * motionScaleY * mapScale);
+        int finalY = screenY + (int)(m_colH * mapScale) - finalH;
+        int drawX = screenX + (int)(m_colW * mapScale / 2) - (finalW / 2);
 
         if (m_isFacingLeft)
         {
             int oldMode = SetGraphicsMode(hdc, GM_ADVANCED);
             XFORM xFormOld;
             GetWorldTransform(hdc, &xFormOld);
-
-            XFORM xFormLeft;
-            xFormLeft.eM11 = -1.0f;
-            xFormLeft.eM12 = 0.0f;
-            xFormLeft.eM21 = 0.0f;
-            xFormLeft.eM22 = 1.0f;
-            xFormLeft.eDx = (float)(2 * screenX + finalW);
-            xFormLeft.eDy = 0.0f;
-
+            XFORM xFormLeft = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * drawX + finalW), 0.0f };
             SetWorldTransform(hdc, &xFormLeft);
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
             SetWorldTransform(hdc, &xFormOld);
             SetGraphicsMode(hdc, oldMode);
         }
         else
         {
-            targetImg->Draw(hdc, screenX, finalY, finalW, finalH);
+            targetImg->Draw(hdc, drawX, finalY, finalW, finalH);
         }
-    }
-    else
-    {
-        Rectangle(hdc, screenX, screenY, screenX + (int)(m_colW * mapScale), screenY + (int)(m_colH * mapScale));
     }
 
     if (g_showDebugRect)

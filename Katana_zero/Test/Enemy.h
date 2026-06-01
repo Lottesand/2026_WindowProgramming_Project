@@ -80,6 +80,7 @@ protected:
     float m_friction;
     float m_knockbackVx;
 
+
 public:
     Enemy(float startX, float startY, EnemyType type);
     virtual ~Enemy();
