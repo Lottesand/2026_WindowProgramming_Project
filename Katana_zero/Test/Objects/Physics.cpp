@@ -23,26 +23,32 @@ bool CheckCollision(int x, int y) {
 
 bool CheckMapCollision(float x, float y, float w, float h) {
     auto isSolid = [](int t) { return t == 1 || t == 3; };
-    if (isSolid(GetCollisionType((int)x, (int)y))) return true;
-    if (isSolid(GetCollisionType((int)(x + w / 2), (int)y))) return true;
-    if (isSolid(GetCollisionType((int)(x + w), (int)y))) return true;
-    if (isSolid(GetCollisionType((int)x, (int)(y + h / 2)))) return true;
-    if (isSolid(GetCollisionType((int)(x + w), (int)(y + h / 2)))) return true;
-    if (isSolid(GetCollisionType((int)x, (int)(y + h)))) return true;
-    if (isSolid(GetCollisionType((int)(x + w / 2), (int)(y + h)))) return true;
-    if (isSolid(GetCollisionType((int)(x + w), (int)(y + h)))) return true;
+    int x1 = (int)x, x2 = (int)(x + w / 2), x3 = (int)(x + w - 1);
+    int y1 = (int)y, y2 = (int)(y + h / 2), y3 = (int)(y + h - 1);
+
+    if (isSolid(GetCollisionType(x1, y1))) return true;
+    if (isSolid(GetCollisionType(x2, y1))) return true;
+    if (isSolid(GetCollisionType(x3, y1))) return true;
+    if (isSolid(GetCollisionType(x1, y2))) return true;
+    if (isSolid(GetCollisionType(x3, y2))) return true;
+    if (isSolid(GetCollisionType(x1, y3))) return true;
+    if (isSolid(GetCollisionType(x2, y3))) return true;
+    if (isSolid(GetCollisionType(x3, y3))) return true;
     return false;
 }
 
 bool CheckSpecificCollision(float x, float y, float w, float h, int targetType) {
-    if (GetCollisionType((int)x, (int)y) == targetType) return true;
-    if (GetCollisionType((int)(x + w / 2), (int)y) == targetType) return true;
-    if (GetCollisionType((int)(x + w), (int)y) == targetType) return true;
-    if (GetCollisionType((int)x, (int)(y + h / 2)) == targetType) return true;
-    if (GetCollisionType((int)(x + w), (int)(y + h / 2)) == targetType) return true;
-    if (GetCollisionType((int)x, (int)(y + h)) == targetType) return true;
-    if (GetCollisionType((int)(x + w / 2), (int)(y + h)) == targetType) return true;
-    if (GetCollisionType((int)(x + w), (int)(y + h)) == targetType) return true;
+    int x1 = (int)x, x2 = (int)(x + w / 2), x3 = (int)(x + w - 1);
+    int y1 = (int)y, y2 = (int)(y + h / 2), y3 = (int)(y + h - 1);
+
+    if (GetCollisionType(x1, y1) == targetType) return true;
+    if (GetCollisionType(x2, y1) == targetType) return true;
+    if (GetCollisionType(x3, y1) == targetType) return true;
+    if (GetCollisionType(x1, y2) == targetType) return true;
+    if (GetCollisionType(x3, y2) == targetType) return true;
+    if (GetCollisionType(x1, y3) == targetType) return true;
+    if (GetCollisionType(x2, y3) == targetType) return true;
+    if (GetCollisionType(x3, y3) == targetType) return true;
     return false;
 }
 

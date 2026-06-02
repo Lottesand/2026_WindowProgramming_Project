@@ -47,6 +47,8 @@ Player::Player() {
     m_hasLeapedInAir = false; m_isAttackClicked = false;
     m_isSlowMo = false; m_canSlowMo = true; m_slowMoStartTime = 0;
     m_batteryLevel = 11.0f; m_lastTimeScale = 1.0f;
+    m_isGodMode = false;
+    m_snapshots.reserve(3000);
 }
 
 Player::~Player() {}
@@ -75,6 +77,8 @@ void Player::Init() {
 }
 
 void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
+    if (m_state == PlayerState::DEAD && !m_isRewinding) return;
+
     DWORD ct = GetTickCount();
     if (m_isRewinding) {
         if (m_history.empty()) { 
@@ -84,7 +88,7 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         }
         for (int i = 0; i < m_rewindSpeed; i++) {
             if (m_history.empty()) break;
-            RewindData d = m_history.back(); m_history.pop_back();
+            PlayerSnapshot d = m_history.back(); m_history.pop_back();
             m_x = d.x; m_y = d.y; m_state = d.state; m_currentFrame = d.frame;
             m_isFacingRight = d.isFacingRight; m_attackAngle = d.attackAngle;
         }
@@ -93,8 +97,10 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     
     // 슬로우 모션 중에는 히스토리를 저장하지 않음
     if (!m_isSlowMo) {
-        m_history.push_back({ m_x, m_y, m_state, m_currentFrame, m_isFacingRight, m_attackAngle });
+        PlayerSnapshot data = { m_x, m_y, m_state, m_currentFrame, m_isFacingRight, m_attackAngle };
+        m_history.push_back(data);
         if (m_history.size() > (size_t)m_maxHistorySize) m_history.erase(m_history.begin());
+        m_snapshots.push_back(data);
     }
 
     bool isW = GetAsyncKeyState('W') & 0x8000, isA = GetAsyncKeyState('A') & 0x8000, isS = GetAsyncKeyState('S') & 0x8000, isD = GetAsyncKeyState('D') & 0x8000, isJ = (GetAsyncKeyState('W') & 0x8000) || (GetAsyncKeyState(VK_SPACE) & 0x8000);
@@ -149,9 +155,27 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     if (tvx != 0.0f && m_state != PlayerState::ROLL && m_state != PlayerState::ATTACK && m_state != PlayerState::WALL_GRAB && m_state != PlayerState::WALL_SLIDE && m_state != PlayerState::WALL_FLIP) m_vx += (tvx - m_vx) * cAcc;
     else if (m_state != PlayerState::ROLL && m_state != PlayerState::ATTACK && m_state != PlayerState::WALL_GRAB && m_state != PlayerState::WALL_SLIDE && m_state != PlayerState::WALL_FLIP) { m_vx += (0.0f - m_vx) * cFri; if (fabs(m_vx) < 0.1f) m_vx = 0.0f; }
     if (m_vx != 0.0f && m_state != PlayerState::ATTACK && m_state != PlayerState::WALL_GRAB && m_state != PlayerState::WALL_SLIDE) {
-        float nx = m_x + m_vx; if (!CheckMapCollision(nx, m_y, m_colW, m_colH - 5)) m_x = nx;
-        else { bool step = false; for (int i = 1; i <= 15; i++) if (!CheckMapCollision(nx, m_y - i, m_colW, m_colH - 5)) { m_x = nx; m_y -= i; step = true; break; }
-            if (!step) { float si = (m_vx > 0) ? 1.0f : -1.0f; int f = 0; while (!CheckMapCollision(m_x + si, m_y, m_colW, m_colH - 5) && f++ < (int)fabs(m_vx) + 2) m_x += si; if (m_state != PlayerState::WALL_FLIP) m_vx = 0.0f; }
+        float nx = m_x + m_vx;
+        if (!CheckMapCollision(nx, m_y, m_colW, m_colH - 5)) {
+            m_x = nx;
+        } else {
+            bool stepped = false;
+            for (int i = 1; i <= 16; i++) {
+                if (!CheckMapCollision(m_x, m_y - i, m_colW, m_colH - 5) && !CheckMapCollision(nx, m_y - i, m_colW, m_colH - 5)) {
+                    m_x = nx;
+                    m_y -= (float)i;
+                    stepped = true;
+                    break;
+                }
+            }
+            if (!stepped) {
+                float si = (m_vx > 0) ? 1.0f : -1.0f;
+                int f = 0;
+                while (!CheckMapCollision(m_x + si, m_y, m_colW, m_colH - 5) && f++ < (int)fabs(m_vx) + 2) {
+                    m_x += si;
+                }
+                if (m_state != PlayerState::WALL_FLIP) m_vx = 0.0f;
+            }
         }
     }
     if (isS && !air && m_state != PlayerState::ROLL && m_state != PlayerState::ATTACK && m_state != PlayerState::WALL_GRAB && m_state != PlayerState::WALL_SLIDE && m_state != PlayerState::WALL_FLIP) {
@@ -165,7 +189,7 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         }
         float ny = m_y + m_vy;
         if (m_vy > 0) {
-            bool hf = false; auto cf = [&](float ty) { int tl = GetCollisionType((int)m_x, (int)(ty + m_colH)), tc = GetCollisionType((int)(m_x + m_colW / 2), (int)(ty + m_colH)), tr = GetCollisionType((int)(m_x + m_colW), (int)(ty + m_colH)); if (tl == 1 || tl == 3 || tc == 1 || tc == 3 || tr == 1 || tr == 3) return true; if (tl == 2 || tc == 2 || tr == 2) { if (m_y + m_colH <= ty + m_colH) return true; } return false; };
+            bool hf = false; auto cf = [&](float ty) { int tl = GetCollisionType((int)(m_x + 2.0f), (int)(ty + m_colH)), tc = GetCollisionType((int)(m_x + m_colW / 2.0f), (int)(ty + m_colH)), tr = GetCollisionType((int)(m_x + m_colW - 2.0f), (int)(ty + m_colH)); if (tl == 1 || tl == 3 || tc == 1 || tc == 3 || tr == 1 || tr == 3) return true; if (tl == 2 || tc == 2 || tr == 2) { if (m_y + m_colH <= ty + m_colH) return true; } return false; };
             for (float sy = m_y; sy <= ny; sy += 1.0f) if (cf(sy)) { m_y = sy; hf = true; break; }
             if (hf) { if (air && !m_isSlowMo) EffectManager::AddLandCloudVFX(m_x + m_colW / 2.0f, m_y + m_colH, ct); m_isJumping = false; m_vy = 0; m_canAirYDash = true; m_hasLeapedInAir = false; } else { m_y = ny; if (!cf(m_y + 1.0f)) m_isJumping = true; else { m_isJumping = false; m_canAirYDash = true; } }
         } else if (m_vy < 0) {
@@ -173,8 +197,16 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
             bool hc = false; for (float sy = m_y; sy >= ny; sy -= 1.0f) if (ch(sy)) { m_y = sy; hc = true; break; }
             if (hc) m_vy = 0; else m_y = ny;
         }
-        int ml = StageManager::GetMap().IsNull() ? 720 : StageManager::GetMap().GetHeight(); if (m_y + m_colH > ml - 20) { m_y = (float)ml - m_colH - 20.0f; m_isJumping = false; m_vy = 0; }
+        int ml = StageManager::GetMap().IsNull() ? 720 : StageManager::GetMap().GetHeight(); 
+        if (m_y + m_colH >= ml) {
+            if (!m_isGodMode) {
+                m_state = PlayerState::DEAD;
+                m_vx = 0; m_vy = 0;
+            }
+        }
     }
+    if (m_state == PlayerState::DEAD) return;
+
     PlayerState nst = m_state;
     if (m_state == PlayerState::ATTACK && m_currentFrame >= 5) nst = air ? PlayerState::FALL : PlayerState::IDLE;
     else if (m_state == PlayerState::DOOR_KICK && m_currentFrame >= 5) nst = air ? PlayerState::FALL : PlayerState::IDLE;

@@ -3,7 +3,7 @@
 #include <atlimage.h>
 #include "../SceneAndMap/StageManager.h"
 
-// 臾쇰━ 愿???곸닔
+
 extern const int VIRTUAL_WIDTH;
 extern const int VIRTUAL_HEIGHT;
 

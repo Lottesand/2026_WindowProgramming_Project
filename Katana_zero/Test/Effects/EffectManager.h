@@ -38,7 +38,7 @@ struct DustCloudVFX {
     int currentFrame;
     int maxFrame;
     DWORD lastTime;
-    DWORD startTick; // ?ㅼ젣 ?좊땲硫붿씠???쒖옉 ?쒓컙 (?쒕젅?댁슜)
+    DWORD startTick;
     bool isFacingRight;
 };
 

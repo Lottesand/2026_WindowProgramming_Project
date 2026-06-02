@@ -21,7 +21,8 @@ enum class PlayerState {
     PREVDOWN, DOWN, POSTDOWN,
     ROLL, ATTACK,
     WALL_GRAB, WALL_SLIDE, WALL_FLIP,
-    DOOR_KICK, DOOR_KICK_FULL
+    DOOR_KICK, DOOR_KICK_FULL,
+    DEAD
 };
 
 class Player {
@@ -80,6 +81,8 @@ private:
     float m_slowMoDuration = 6.5f;
     float m_slowMoRecoveryTime = 11.0f;
 
+    bool m_isGodMode;
+
     float GetBatteryConsumptionPerSec() const { return m_batteryMax / m_slowMoDuration; }
     float GetBatteryRecoveryPerSec() const { return m_batteryMax / m_slowMoRecoveryTime; }
 
@@ -93,7 +96,16 @@ public:
     void Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
     void UpdateAnimation();
     void Render(HDC hMemDC, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect);
-    void SetState(PlayerState state) { if (m_state != state) { m_state = state; m_currentFrame = 0; } }
+    void SetState(PlayerState state) { 
+        if (m_state != state) { 
+            m_state = state; 
+            m_currentFrame = 0; 
+            if (state == PlayerState::DEAD) {
+                m_vx = 0;
+                m_vy = 0;
+            }
+        } 
+    }
 
     float GetX() const { return m_x; }
     float GetY() const { return m_y; }
@@ -111,14 +123,15 @@ public:
     bool GetIsSlowMo() const { return m_isSlowMo; }
     float GetBatteryLevel() const { return m_batteryLevel; }
 
-    struct RewindData {
+    struct PlayerSnapshot {
         float x, y;
         PlayerState state;
         int frame;
         bool isFacingRight;
         float attackAngle;
     };
-    std::vector<RewindData> m_history;
+    std::vector<PlayerSnapshot> m_history;
+    std::vector<PlayerSnapshot> m_snapshots;
     bool m_isRewinding = false;
     int m_rewindSpeed = 1;
     int m_maxHistorySize = 600;
@@ -136,5 +149,9 @@ public:
     void ClearHistory() { m_history.clear(); }
     void SetPos(float x, float y) { m_x = x; m_y = y; m_vx = 0; m_vy = 0; }
     int GetHistorySize() const { return (int)m_history.size(); }
+    void ClearSnapshots() { m_snapshots.clear(); }
+    const std::vector<PlayerSnapshot>& GetSnapshots() const { return m_snapshots; }
+    void SetGodMode(bool god) { m_isGodMode = god; }
+    bool IsGodMode() const { return m_isGodMode; }
 };
 

@@ -16,6 +16,11 @@ public:
     static bool IsRewindEffectActive() { return m_rewindTimer > 0; }
     static float GetRewindYOffset() { return m_rewindYOffset; }
 
+    static void SetLookAheadX(float val) { m_camLookAheadX = val; }
+    static void SetFixedY(float val) { m_camY_Fixed = val; }
+    static void SetLerpSpeedX(float val) { m_camLerpSpeedX = val; }
+    static void SetLerpSpeedY(float val) { m_camLerpSpeedY = val; }
+
 private:
     static float m_camX;
     static float m_camY;
@@ -28,11 +33,13 @@ private:
     static float m_rewindTimer;
     static float m_rewindYOffset;
 
-    // Constants (from main.cpp)
-    static constexpr float m_camLookAheadX = 150.0f;
-    static constexpr float m_camLerpSpeedX = 0.08f;
-    static constexpr float m_camLerpSpeedY = 0.08f;
-    static constexpr float m_camY_Fixed = 60.0f;
+    // Configurable parameters
+    static float m_camLookAheadX;
+    static float m_camLerpSpeedX;
+    static float m_camLerpSpeedY;
+    static float m_camY_Fixed;
+
+    // Constants
     static constexpr float m_shakeIntensity = 10.0f;
     static constexpr float m_shakeDecay = 0.85f;
     static constexpr int VIRTUAL_WIDTH = 1280;

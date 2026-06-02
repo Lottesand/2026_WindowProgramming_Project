@@ -1,68 +1,67 @@
-﻿#include "StageManager.h"
+#include "StageManager.h"
 #include <algorithm>
+#include <atomic>
 
-CImage StageManager::m_imgMap;
-CImage StageManager::m_imgColMap;
+std::map<int, CImage> StageManager::m_mapImages;
+std::map<int, CImage> StageManager::m_colMapImages;
+std::map<int, StageManager::StageData> StageManager::m_stageDataMap;
+
+CImage* StageManager::m_imgMap = nullptr;
+CImage* StageManager::m_imgColMap = nullptr;
+
 CImage StageManager::m_imgSkylineBlack;
 CImage StageManager::m_imgSkylineClouds;
-std::vector<Door> StageManager::m_doors;
+std::vector<Door>* StageManager::m_pCurrentDoors = nullptr;
 POINT StageManager::m_playerStart = { 0, 0 };
 std::vector<RECT> StageManager::m_clearZones;
 float StageManager::m_stageLimitTime = 60.0f;
 
 void StageManager::Init() {
-    m_doors.clear();
-    m_clearZones.clear();
-    m_playerStart = { 100, 100 }; 
-    
-    if (!m_imgColMap.IsNull()) {
-        int w = m_imgColMap.GetWidth();
-        int h = m_imgColMap.GetHeight();
+}
 
-        // 처리된 픽셀을 기록하기 위한 마스크 (최적화)
+void StageManager::ProcessStage(int stage) {
+    StageData& data = m_stageDataMap[stage];
+    CImage& colMap = m_colMapImages[stage];
+
+    data.doors.clear();
+    data.clearZones.clear();
+    data.playerStart = { 100, 100 };
+    data.stageLimitTime = (stage == 1) ? 30.0f : 60.0f;
+
+    if (!colMap.IsNull()) {
+        int w = colMap.GetWidth();
+        int h = colMap.GetHeight();
         std::vector<bool> visited(w * h, false);
 
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 if (visited[y * w + x]) continue;
 
-                COLORREF color = m_imgColMap.GetPixel(x, y);
+                COLORREF color = colMap.GetPixel(x, y);
                 BYTE r = GetRValue(color);
                 BYTE g = GetGValue(color);
                 BYTE b = GetBValue(color);
 
-                // Magenta (255, 0, 255) - Door
                 if (r == 255 && g == 0 && b == 255) {
                     int rectW = 0, rectH = 0;
-                    while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FF00FF) rectW++;
-                    while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FF00FF) rectH++;
-                    
+                    while (x + rectW < w && (colMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FF00FF) rectW++;
+                    while (y + rectH < h && (colMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FF00FF) rectH++;
                     if (rectW > 0 && rectH > 0) {
-                        m_doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
-                        // 방문 기록 업데이트
-                        for (int ry = y; ry < y + rectH; ry++)
-                            for (int rx = x; rx < x + rectW; rx++)
-                                visited[ry * w + rx] = true;
+                        data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
                     }
                 }
-                // White (255, 255, 255) - Player Start
                 else if (r == 255 && g == 255 && b == 255) {
-                    if (m_playerStart.x == 100 && m_playerStart.y == 100) { 
-                        m_playerStart = { x, y };
-                    }
+                    data.playerStart = { x, y };
                     visited[y * w + x] = true;
                 }
-                // Cyan (0, 255, 255) - Clear Zone
                 else if (r == 0 && g == 255 && b == 255) {
                     int rectW = 0, rectH = 0;
-                    while (x + rectW < w && (m_imgColMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FFFF00) rectW++;
-                    while (y + rectH < h && (m_imgColMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FFFF00) rectH++;
-                    
+                    while (x + rectW < w && (colMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FFFF00) rectW++;
+                    while (y + rectH < h && (colMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FFFF00) rectH++;
                     if (rectW > 0 && rectH > 0) {
-                        m_clearZones.push_back({ x, y, x + rectW, y + rectH });
-                        for (int ry = y; ry < y + rectH; ry++)
-                            for (int rx = x; rx < x + rectW; rx++)
-                                visited[ry * w + rx] = true;
+                        data.clearZones.push_back({ x, y, x + rectW, y + rectH });
+                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
                     }
                 }
             }
@@ -80,34 +79,71 @@ bool StageManager::IsInClearZone(float x, float y, float w, float h) {
 }
 
 void StageManager::Reset() {
-    for (auto& d : m_doors) {
-        d.Reset();
+    if (m_pCurrentDoors) {
+        for (auto& d : *m_pCurrentDoors) d.Reset();
+    }
+}
+
+void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
+    for (int i = 1; i <= 2; ++i) {
+        TCHAR mapPath[256], colPath[256];
+        wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), i, i);
+        wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), i, i);
+
+        m_mapImages[i].Load(mapPath);
+        m_colMapImages[i].Load(colPath);
+        
+        ProcessStage(i);
+
+        if (i == 2) {
+            StageData& data = m_stageDataMap[2];
+            data.camFixedY = 60.0f; 
+            data.mapScale = 1.0f; 
+            data.mapRenderOffsetY = 240.0f; // 1/3 of 720
+        }
+
+        if (pProgress) {
+            *pProgress = 60 + (i * 10); // 스테이지마다 10%씩 (60 -> 70 -> 80)
+            Sleep(100);
+        }
+    }
+
+    if (m_imgSkylineBlack.IsNull()) m_imgSkylineBlack.Load(TEXT("assets/spr_skyline_black.png"));
+    if (m_imgSkylineClouds.IsNull()) m_imgSkylineClouds.Load(TEXT("assets/spr_skyline_clouds.png"));
+    
+    if (pProgress) {
+        *pProgress = 85;
+        Sleep(100);
+    }
+
+    Door::LoadAssets();
+
+    if (pProgress) {
+        *pProgress = 90;
+        Sleep(100);
     }
 }
 
 void StageManager::LoadAssets(int stage) {
-    TCHAR mapPath[256], colPath[256];
-    wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), stage, stage);
-    wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), stage, stage);
-
-    m_imgMap.Destroy();
-    m_imgColMap.Destroy();
-    
-    m_imgMap.Load(mapPath);
-    m_imgColMap.Load(colPath);
-    
-    // 스테이지별 제한 시간 설정
-    if (stage == 1) m_stageLimitTime = 30.0f; // 1스테이지 30초
-    else m_stageLimitTime = 60.0f;
-
-    if (m_imgSkylineBlack.IsNull()) m_imgSkylineBlack.Load(TEXT("assets/spr_skyline_black.png"));
-    if (m_imgSkylineClouds.IsNull()) m_imgSkylineClouds.Load(TEXT("assets/spr_skyline_clouds.png"));
-    Door::LoadAssets();
+    if (m_mapImages.count(stage)) {
+        m_imgMap = &m_mapImages[stage];
+        m_imgColMap = &m_colMapImages[stage];
+        
+        StageData& data = m_stageDataMap[stage];
+        m_pCurrentDoors = &data.doors;
+        m_playerStart = data.playerStart;
+        m_clearZones = data.clearZones;
+        m_stageLimitTime = data.stageLimitTime;
+    }
 }
 
 void StageManager::ReleaseAssets() {
-    m_imgMap.Destroy();
-    m_imgColMap.Destroy();
+    for (auto& pair : m_mapImages) pair.second.Destroy();
+    for (auto& pair : m_colMapImages) pair.second.Destroy();
+    m_mapImages.clear();
+    m_colMapImages.clear();
+    m_stageDataMap.clear();
+    
     m_imgSkylineBlack.Destroy();
     m_imgSkylineClouds.Destroy();
     Door::ReleaseAssets();
@@ -115,94 +151,88 @@ void StageManager::ReleaseAssets() {
 
 DoorOpenEvent StageManager::UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale) {
     DoorOpenEvent result = DoorOpenEvent::NONE;
-    for (auto& d : m_doors) {
-        DoorOpenEvent e = d.Update(playerX, playerY, playerW, playerH, isA, isD, isAttacking, attackHitX, attackHitY, attackHitW, attackHitH, currentTime, timeScale);
-        if (e != DoorOpenEvent::NONE) result = e;
+    if (m_pCurrentDoors) {
+        for (auto& d : *m_pCurrentDoors) {
+            DoorOpenEvent e = d.Update(playerX, playerY, playerW, playerH, isA, isD, isAttacking, attackHitX, attackHitY, attackHitW, attackHitH, currentTime, timeScale);
+            if (e != DoorOpenEvent::NONE) result = e;
+        }
     }
     return result;
 }
 
 void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight) {
     if (!isFullMapView) {
-        // --- 1. Cloud Layer ---
         if (!m_imgSkylineClouds.IsNull()) {
-            float cloudScaleX = 3.0f;
-            float cloudScaleY = 1.5f; 
-            int cW = (int)(m_imgSkylineClouds.GetWidth() * cloudScaleX);
-            int cH = (int)(m_imgSkylineClouds.GetHeight() * cloudScaleY);
-            int mapW = GetMapWidth();
-            float maxCamX = (float)(mapW - (virtualWidth / renderMapScale));
-            float ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0;
-            float pX = -ratioX * (cW - virtualWidth);
-            if (cW > 0 && cH > 0 && m_imgSkylineClouds.GetWidth() > 0 && m_imgSkylineClouds.GetHeight() > 0)
+            float cloudScaleX = 3.0f, cloudScaleY = 1.5f; 
+            int cW = (int)(m_imgSkylineClouds.GetWidth() * cloudScaleX), cH = (int)(m_imgSkylineClouds.GetHeight() * cloudScaleY);
+            int mapW = GetMapWidth(); float maxCamX = (float)(mapW - (virtualWidth / renderMapScale)), ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0, pX = -ratioX * (cW - virtualWidth);
+            if (cW > 0 && cH > 0 && m_imgSkylineClouds.GetWidth() > 0 && m_imgSkylineClouds.GetHeight() > 0) {
                 m_imgSkylineClouds.Draw(hDC, (int)pX, 0, cW, cH, 0, 0, m_imgSkylineClouds.GetWidth(), m_imgSkylineClouds.GetHeight());
+            }
         }
-
-        // --- 2. Skyline Black Layer ---
         if (!m_imgSkylineBlack.IsNull()) {
-            int mapW = GetMapWidth();
-            float skylineScale = 3.0f; 
-            int sW = (int)(m_imgSkylineBlack.GetWidth() * skylineScale);
-            int sH = (int)(m_imgSkylineBlack.GetHeight() * skylineScale);
-            float maxCamX = (float)(mapW - (virtualWidth / renderMapScale));
-            float ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0;
-            float pX = -ratioX * (sW - virtualWidth);
+            int mapW = GetMapWidth(); float skylineScale = 3.0f; int sW = (int)(m_imgSkylineBlack.GetWidth() * skylineScale), sH = (int)(m_imgSkylineBlack.GetHeight() * skylineScale);
+            float maxCamX = (float)(mapW - (virtualWidth / renderMapScale)), ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0, pX = -ratioX * (sW - virtualWidth);
             int pY = (virtualHeight / 2) - (sH / 2) - 150;
-            if (sW > 0 && sH > 0 && m_imgSkylineBlack.GetWidth() > 0 && m_imgSkylineBlack.GetHeight() > 0)
+            if (sW > 0 && sH > 0 && m_imgSkylineBlack.GetWidth() > 0 && m_imgSkylineBlack.GetHeight() > 0) {
                 m_imgSkylineBlack.Draw(hDC, (int)pX, pY, sW, sH, 0, 0, m_imgSkylineBlack.GetWidth(), m_imgSkylineBlack.GetHeight());
+            }
         }
     }
 
-    // --- 3. Map Layer ---
     if (!hDC) return;
-    if (!m_imgMap.IsNull()) {
-        CImage* tMap = showDebugRect ? &m_imgColMap : &m_imgMap;
+    if (m_imgMap && !m_imgMap->IsNull()) {
+        CImage* tMap = showDebugRect ? m_imgColMap : m_imgMap;
         if (tMap && !tMap->IsNull()) {
-            int cMW = tMap->GetWidth();
-            int cMH = tMap->GetHeight();
+            int cMW = tMap->GetWidth(), cMH = tMap->GetHeight();
             if (isFullMapView) {
                 tMap->Draw(hDC, (int)mapOffsetX, (int)mapOffsetY, (int)(cMW * renderMapScale), (int)(cMH * renderMapScale), 0, 0, cMW, cMH);
-            } else {
-                // 리와인드 시의 필름 효과를 위해 Y좌표를 맵 높이로 래핑합니다.
-                float vW = virtualWidth / renderMapScale;
-                float vH = virtualHeight / renderMapScale;
-                
-                int drawCamY = (int)camY % cMH;
-                if (drawCamY < 0) drawCamY += cMH;
+            }
+            else {
+                // Find current stage data to get offset
+                float currentOffset = 0.0f;
+                for (auto& pair : m_stageDataMap) {
+                    if (&m_mapImages[pair.first] == m_imgMap) {
+                        currentOffset = pair.second.mapRenderOffsetY;
+                        break;
+                    }
+                }
 
-                if (drawCamY + vH <= cMH) {
-                    // 한 번에 그려지는 경우
-                    if (virtualWidth > 0 && virtualHeight > 0 && vW > 0 && vH > 0)
-                        tMap->Draw(hDC, 0, 0, virtualWidth, virtualHeight, (int)camX, drawCamY, (int)vW, (int)vH);
-                } else {
-                    // 경계에 걸쳐서 두 번 나눠 그려야 하는 경우 (필름 스트립 효과)
-                    int firstPartH = cMH - drawCamY;
-                    int firstPartDrawH = (int)(firstPartH * (virtualHeight / vH));
-                    
-                    if (virtualWidth > 0 && firstPartDrawH > 0 && vW > 0 && firstPartH > 0)
-                        tMap->Draw(hDC, 0, 0, virtualWidth, firstPartDrawH, (int)camX, drawCamY, (int)vW, firstPartH);
-                    
-                    int secondPartDrawH = virtualHeight - firstPartDrawH;
-                    int secondPartSrcH = (int)vH - firstPartH;
-                    if (virtualWidth > 0 && secondPartDrawH > 0 && vW > 0 && secondPartSrcH > 0)
-                        tMap->Draw(hDC, 0, firstPartDrawH, virtualWidth, secondPartDrawH, (int)camX, 0, (int)vW, secondPartSrcH);
+                float vW = virtualWidth / renderMapScale, vH = (virtualHeight - currentOffset) / renderMapScale;
+                int drawCamY = (int)camY % cMH; if (drawCamY < 0) drawCamY += cMH;
+                
+                int destY = (int)currentOffset;
+                int destH = virtualHeight - destY;
+
+                if (drawCamY + vH <= cMH) { 
+                    if (virtualWidth > 0 && destH > 0 && vW > 0 && vH > 0) {
+                        tMap->Draw(hDC, 0, destY, virtualWidth, destH, (int)camX, drawCamY, (int)vW, (int)vH); 
+                    }
+                }
+                else {
+                    int firstPartH = cMH - drawCamY, firstPartDrawH = (int)(firstPartH * (destH / vH));
+                    if (virtualWidth > 0 && firstPartDrawH > 0 && vW > 0 && firstPartH > 0) {
+                        tMap->Draw(hDC, 0, destY, virtualWidth, firstPartDrawH, (int)camX, drawCamY, (int)vW, firstPartH);
+                    }
+                    int secondPartDrawH = destH - firstPartDrawH, secondPartSrcH = (int)vH - firstPartH;
+                    if (virtualWidth > 0 && secondPartDrawH > 0 && vW > 0 && secondPartSrcH > 0) {
+                        tMap->Draw(hDC, 0, destY + firstPartDrawH, virtualWidth, secondPartDrawH, (int)camX, 0, (int)vW, secondPartSrcH);
+                    }
                 }
             }
         }
     }
 
 
-    // --- 4. Doors ---
-    for (auto& d : m_doors) {
-        float cFS = 0, cFX = 0, cFY = 0;
-        if (isFullMapView) {
-            int mapW = GetMapWidth();
-            int mapH = GetMapHeight();
-            cFS = (std::min)((float)virtualWidth / mapW, (float)virtualHeight / mapH);
-            cFX = (virtualWidth - mapW * cFS) / 2.0f;
-            cFY = (virtualHeight - mapH * cFS) / 2.0f;
+    if (m_pCurrentDoors) {
+        for (auto& d : *m_pCurrentDoors) {
+            float cFS = 0, cFX = 0, cFY = 0;
+            if (isFullMapView) {
+                int mapW = GetMapWidth(), mapH = GetMapHeight();
+                cFS = (std::min)((float)virtualWidth / mapW, (float)virtualHeight / mapH);
+                cFX = (virtualWidth - mapW * cFS) / 2.0f; cFY = (virtualHeight - mapH * cFS) / 2.0f;
+            }
+            d.Render(hDC, camX, camY, mapScale, isFullMapView, cFS, cFX, cFY);
         }
-        d.Render(hDC, camX, camY, mapScale, isFullMapView, cFS, cFX, cFY);
     }
 }
-

@@ -45,9 +45,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
     g_game = new Game();
     g_game->Init(hWnd, hInstance);
     
-    // StageManager 초기화 (ColMap 로드 후 Door 생성 스캔)
-    StageManager::Init();
-
     MSG msg;
     while (true) {
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {

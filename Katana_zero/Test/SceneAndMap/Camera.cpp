@@ -12,6 +12,11 @@ float Camera::m_shakeTrauma = 0.0f;
 float Camera::m_rewindTimer = 0.0f;
 float Camera::m_rewindYOffset = 0.0f;
 
+float Camera::m_camLookAheadX = 150.0f;
+float Camera::m_camLerpSpeedX = 0.08f;
+float Camera::m_camLerpSpeedY = 0.08f;
+float Camera::m_camY_Fixed = 60.0f;
+
 void Camera::Init() {
     m_camX = 0.0f;
     m_camY = 60.0f;

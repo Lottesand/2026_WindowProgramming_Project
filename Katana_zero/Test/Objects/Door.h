@@ -30,7 +30,7 @@ public:
                 float attackHitX, float attackHitY, float attackHitW, float attackHitH,
                 DWORD currentTime, float timeScale);
 
-    void Reset(); // ?곹깭 珥덇린??
+    void Reset(); 
 
     void Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMapView, float pFS, float pFX, float pFY);
 

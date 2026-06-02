@@ -14,6 +14,7 @@ CImage UIManager::m_imgCursor;
 CImage UIManager::m_imgHudShift[2];
 CImage UIManager::m_imgLeftClick;
 CImage UIManager::m_imgRightClick;
+CImage UIManager::m_imgDeathBox;
 
 void UIManager::Init() {
 }
@@ -31,6 +32,7 @@ void UIManager::LoadAssets() {
     m_imgHudShift[1].Load(TEXT("assets/hud/keyboard_shift_1.png"));
     m_imgLeftClick.Load(TEXT("assets/hud/left_click.png"));
     m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
+    m_imgDeathBox.Load(TEXT("assets/deathbox.png"));
 }
 
 void UIManager::ReleaseAssets() {
@@ -47,9 +49,56 @@ void UIManager::ReleaseAssets() {
     m_imgHudShift[1].Destroy();
     m_imgLeftClick.Destroy();
     m_imgRightClick.Destroy();
+    m_imgDeathBox.Destroy();
 }
-void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed) {
+void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead) {
     if (!hDC) return;
+
+    if (isDead) {
+        if (!m_imgDeathBox.IsNull()) {
+            int dbW = m_imgDeathBox.GetWidth();
+            int dbH = m_imgDeathBox.GetHeight();
+            // 0.75배에서 50% 줄여서 0.375배로 설정
+            float scale = 0.65f; 
+            int targetW = (int)(dbW * scale);
+            int targetH = (int)(dbH * scale);
+            int startX = (virtualWidth - targetW) / 2;
+            int startY = (virtualHeight - targetH) / 2;
+
+            Gdiplus::Graphics graphics(hDC);
+            graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+            // 1. 배경 그라데이션 Rect 그리기
+            Gdiplus::GraphicsPath path;
+            // 배경 크기도 글자 크기에 맞춰 조정
+            Gdiplus::Rect gradientRect(startX - 40, startY - 20, targetW + 80, targetH + 40);
+            path.AddRectangle(gradientRect);
+
+            Gdiplus::PathGradientBrush pgb(&path);
+            pgb.SetCenterColor(Gdiplus::Color(230, 0, 0, 0)); // 중앙을 조금 더 진하게 (알파 230)
+            pgb.SetCenterPoint(Gdiplus::PointF(virtualWidth / 2.0f, virtualHeight / 2.0f));
+            
+            Gdiplus::Color colors[] = { Gdiplus::Color(0, 0, 0, 0) }; 
+            int count = 1;
+            pgb.SetSurroundColors(colors, &count);
+            // 안쪽에서 바깥쪽으로 진해지는(투명해지는) 비율을 높임 (중심 집중도 강화)
+            pgb.SetFocusScales(0.3f, 0.3f); 
+
+            graphics.FillRectangle(&pgb, gradientRect);
+
+            // 2. 글자(DeathBox) 그리기
+            void* bits = m_imgDeathBox.GetBits();
+            if (bits) {
+                Gdiplus::Bitmap bitmap(dbW, dbH, m_imgDeathBox.GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+                
+                Gdiplus::ImageAttributes attr;
+                attr.SetColorKey(Gdiplus::Color(0, 0, 0), Gdiplus::Color(20, 20, 20), Gdiplus::ColorAdjustTypeBitmap);
+
+                graphics.DrawImage(&bitmap, Gdiplus::Rect(startX, startY, targetW, targetH), 
+                    0, 0, dbW, dbH, Gdiplus::UnitPixel, &attr);
+            }
+        }
+    }
 
     // 게임 시작 전 메시지 출력
     if (!bGameStarted) {

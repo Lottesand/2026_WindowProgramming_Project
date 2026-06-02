@@ -1,12 +1,17 @@
 ﻿#pragma once
 #include <windows.h>
 #include <vector>
+#include <atomic>
 #include "../Objects/Player.h"
 #include "../Objects/Enemy.h"
+
+enum class GameMode { PLAYING, YES_SCENE, REPLAYING };
+enum class TransitionState { NONE, ENTERING, WAITING, LEAVING };
 
 class Game {
 public:
     Game();
+
     ~Game();
 
     void Init(HWND hWnd, HINSTANCE hInst);
@@ -19,6 +24,12 @@ public:
     int GetWinWidth() const { return m_winWidth; }
     int GetWinHeight() const { return m_winHeight; }
     void SetWinSize(int w, int h) { m_winWidth = w; m_winHeight = h; }
+
+    // Loading system
+    static void LoadingThreadProc(Game* pGame);
+    void LoadAllAssets();
+    bool IsLoaded() const { return m_isLoaded; }
+    int GetLoadingProgress() const { return m_loadingProgress; }
 
 private:
     void UpdateScreenScale();
@@ -35,6 +46,11 @@ private:
     bool m_isStageCleared;
     bool m_bGameStarted;
 
+    // Loading status
+    std::atomic<bool> m_isLoaded{ false };
+    std::atomic<int> m_loadingProgress{ 0 };
+    CImage m_imgLoading;
+
     bool m_isTimePaused;
     bool m_showDebugRect;
     bool m_showGrid;
@@ -48,12 +64,23 @@ private:
     DWORD m_prevTime;
     float m_stageTimer; // 현재 스테이지 남은 시간
 
+    GameMode m_gameMode = GameMode::PLAYING;
+    int m_replayFrame = 0;
+    bool m_isReplayPaused = false;
+    CImage m_imgReplayUI[4];
+    DWORD m_yesSceneStartTime = 0;
+    
+    TransitionState m_transitionState = TransitionState::NONE;
+    float m_transitionProgress = 0.0f;
+    DWORD m_transitionWaitTime = 0;
+    bool m_transitionToNextStage = false;
+
     int m_maxRewindTime = 10; 
     int m_rewindSpeed = 4;    
 
     static constexpr int VIRTUAL_WIDTH = 1280;
     static constexpr int VIRTUAL_HEIGHT = 720;
-    static constexpr float mapScale = 1.02f;
-    static constexpr float playerScale = 2.0f;
+    float mapScale = 1.02f;
+    float playerScale = 2.0f;
 };
 
