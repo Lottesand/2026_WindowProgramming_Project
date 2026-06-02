@@ -29,7 +29,7 @@ public:
     static void LoadAssets(int stage = 1);
     static void ReleaseAssets();
     static void Render(HDC hDC, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight);
-    static DoorOpenEvent UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale);
+    static int UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale);
 
 
     static int GetMapWidth() { return m_imgMap == nullptr || m_imgMap->IsNull() ? 0 : m_imgMap->GetWidth(); }

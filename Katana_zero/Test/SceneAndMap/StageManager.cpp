@@ -31,37 +31,76 @@ void StageManager::ProcessStage(int stage) {
     if (!colMap.IsNull()) {
         int w = colMap.GetWidth();
         int h = colMap.GetHeight();
+        int pitch = colMap.GetPitch();
+        int bpp = colMap.GetBPP() / 8;
+        BYTE* pBits = (BYTE*)colMap.GetBits();
+
         std::vector<bool> visited(w * h, false);
 
         for (int y = 0; y < h; y++) {
+            BYTE* pRow = pBits + (y * pitch);
             for (int x = 0; x < w; x++) {
                 if (visited[y * w + x]) continue;
 
-                COLORREF color = colMap.GetPixel(x, y);
-                BYTE r = GetRValue(color);
-                BYTE g = GetGValue(color);
-                BYTE b = GetBValue(color);
+                BYTE* pPixel = pRow + (x * bpp);
+                // Windows Bitmaps are stored in BGR order
+                BYTE b = pPixel[0];
+                BYTE g = pPixel[1];
+                BYTE r = pPixel[2];
 
+                // Door: Magenta (255, 0, 255)
                 if (r == 255 && g == 0 && b == 255) {
                     int rectW = 0, rectH = 0;
-                    while (x + rectW < w && (colMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FF00FF) rectW++;
-                    while (y + rectH < h && (colMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FF00FF) rectH++;
+                    // Find Width
+                    while (x + rectW < w) {
+                        BYTE* pNext = pRow + ((x + rectW) * bpp);
+                        if (pNext[2] == 255 && pNext[1] == 0 && pNext[0] == 255) rectW++;
+                        else break;
+                    }
+                    // Find Height
+                    while (y + rectH < h) {
+                        BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
+                        if (pNextRow[2] == 255 && pNextRow[1] == 0 && pNextRow[0] == 255) rectH++;
+                        else break;
+                    }
+
                     if (rectW > 0 && rectH > 0) {
                         data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
-                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
+                        for (int ry = y; ry < y + rectH; ry++) {
+                            for (int rx = x; rx < x + rectW; rx++) {
+                                visited[ry * w + rx] = true;
+                            }
+                        }
                     }
                 }
+                // Player Start: White (255, 255, 255)
                 else if (r == 255 && g == 255 && b == 255) {
                     data.playerStart = { x, y };
                     visited[y * w + x] = true;
                 }
+                // Clear Zone: Cyan (0, 255, 255)
                 else if (r == 0 && g == 255 && b == 255) {
                     int rectW = 0, rectH = 0;
-                    while (x + rectW < w && (colMap.GetPixel(x + rectW, y) & 0x00FFFFFF) == 0x00FFFF00) rectW++;
-                    while (y + rectH < h && (colMap.GetPixel(x, y + rectH) & 0x00FFFFFF) == 0x00FFFF00) rectH++;
+                    // Find Width
+                    while (x + rectW < w) {
+                        BYTE* pNext = pRow + ((x + rectW) * bpp);
+                        if (pNext[2] == 0 && pNext[1] == 255 && pNext[0] == 255) rectW++;
+                        else break;
+                    }
+                    // Find Height
+                    while (y + rectH < h) {
+                        BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
+                        if (pNextRow[2] == 0 && pNextRow[1] == 255 && pNextRow[0] == 255) rectH++;
+                        else break;
+                    }
+
                     if (rectW > 0 && rectH > 0) {
                         data.clearZones.push_back({ x, y, x + rectW, y + rectH });
-                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
+                        for (int ry = y; ry < y + rectH; ry++) {
+                            for (int rx = x; rx < x + rectW; rx++) {
+                                visited[ry * w + rx] = true;
+                            }
+                        }
                     }
                 }
             }
@@ -149,15 +188,17 @@ void StageManager::ReleaseAssets() {
     Door::ReleaseAssets();
 }
 
-DoorOpenEvent StageManager::UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale) {
-    DoorOpenEvent result = DoorOpenEvent::NONE;
+int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale) {
     if (m_pCurrentDoors) {
-        for (auto& d : *m_pCurrentDoors) {
-            DoorOpenEvent e = d.Update(playerX, playerY, playerW, playerH, isA, isD, isAttacking, attackHitX, attackHitY, attackHitW, attackHitH, currentTime, timeScale);
-            if (e != DoorOpenEvent::NONE) result = e;
+        for (int i = 0; i < (int)m_pCurrentDoors->size(); i++) {
+            Door& d = (*m_pCurrentDoors)[i];
+            DoorOpenEvent de = d.Update(playerX, playerY, playerW, playerH, isA, isD, isAttacking, attackHitX, attackHitY, attackHitW, attackHitH, currentTime, timeScale);
+            if (de != DoorOpenEvent::NONE) {
+                return i; // 열린 문의 인덱스 반환
+            }
         }
     }
-    return result;
+    return -1;
 }
 
 void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight) {

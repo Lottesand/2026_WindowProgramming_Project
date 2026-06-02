@@ -123,25 +123,42 @@ public:
     bool GetIsSlowMo() const { return m_isSlowMo; }
     float GetBatteryLevel() const { return m_batteryLevel; }
 
+    enum class ReplayEvent { ENEMY_DIE, DOOR_OPEN };
+    struct ReplayEventData {
+        ReplayEvent type;
+        int targetIdx; // 적 인덱스 또는 문 인덱스
+    };
+
     struct PlayerSnapshot {
         float x, y;
         PlayerState state;
         int frame;
         bool isFacingRight;
         float attackAngle;
+        std::vector<ReplayEventData> events;
     };
     std::vector<PlayerSnapshot> m_history;
     std::vector<PlayerSnapshot> m_snapshots;
+    
+    void AddReplayEvent(ReplayEvent type, int idx) {
+        if (!m_snapshots.empty()) {
+            m_snapshots.back().events.push_back({ type, idx });
+        }
+    }
     bool m_isRewinding = false;
     int m_rewindSpeed = 1;
     int m_maxHistorySize = 600;
+
+    void ClearAfterImages() {
+        for (auto& img : m_afterImages) img.active = false;
+    }
 
     void StartRewind(int speed = 2) { 
         m_isRewinding = true; 
         m_rewindSpeed = speed; 
         m_isSlowMo = false; // 리와인드 시작 시 슬로우 모션 강제 종료
         m_batteryLevel = m_batteryMax; // 배터리(슬로우 모드 게이지) 풀 회복
-        for (auto& img : m_afterImages) img.active = false; 
+        ClearAfterImages();
     }
     void StopRewind() { m_isRewinding = false; }
     bool IsRewinding() const { return m_isRewinding; }

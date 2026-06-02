@@ -24,6 +24,14 @@ void Door::Reset() {
     m_lastFrameTime = GetTickCount();
 }
 
+void Door::Open(bool byAttack, DWORD currentTime) {
+    if (m_state == DoorState::CLOSED) {
+        m_state = DoorState::OPENING;
+        m_currentFrame = 0;
+        m_lastFrameTime = currentTime;
+    }
+}
+
 void Door::LoadAssets() {
     TCHAR path[256];
     if (m_imgDoor[0].IsNull()) {

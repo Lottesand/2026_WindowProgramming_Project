@@ -31,6 +31,7 @@ public:
                 DWORD currentTime, float timeScale);
 
     void Reset(); 
+    void Open(bool byAttack, DWORD currentTime);
 
     void Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMapView, float pFS, float pFX, float pFY);
 

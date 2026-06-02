@@ -2,6 +2,7 @@
 #include "Input.h"
 #include "../SceneAndMap/Camera.h"
 #include "../SceneAndMap/StageManager.h"
+#include "../Objects/Door.h"
 #include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
 #include <time.h>
@@ -219,6 +220,8 @@ void Game::Update() {
             m_gameMode = GameMode::YES_SCENE;
             m_yesSceneStartTime = GetTickCount();
             m_player.SetState(PlayerState::IDLE);
+            EffectManager::Init(); // Replay 진입 전 먼지, 잔상 등 이펙트 제거
+            m_player.ClearAfterImages(); // 플레이어 잔상(구르기 등) 제거
             m_prevTime = GetTickCount();
             return;
         }
@@ -228,6 +231,11 @@ void Game::Update() {
         if (ct - m_yesSceneStartTime > 2000) { // 2s display + 0.5s fade out
             m_gameMode = GameMode::REPLAYING;
             m_replayFrame = 0;
+            
+            // Replay 시작 전 적과 문 상태 초기화
+            StageManager::Reset();
+            for (auto& e : m_enemies) if (e) e->Reset();
+
             // Set initial camera to frame 0
             const auto& fullHistory = m_player.GetSnapshots();
             if (!fullHistory.empty()) {
@@ -255,13 +263,39 @@ void Game::Update() {
 
         if (!m_isReplayPaused) {
             const auto& fullHistory = m_player.GetSnapshots();
-            if (m_replayFrame < fullHistory.size()) {
+            if (m_replayFrame < (int)fullHistory.size()) {
+                // 리플레이 이벤트 처리 (속도에 맞춰 스킵되는 프레임의 이벤트도 모두 실행)
+                for (int i = 0; i < m_replaySpeed; i++) {
+                    int targetFrame = m_replayFrame + i;
+                    if (targetFrame < (int)fullHistory.size()) {
+                        for (const auto& ev : fullHistory[targetFrame].events) {
+                            if (ev.type == Player::ReplayEvent::ENEMY_DIE) {
+                                if (ev.targetIdx >= 0 && ev.targetIdx < (int)m_enemies.size()) {
+                                    m_enemies[ev.targetIdx]->OnTakeDamage(999.0f);
+                                }
+                            } else if (ev.type == Player::ReplayEvent::DOOR_OPEN) {
+                                // 문 열림 이벤트는 StageManager에서 처리 (인덱스 기반)
+                                StageManager::GetStageData(m_currentStage).doors[ev.targetIdx].Open(true, ct);
+                            }
+                        }
+                    }
+                }
+
                 const auto& d = fullHistory[m_replayFrame];
                 m_player.SetPos(d.x, d.y);
                 m_player.SetState(d.state);
                 
+                // 적 업데이트 추가 (리플레이 중에도 움직이게 함)
+                for (auto& e : m_enemies) {
+                    if (e) {
+                        for (int i = 0; i < m_replaySpeed; i++) {
+                            e->Update(1.0f);
+                        }
+                    }
+                }
+
                 bool forceSnap = (m_replayFrame == 0);
-                m_replayFrame++;
+                m_replayFrame += m_replaySpeed;
                 Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, forceSnap);
             } else {
                 m_transitionState = TransitionState::ENTERING;
@@ -364,11 +398,15 @@ void Game::Update() {
             float cX = m_player.GetX() + m_player.GetColW() / 2.0f, cY = m_player.GetY() + m_player.GetColH() / 2.0f;
             float hX = cX + m_player.GetAttackDirX() * 40.0f - 40.0f, hY = cY + m_player.GetAttackDirY() * 40.0f - 30.0f;
             RECT aR = { (int)hX, (int)hY, (int)(hX + 80.0f), (int)(hY + 60.0f) };
-            for (auto& e : m_enemies) {
+            for (int i = 0; i < (int)m_enemies.size(); i++) {
+                Enemy* e = m_enemies[i];
                 if (e && e->GetIsAlive()) {
                     RECT eR = e->GetRect(); RECT ol;
                     if (IntersectRect(&ol, &aR, &eR)) {
                         m_isTimePaused = true;
+                        // 적 죽음 이벤트를 리플레이에 기록
+                        m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i);
+
                         float ex = e->GetX() + e->GetColW() / 2.0f, ey = e->GetY() + e->GetColH() / 2.0f;
                         float dx = ex - cX, dy = ey - cY, dist = (std::max)(1.0f, (float)sqrt(dx * dx + dy * dy));
                         float ux = dx / dist, uy = dy / dist;
@@ -383,9 +421,10 @@ void Game::Update() {
         }
     } else if (!m_isTimePaused) laF = -1;
     if (!m_isTimePaused) {
-        DoorOpenEvent de = StageManager::UpdateDoors(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), (GetAsyncKeyState('A') & 0x8000) != 0, (GetAsyncKeyState('D') & 0x8000) != 0, m_player.GetState() == PlayerState::ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct, ts);
-        if (de == DoorOpenEvent::OPEN_BY_ATTACK) m_player.SetState(PlayerState::DOOR_KICK);
-        else if (de == DoorOpenEvent::OPEN_BY_WALK) m_player.SetState(PlayerState::DOOR_KICK_FULL);
+        int openedDoorIdx = StageManager::UpdateDoors(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), (GetAsyncKeyState('A') & 0x8000) != 0, (GetAsyncKeyState('D') & 0x8000) != 0, m_player.GetState() == PlayerState::ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct, ts);
+        if (openedDoorIdx != -1) {
+            m_player.AddReplayEvent(Player::ReplayEvent::DOOR_OPEN, openedDoorIdx);
+        }
     }
     EffectManager::Update(ts, ct);
     if (m_isTimePaused && !EffectManager::HasActiveHitVFX()) m_isTimePaused = false;

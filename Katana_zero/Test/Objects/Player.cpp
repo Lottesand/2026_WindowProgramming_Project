@@ -95,13 +95,15 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         return;
     }
     
-    // 슬로우 모션 중에는 히스토리를 저장하지 않음
+    // Replay 저장을 위해 매 프레임 스냅샷을 2배 빈도로 저장 (슬로우 모션 상관없이)
+    PlayerSnapshot data = { m_x, m_y, m_state, m_currentFrame, m_isFacingRight, m_attackAngle };
     if (!m_isSlowMo) {
-        PlayerSnapshot data = { m_x, m_y, m_state, m_currentFrame, m_isFacingRight, m_attackAngle };
         m_history.push_back(data);
         if (m_history.size() > (size_t)m_maxHistorySize) m_history.erase(m_history.begin());
-        m_snapshots.push_back(data);
     }
+    // 스냅샷은 항상 저장하여 리플레이 부드러움 향상 (한 프레임에 두 번 저장하여 빈도 2배)
+    m_snapshots.push_back(data);
+    m_snapshots.push_back(data); 
 
     bool isW = GetAsyncKeyState('W') & 0x8000, isA = GetAsyncKeyState('A') & 0x8000, isS = GetAsyncKeyState('S') & 0x8000, isD = GetAsyncKeyState('D') & 0x8000, isJ = (GetAsyncKeyState('W') & 0x8000) || (GetAsyncKeyState(VK_SPACE) & 0x8000);
     int twd = 0; if (CheckSpecificCollision(m_x - 3.0f, m_y, m_colW, m_colH, 3)) twd = -1; else if (CheckSpecificCollision(m_x + 3.0f, m_y, m_colW, m_colH, 3)) twd = 1;

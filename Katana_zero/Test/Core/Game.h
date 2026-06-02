@@ -66,6 +66,7 @@ private:
 
     GameMode m_gameMode = GameMode::PLAYING;
     int m_replayFrame = 0;
+    int m_replaySpeed = 2; // 리플레이 재생 속도 (프레임 스킵/배속)
     bool m_isReplayPaused = false;
     CImage m_imgReplayUI[4];
     DWORD m_yesSceneStartTime = 0;
