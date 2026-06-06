@@ -1,11 +1,13 @@
-#include "Game.h"
+﻿#include "Game.h"
 #include "Input.h"
 #include "../SceneAndMap/Camera.h"
 #include "../SceneAndMap/StageManager.h"
 #include "../Objects/Door.h"
+#include "../Objects/Bullet.h"
 #include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
 #include <time.h>
+#include <stdlib.h>
 #include <gdiplus.h>
 #include <algorithm>
 #include <cmath>
@@ -13,9 +15,10 @@
 #include <objbase.h>
 
 Game::Game() : m_hWnd(NULL), m_hInst(NULL), m_winWidth(1280), m_winHeight(720),
-    m_isTimePaused(false), m_showDebugRect(false), m_showGrid(false), m_isFullMapView(false),
+    m_isTimePaused(false), m_isTimeoutDeath(false), m_showDebugRect(false), m_showGrid(false), m_isFullMapView(false),
     m_renderMapScale(1.0f), m_renderPlayerScale(2.0f), m_mapOffsetX(0.0f), m_mapOffsetY(0.0f),
-    m_prevTime(0), m_currentStage(1), m_isStageCleared(false), m_stageTimer(0.0f), m_bGameStarted(false) {
+    m_prevTime(0), m_currentStage(1), m_isStageCleared(false), m_stageTimer(0.0f), m_bGameStarted(false),
+    m_fps(0), m_frameCount(0), m_lastFpsTime(0) {
     m_isLoaded = false;
     m_loadingProgress = 0;
 }
@@ -23,48 +26,41 @@ Game::Game() : m_hWnd(NULL), m_hInst(NULL), m_winWidth(1280), m_winHeight(720),
 Game::~Game() {
     for (auto& e : m_enemies) if (e) delete e;
     m_enemies.clear();
+    Bullet::Release();
 }
 
 void Game::Init(HWND hWnd, HINSTANCE hInst) {
     m_hWnd = hWnd; m_hInst = hInst; m_prevTime = GetTickCount();
     
-    // 백그라운드 스레드에서 모든 에셋 로드 시작
     std::thread loadingThread(LoadingThreadProc, this);
     loadingThread.detach();
 }
 
 void Game::LoadingThreadProc(Game* pGame) {
-    // COM 초기화 (CImage::Load가 내부적으로 사용)
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-
     pGame->LoadAllAssets();
-
     CoUninitialize();
 }
 
 void Game::LoadAllAssets() {
     m_loadingProgress = 0;
 
-    // 0. 로딩 화면 이미지 로드
     m_imgLoading.Load(TEXT("assets/loading.png"));
     m_imgReplayUI[0].Load(TEXT("assets/Replay/0.png"));
     m_imgReplayUI[1].Load(TEXT("assets/Replay/1.png"));
     m_imgReplayUI[2].Load(TEXT("assets/Replay/3.png"));
     m_imgReplayUI[3].Load(TEXT("assets/Replay/yes.png"));
     m_loadingProgress = 5;
-    Sleep(50); // 진행 상태를 시각적으로 보여주기 위한 짧은 대기
+    Sleep(50);
 
-    // 1. UI 에셋 로드 (10%)
     UIManager::LoadAssets();
     m_loadingProgress = 15;
     Sleep(50);
 
-    // 2. 이펙트 에셋 로드 (10%)
     EffectManager::LoadAssets();
     m_loadingProgress = 20;
     Sleep(50);
 
-    // 3. 적 에셋 전역 초기화 (20%)
     Gangster(0, 0).Init();
     Grunt(0, 0).Init();
     m_loadingProgress = 30;
@@ -72,24 +68,21 @@ void Game::LoadAllAssets() {
     
     Pomp(0, 0).Init();
     ShieldCop(0, 0).Init();
+    Bullet::Init();
     m_loadingProgress = 40;
     Sleep(50);
 
-    // 4. 플레이어 에셋 로드 (20%)
     m_player.Init();
     m_loadingProgress = 60;
     Sleep(50);
 
-    // 5. 모든 스테이지 에셋 로드 및 전처리 (30%)
     StageManager::LoadAllStages(&m_loadingProgress);
     
-    // 6. 초기 스테이지 설정 (10%)
     LoadStage(1);
     m_player.SetMaxHistory(m_maxRewindTime);
     m_loadingProgress = 100;
-    Sleep(500); // 100% 도달 후 사용자가 확인할 수 있도록 충분히 유지
+    Sleep(500);
 
-    // 로딩 완료
     m_isLoaded = true;
 }
 
@@ -98,7 +91,6 @@ void Game::LoadStage(int stage) {
     m_isStageCleared = false; 
     m_bGameStarted = false;   
     
-    // 이미 로드/전처리된 데이터에서 현재 스테이지 설정 (즉시 완료)
     StageManager::LoadAssets(m_currentStage);
     
     if (m_currentStage == 1) {
@@ -113,8 +105,8 @@ void Game::LoadStage(int stage) {
 
     StageManager::Init();
     SpawnEnemies();
+    Bullet::ClearAll();
     
-    // Stage-specific camera and map scale settings
     StageManager::StageData& data = StageManager::GetStageData(m_currentStage);
     mapScale = data.mapScale;
     Camera::SetLookAheadX(data.camLookAheadX);
@@ -134,29 +126,49 @@ void Game::SpawnEnemies() {
     for (auto& e : m_enemies) if (e) delete e;
     m_enemies.clear();
     
-    if (m_currentStage == 1) {
-        Enemy* n = new Pomp(800.0f, 200.0f);
-        if (n) { m_enemies.push_back(n); }
-    } else {
-        Enemy* n = new Pomp(500.0f, 200.0f);
-        if (n) { m_enemies.push_back(n); }
-        Enemy* n2 = new Pomp(900.0f, 300.0f);
-        if (n2) { m_enemies.push_back(n2); }
+    const auto& stageData = StageManager::GetStageData(m_currentStage);
+    int enemyCount = 0;
+    for (const auto& info : stageData.enemySpawns) {
+        Enemy* ne = nullptr;
+        int type = info.type;
+
+        // Force different enemies on Stage 1 for testing
+        if (m_currentStage == 1) {
+            type = enemyCount % 4; // Cycles through 0: Gangster, 1: Grunt, 2: Pomp, 3: ShieldCop
+        }
+
+        // 0: Gangster, 1: Grunt, 2: Pomp, 3: ShieldCop
+        switch (type) {
+        case 0: ne = new Gangster(info.x, info.y); break;
+        case 1: ne = new Grunt(info.x, info.y); break;
+        case 2: ne = new Pomp(info.x, info.y); break;
+        case 3: ne = new ShieldCop(info.x, info.y); break;
+        default: ne = new Gangster(info.x, info.y); break;
+        }
+        
+        if (ne) {
+            ne->SetPatrolRange(info.patrolRange);
+            m_enemies.push_back(ne);
+        }
+        enemyCount++;
     }
 }
 
 void Game::Update() {
-    // 로딩 중에는 업데이트 중단
-    if (!m_isLoaded) return;
-
     DWORD ct = GetTickCount();
+    m_frameCount++;
+    if (ct - m_lastFpsTime >= 1000) {
+        m_fps = m_frameCount;
+        m_frameCount = 0;
+        m_lastFpsTime = ct;
+    }
+    if (!m_isLoaded) return;
     if (ct - m_prevTime < 16) return;
     float dT = (ct - m_prevTime) / 1000.0f;
     Input::Update(); UpdateScreenScale();
 
-    // --- 트랜지션(화면 전환) 로직 ---
     if (m_transitionState != TransitionState::NONE) {
-        float transitionSpeed = 3.5f; // 약 0.28초
+        float transitionSpeed = 3.5f;
         if (m_transitionState == TransitionState::ENTERING) {
             m_transitionProgress += dT * transitionSpeed;
             if (m_transitionProgress >= 1.0f) {
@@ -173,7 +185,7 @@ void Game::Update() {
                 }
             }
         } else if (m_transitionState == TransitionState::WAITING) {
-            if (ct - m_transitionWaitTime > 150) { // 150ms 대기
+            if (ct - m_transitionWaitTime > 150) {
                 m_transitionState = TransitionState::LEAVING;
                 m_transitionProgress = 0.0f;
             }
@@ -185,22 +197,19 @@ void Game::Update() {
             }
         }
         m_prevTime = ct;
-        return; // 트랜지션 중에는 게임 업데이트 블록
+        return;
     }
 
-    // 게임 시작 대기 중인 경우
     if (!m_bGameStarted) {
         if (Input::GetKeyDown(VK_LBUTTON)) {
             m_bGameStarted = true;
-            m_prevTime = GetTickCount(); // 시작 시점의 시간으로 갱신하여 타이머 급감 방지
+            m_prevTime = GetTickCount();
         }
-        // 시작 전에는 카메라와 기본적인 애니메이션만 업데이트 (필요 시)
         Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
         m_prevTime = ct;
         return;
     }
     
-    // 1. Enemy All Dead Check
     if (!m_isStageCleared) {
         bool anyAlive = false;
         for (auto& e : m_enemies) {
@@ -214,29 +223,26 @@ void Game::Update() {
         }
     }
 
-    // 2. Stage Clear Zone Check
     if (m_isStageCleared && m_gameMode == GameMode::PLAYING) {
         if (StageManager::IsInClearZone(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH())) {
             m_gameMode = GameMode::YES_SCENE;
             m_yesSceneStartTime = GetTickCount();
-            m_player.SetState(PlayerState::IDLE);
-            EffectManager::Init(); // Replay 진입 전 먼지, 잔상 등 이펙트 제거
-            m_player.ClearAfterImages(); // 플레이어 잔상(구르기 등) 제거
+            m_player.SetState(PlayerState::PS_IDLE);
+            EffectManager::Init();
+            m_player.ClearAfterImages();
             m_prevTime = GetTickCount();
             return;
         }
     }
 
     if (m_gameMode == GameMode::YES_SCENE) {
-        if (ct - m_yesSceneStartTime > 2000) { // 2s display + 0.5s fade out
+        if (ct - m_yesSceneStartTime > 2000) {
             m_gameMode = GameMode::REPLAYING;
             m_replayFrame = 0;
             
-            // Replay 시작 전 적과 문 상태 초기화
             StageManager::Reset();
             for (auto& e : m_enemies) if (e) e->Reset();
 
-            // Set initial camera to frame 0
             const auto& fullHistory = m_player.GetSnapshots();
             if (!fullHistory.empty()) {
                 m_player.SetPos(fullHistory[0].x, fullHistory[0].y);
@@ -245,7 +251,7 @@ void Game::Update() {
             }
         }
         m_prevTime = ct;
-        return; // BLOCK Physics/Input
+        return;
     }
 
     if (m_gameMode == GameMode::REPLAYING) {
@@ -264,17 +270,15 @@ void Game::Update() {
         if (!m_isReplayPaused) {
             const auto& fullHistory = m_player.GetSnapshots();
             if (m_replayFrame < (int)fullHistory.size()) {
-                // 리플레이 이벤트 처리 (속도에 맞춰 스킵되는 프레임의 이벤트도 모두 실행)
                 for (int i = 0; i < m_replaySpeed; i++) {
                     int targetFrame = m_replayFrame + i;
                     if (targetFrame < (int)fullHistory.size()) {
                         for (const auto& ev : fullHistory[targetFrame].events) {
                             if (ev.type == Player::ReplayEvent::ENEMY_DIE) {
                                 if (ev.targetIdx >= 0 && ev.targetIdx < (int)m_enemies.size()) {
-                                    m_enemies[ev.targetIdx]->OnTakeDamage(999.0f);
+                                    m_enemies[ev.targetIdx]->OnTakeDamage(5.0f, -5.0f);
                                 }
                             } else if (ev.type == Player::ReplayEvent::DOOR_OPEN) {
-                                // 문 열림 이벤트는 StageManager에서 처리 (인덱스 기반)
                                 StageManager::GetStageData(m_currentStage).doors[ev.targetIdx].Open(true, ct);
                             }
                         }
@@ -285,11 +289,10 @@ void Game::Update() {
                 m_player.SetPos(d.x, d.y);
                 m_player.SetState(d.state);
                 
-                // 적 업데이트 추가 (리플레이 중에도 움직이게 함)
                 for (auto& e : m_enemies) {
                     if (e) {
                         for (int i = 0; i < m_replaySpeed; i++) {
-                            e->Update(1.0f);
+                            e->Update(1.0f, m_player);
                         }
                     }
                 }
@@ -303,96 +306,108 @@ void Game::Update() {
                 m_transitionToNextStage = true;
             }
         } else {
-            // 정지 중에도 카메라는 계속 플레이어를 비추도록 (흔들림 효과 등 유지)
             Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, false);
         }
         m_prevTime = ct;
-        return; // BLOCK Physics/Input
+        return;
     }
 
-    if (m_player.GetState() == PlayerState::DEAD && !m_player.IsRewinding()) {
+    if (m_player.IsDead() && !m_player.IsRewinding()) {
         static bool isDeadShaken = false;
         if (!isDeadShaken) {
-            Camera::AddShake(1.5f); // 강도를 약간 높임
-            Camera::AddPush(0.0f, 40.0f); // 위아래로 툭 떨어지는 느낌을 위해 수직 푸시 추가
+            Camera::AddShake(1.5f);
+            Camera::AddPush(0.0f, 40.0f);
             isDeadShaken = true;
         }
         if (Input::GetKeyDown(VK_LBUTTON)) {
             isDeadShaken = false;
+            m_isTimeoutDeath = false;
+            m_initialRewindHistorySize = m_player.GetHistorySize();
+            float elapsed = StageManager::GetStageLimitTime() - m_stageTimer;
+            float rewindDur = (std::max)(1.0f, (std::min)(5.0f, elapsed / 6.0f)); // 理쒕? 5珥? 理쒖냼 1珥?            m_rewindSpeed = (rewindDur > 0) ? (int)(m_initialRewindHistorySize / (rewindDur * 60.0f)) : 4;
+            if (m_rewindSpeed < 1) m_rewindSpeed = 1;
+
             m_player.StartRewind(m_rewindSpeed); 
             StageManager::Reset(); 
             m_stageTimer = StageManager::GetStageLimitTime(); 
-            Camera::StartRewindEffect(); 
+            Camera::StartRewindEffect(rewindDur); 
             EffectManager::Init(); 
             for (auto& e : m_enemies) if (e) e->Reset(); 
-            // 리와인드가 시작되었으므로 아래의 리와인드 업데이트 로직으로 넘어감
-        } else {
-            // 죽었을 때는 카메라 업데이트만 수행 (정지된 느낌)
-            Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
-            m_prevTime = ct;
-            return;
         }
     }
 
     if (Input::GetKeyDown('F')) m_isFullMapView = !m_isFullMapView;
     if (Input::GetKeyDown('E')) { m_showDebugRect = !m_showDebugRect; m_showGrid = !m_showGrid; }
     if (Input::GetKeyDown('I')) m_player.SetGodMode(!m_player.IsGodMode());
-    
-    // 디버그용 스테이지 이동 기능
+
     if (Input::GetKeyDown('1')) LoadStage(1);
     if (Input::GetKeyDown('2')) LoadStage(2);
 
-    static bool prR = false; bool cuR = GetAsyncKeyState('R') & 0x8000;
-    if (cuR && !prR) { 
-        m_player.StartRewind(m_rewindSpeed); 
-        StageManager::Reset(); 
-        m_stageTimer = StageManager::GetStageLimitTime(); // 타이머 리셋
-        Camera::StartRewindEffect(); // 카메라 리와인드 효과 시작
-        EffectManager::Init(); // 리와인드 시작 시 기존 이펙트(먼지, 잔상 등) 제거
+    static bool prevR_local = false; bool cuR = GetAsyncKeyState('R') & 0x8000;
+    if (cuR && !prevR_local) {
+        m_isTimeoutDeath = false;
+        m_initialRewindHistorySize = m_player.GetHistorySize();
+        float elapsed = StageManager::GetStageLimitTime() - m_stageTimer;
+        float rewindDur = (std::max)(1.0f, (std::min)(5.0f, elapsed / 6.0f));
+        m_rewindSpeed = (rewindDur > 0) ? (int)(m_initialRewindHistorySize / (rewindDur * 60.0f)) : 4;
+        if (m_rewindSpeed < 1) m_rewindSpeed = 1;
+
+        m_player.StartRewind(m_rewindSpeed);
+        StageManager::Reset();
+        m_stageTimer = StageManager::GetStageLimitTime();
+        Camera::StartRewindEffect(rewindDur);
+        EffectManager::Init();
         for (auto& e : m_enemies) if (e) e->Reset(); 
     }
-    prR = cuR;
+    prevR_local = cuR;
 
-    // 타이머 업데이트 (리와인드 중이 아니고 슬로우 모션이 아닐 때만 감소)
-    if (!m_player.IsRewinding() && !m_player.GetIsSlowMo() && !m_isTimePaused) {
-        float dT = (ct - m_prevTime) / 1000.0f;
-        m_stageTimer -= dT;
+    if (!m_player.IsRewinding() && !m_player.GetIsSlowMo() && !m_isTimePaused && !m_player.IsGodMode() && !m_player.IsDead()) {
+        float dT_timer = (ct - m_prevTime) / 1000.0f;
+        m_stageTimer -= dT_timer;
         if (m_stageTimer <= 0) {
             m_stageTimer = 0;
-            // 타이머가 0이 되면 사망 처리 (갓모드인 경우 제외)
-            if (!m_player.IsGodMode() && m_player.GetState() != PlayerState::DEAD) {
-                m_player.SetState(PlayerState::DEAD);
+            if (!m_player.IsGodMode() && !m_player.IsDead()) {
+                m_isTimeoutDeath = true;
+                m_player.SetState(PlayerState::PS_DEAD);
             }
         }
     }
 
     if (m_player.IsRewinding()) {
-        m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
-        m_player.UpdateAnimation();
-        
-        bool forceSnap = (m_player.GetHistorySize() == 0);
-        Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, forceSnap);
-        
-        // 카메라 리와인드 효과가 종료되었는데도 아직 리와인드 중인 경우 강제 중단 및 초기 위치 이동
-        if (!Camera::IsRewindEffectActive()) {
-            m_player.StopRewind();
-            m_player.SetState(PlayerState::IDLE);
+        int currentHist = m_player.GetHistorySize();
+        if (currentHist > (int)(m_initialRewindHistorySize * 0.2f)) {
+            m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
+        } else {
+            // 20% ?⑥븯?????ㅽ궢: ?뚮젅?댁뼱瑜??쒖옉 ?꾩튂濡?媛뺤젣 ?대룞?섍퀬 ?덉뒪?좊━ ??젣
             m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH() - 2.0f);
             m_player.ClearHistory();
-            m_player.ClearSnapshots(); // 사망 또는 재시작(R) 완료 시 리플레이 저장 초기화
-            // 스냅된 위치로 카메라 즉시 갱신
+        }
+        m_player.UpdateAnimation();
+
+        bool forceSnap = (m_player.GetHistorySize() == 0);
+        Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, forceSnap);
+
+        if (!Camera::IsRewindEffectActive()) {
+            m_player.StopRewind();
+            m_player.SetState(PlayerState::PS_IDLE);
+            m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH() - 2.0f);
+            m_player.ClearHistory();
+            m_player.ClearSnapshots();
             Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, true);
         }
-        
+
         m_prevTime = ct; return;
     }
+    float ts = m_player.GetIsSlowMo() ? 0.3f : 1.0f;
     if (!m_isTimePaused) {
         m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
-        for (auto& e : m_enemies) if (e) e->Update(m_player.GetIsSlowMo() ? 0.3f : 1.0f);
+        Bullet::UpdateAll(ts, m_player);
+        if (!m_player.IsDead()) {
+            for (auto& e : m_enemies) if (e) e->Update(ts, m_player);
+        }
     }
-    float ts = m_player.GetIsSlowMo() ? 0.3f : 1.0f;
     static int laF = -1;
-    if (!m_isTimePaused && m_player.GetState() == PlayerState::ATTACK) {
+    if (!m_isTimePaused && m_player.GetState() == PlayerState::PS_ATTACK) {
         int cf = m_player.GetCurrentFrame();
         if (cf >= 1 && cf <= 3 && cf != laF) {
             float cX = m_player.GetX() + m_player.GetColW() / 2.0f, cY = m_player.GetY() + m_player.GetColH() / 2.0f;
@@ -404,7 +419,6 @@ void Game::Update() {
                     RECT eR = e->GetRect(); RECT ol;
                     if (IntersectRect(&ol, &aR, &eR)) {
                         m_isTimePaused = true;
-                        // 적 죽음 이벤트를 리플레이에 기록
                         m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i);
 
                         float ex = e->GetX() + e->GetColW() / 2.0f, ey = e->GetY() + e->GetColH() / 2.0f;
@@ -413,7 +427,11 @@ void Game::Update() {
                         EffectManager::AddNeonTrail(ex, ey, ux, uy, atan2(uy, ux));
                         EffectManager::AddHitVFX(ex, ey, atan2(uy, ux), ct);
                         Camera::AddPush(ux * 30.0f, uy * 30.0f); Camera::AddShake(1.0f);
-                        EffectManager::AddPendingHit(e, (m_player.GetAttackDirX() >= 0) ? 45.0f : -45.0f);
+                        
+                        // Knockback with dramatic force
+                        float kbPowerX = 30.0f;
+                        float kbPowerY = -15.0f; // Always fly up slightly
+                        EffectManager::AddPendingHit(e, m_player.GetDashDirX() * kbPowerX, (m_player.GetDashDirY() * 20.0f) + kbPowerY);
                     }
                 }
             }
@@ -421,9 +439,45 @@ void Game::Update() {
         }
     } else if (!m_isTimePaused) laF = -1;
     if (!m_isTimePaused) {
-        int openedDoorIdx = StageManager::UpdateDoors(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), (GetAsyncKeyState('A') & 0x8000) != 0, (GetAsyncKeyState('D') & 0x8000) != 0, m_player.GetState() == PlayerState::ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct, ts);
+        int openedDoorIdx = StageManager::UpdateDoors(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), (GetAsyncKeyState('A') & 0x8000) != 0, (GetAsyncKeyState('D') & 0x8000) != 0, m_player.GetState() == PlayerState::PS_ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct, ts);
         if (openedDoorIdx != -1) {
             m_player.AddReplayEvent(Player::ReplayEvent::DOOR_OPEN, openedDoorIdx);
+            // ?뚮젅?댁뼱媛 怨듦꺽 以묒씠 ?꾨땲?덈떎硫?臾몄쓣 諛쒕줈 李⑥꽌 ?щ뒗 ?좊땲硫붿씠???ъ깮
+            if (m_player.GetState() != PlayerState::PS_ATTACK && m_player.GetState() != PlayerState::PS_DOOR_KICK && m_player.GetState() != PlayerState::PS_DOOR_KICK_FULL) {
+                m_player.SetState(PlayerState::PS_DOOR_KICK);
+            }
+        }
+
+        // 臾몄씠 ?대━???숈븞 ?곴낵 異⑸룎 泥댄겕 (臾?怨듦꺽)
+        auto& stageData = StageManager::GetStageData(m_currentStage);
+        for (int i = 0; i < (int)stageData.doors.size(); i++) {
+            Door& d = stageData.doors[i];
+            // 臾몄씠 ?대━湲??쒖옉?섎뒗 ?꾨젅??蹂댄넻 珥덈컲遺)?먯꽌 怨듦꺽 ?먯젙
+            if (!d.IsClosed() && d.GetCurrentFrame() >= 1 && d.GetCurrentFrame() <= 5) {
+                RECT dR = { (int)d.GetX(), (int)d.GetY(), (int)(d.GetX() + d.GetW()), (int)(d.GetY() + d.GetH()) };
+                // 臾몄쓽 怨듦꺽 踰붿쐞瑜??쎄컙 ?뺤옣 (醫뚯슦濡?
+                dR.left -= 30; dR.right += 30;
+
+                for (int j = 0; j < (int)m_enemies.size(); j++) {
+                    Enemy* e = m_enemies[j];
+                    if (e && e->GetIsAlive()) {
+                        RECT eR = e->GetRect(); RECT ol;
+                        if (IntersectRect(&ol, &dR, &eR)) {
+                            float ex = e->GetX() + e->GetColW() / 2.0f;
+                            float ey = e->GetY() + e->GetColH() / 2.0f;
+                            float kbx = (ex > d.GetX() + d.GetW() / 2.0f) ? 15.0f : -15.0f;
+                            e->OnTakeDamage(kbx, -5.0f);
+                            m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, j);
+                            
+                            // ?쒓컖 ?④낵 異붽?
+                            float angle = (kbx > 0) ? 0.0f : 3.14159f;
+                            EffectManager::AddNeonTrail(ex, ey, (kbx > 0 ? 1.0f : -1.0f), 0.0f, angle);
+                            EffectManager::AddHitVFX(ex, ey, angle, ct);
+                            Camera::AddShake(0.8f);
+                        }
+                    }
+                }
+            }
         }
     }
     EffectManager::Update(ts, ct);
@@ -439,13 +493,11 @@ void Game::Render(HDC hDC) {
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hMemBmp);
     PatBlt(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, BLACKNESS);
 
-    // 로딩 중인 경우 로딩 화면 출력
     if (!m_isLoaded) {
         if (!m_imgLoading.IsNull()) {
             m_imgLoading.Draw(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         }
 
-        // 로딩 게이지 바 배경 (우측 하단)
         int barW = 400;
         int barH = 10;
         int margin = 60;
@@ -455,7 +507,6 @@ void Game::Render(HDC hDC) {
         FillRect(hMemDC, &barBg, hBgBrush);
         DeleteObject(hBgBrush);
 
-        // 로딩 게이지 바 진행도 (Cyan) - 실수 연산으로 정확도 향상
         int currentProgress = m_loadingProgress.load();
         int progressWidth = (int)((float)barW * (currentProgress / 100.0f));
         RECT barProgress = { barBg.left, barBg.top, barBg.left + progressWidth, barBg.bottom };
@@ -463,7 +514,6 @@ void Game::Render(HDC hDC) {
         FillRect(hMemDC, &barProgress, hPrgBrush);
         DeleteObject(hPrgBrush);
 
-        // 퍼센트 텍스트 출력
         SetBkMode(hMemDC, TRANSPARENT);
         SetTextColor(hMemDC, RGB(200, 200, 200));
         HFONT hFont = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
@@ -486,7 +536,6 @@ void Game::Render(HDC hDC) {
 
     float cX = Camera::GetCamX(), cY = Camera::GetCamY(); Camera::ApplyShake(cX, cY);
     
-    // 리와인드 효과 중일 때 맵 높이에 맞춰 카메라 Y좌표를 래핑 (필름 효과)
     if (Camera::IsRewindEffectActive()) {
         int mapH = StageManager::GetMapHeight();
         if (mapH > 0) {
@@ -496,33 +545,36 @@ void Game::Render(HDC hDC) {
         }
     }
 
-    StageManager::Render(hMemDC, m_isFullMapView, m_showDebugRect, mapScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, cX, cY, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    Gdiplus::Graphics g(hMemDC);
+    StageManager::Render(hMemDC, m_isFullMapView, m_showDebugRect, mapScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, cX, cY, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetIsSlowMo());
+    
+    if (m_showDebugRect) {
+        TCHAR szFps[32]; wsprintf(szFps, TEXT("FPS: %d"), m_fps);
+        SetTextColor(hMemDC, RGB(255, 255, 0)); SetBkMode(hMemDC, TRANSPARENT);
+        TextOut(hMemDC, 10, 10, szFps, lstrlen(szFps));
+    }
+
     if (m_showGrid) {
         HPEN hGP = CreatePen(PS_SOLID, 1, RGB(100, 100, 100)); HPEN hOP = (HPEN)SelectObject(hMemDC, hGP);
         for (int x = 0; x <= VIRTUAL_WIDTH; x += 20) { MoveToEx(hMemDC, x, 0, NULL); LineTo(hMemDC, x, VIRTUAL_HEIGHT); }
         for (int y = 0; y <= VIRTUAL_HEIGHT; y += 20) { MoveToEx(hMemDC, 0, y, NULL); LineTo(hMemDC, VIRTUAL_WIDTH, y); }
         SelectObject(hMemDC, hOP); DeleteObject(hGP);
     }
-    for (auto& e : m_enemies) if (e) e->Render(hMemDC, cX, cY, mapScale, m_showDebugRect);
+    for (auto& e : m_enemies) if (e) e->Render(hMemDC, &g, cX, cY, mapScale, m_showDebugRect, m_player.GetIsSlowMo());
+    Bullet::RenderAll(hMemDC, cX, cY, mapScale);
     if (m_player.GetIsSlowMo() && m_gameMode != GameMode::REPLAYING) {
-        Gdiplus::Graphics g(hMemDC); Gdiplus::Rect fr(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        Gdiplus::Rect fr(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         Gdiplus::GraphicsPath p; p.AddRectangle(fr); Gdiplus::PathGradientBrush pgb(&p);
         pgb.SetCenterColor(Gdiplus::Color(0, 0, 0, 0)); pgb.SetCenterPoint(Gdiplus::PointF(VIRTUAL_WIDTH / 2.0f, VIRTUAL_HEIGHT / 2.0f));
         Gdiplus::Color ec[] = { Gdiplus::Color(180, 0, 0, 0) }; int cnt = 1; pgb.SetSurroundColors(ec, &cnt);
         pgb.SetFocusScales(0.2f, 0.2f); g.FillRectangle(&pgb, fr);
     }
 
-    // 타임아웃 경고 효과 (남은 시간 3초 이하일 때 핑크/보라색 오버레이)
-    if (m_stageTimer <= 3.0f && m_bGameStarted && !m_player.IsRewinding() && m_gameMode != GameMode::REPLAYING) {
-        float alphaRatio = 1.0f - (m_stageTimer / 3.0f); // 3초일 때 0, 0초일 때 1
+    if (m_stageTimer <= 3.0f && m_bGameStarted && !m_player.IsRewinding() && m_gameMode != GameMode::REPLAYING && !m_player.IsDeathAnimationFinished()) {
+        float alphaRatio = 1.0f - (m_stageTimer / 3.0f);
         if (alphaRatio < 0) alphaRatio = 0;
         if (alphaRatio > 1.0f) alphaRatio = 1.0f;
-
-        // 사망 시에는 완전히 덮음, 그 외에는 최대 150 알파까지 서서히 증가
-        int alpha = m_player.GetState() == PlayerState::DEAD ? 200 : (int)(alphaRatio * 150);
-        
-        Gdiplus::Graphics g(hMemDC);
-        // 핑크와 보라 사이의 색상 (예: R:255, G:50, B:200)
+        int alpha = m_player.IsDead() ? 200 : (int)(alphaRatio * 150);
         Gdiplus::SolidBrush warningBrush(Gdiplus::Color(alpha, 255, 50, 200));
         g.FillRectangle(&warningBrush, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     }
@@ -530,7 +582,7 @@ void Game::Render(HDC hDC) {
     float scX = fW / fCW, scY = fH / fCH, cFS = (scX < scY) ? scX : scY;
     float cFX = (fW - fCW * cFS) / 2.0f, cFY = (fH - fCH * cFS) / 2.0f;
     EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
-    m_player.Render(hMemDC, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect);
+    m_player.Render(hMemDC, &g, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect, m_stageTimer);
     
     auto drawTransition = [&](HDC dc) {
         if (m_transitionState == TransitionState::NONE) return;
@@ -546,12 +598,10 @@ void Game::Render(HDC hDC) {
     };
 
     if (m_gameMode == GameMode::REPLAYING || m_gameMode == GameMode::YES_SCENE) {
-        // 더블 버퍼링 유지를 위한 포스트 프로세싱 버퍼 생성
         HDC hPostDC = CreateCompatibleDC(hDC);
         HBITMAP hPostBmp = CreateCompatibleBitmap(hDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         HBITMAP hOldPostBmp = (HBITMAP)SelectObject(hPostDC, hPostBmp);
 
-        // hMemDC(원본) -> hPostDC(흑백) 복사
         Gdiplus::Graphics g(hPostDC);
         Gdiplus::Bitmap bmp(hMemBmp, NULL);
         Gdiplus::ImageAttributes attr;
@@ -565,19 +615,18 @@ void Game::Render(HDC hDC) {
         attr.SetColorMatrix(&mat);
         g.DrawImage(&bmp, Gdiplus::Rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT), 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Gdiplus::UnitPixel, &attr);
         
-        // UI 오버레이 그리기 (가상 해상도 기준)
         if (m_gameMode == GameMode::REPLAYING) {
             if (!m_imgReplayUI[0].IsNull()) {
                 int w = m_imgReplayUI[0].GetWidth();
                 int h = m_imgReplayUI[0].GetHeight();
-                m_imgReplayUI[0].Draw(hPostDC, VIRTUAL_WIDTH - w - 20, VIRTUAL_HEIGHT - h - 20, w, h); // 우측 하단
+                m_imgReplayUI[0].Draw(hPostDC, VIRTUAL_WIDTH - w - 20, VIRTUAL_HEIGHT - h - 20, w, h);
             }
             
             int topUIIdx = m_isReplayPaused ? 2 : 1;
             if (!m_imgReplayUI[topUIIdx].IsNull()) {
                 int w = m_imgReplayUI[topUIIdx].GetWidth();
                 int h = m_imgReplayUI[topUIIdx].GetHeight();
-                m_imgReplayUI[topUIIdx].Draw(hPostDC, 20, 20, w, h); // 좌측 상단
+                m_imgReplayUI[topUIIdx].Draw(hPostDC, 20, 20, w, h);
             }
         } else if (m_gameMode == GameMode::YES_SCENE) {
             DWORD elapsed = GetTickCount() - m_yesSceneStartTime;
@@ -614,7 +663,6 @@ void Game::Render(HDC hDC) {
 
         drawTransition(hPostDC);
 
-        // 최종 화면 출력
         SetStretchBltMode(hDC, HALFTONE);
         StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hPostDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY);
 
@@ -622,7 +670,7 @@ void Game::Render(HDC hDC) {
     } else {
         if (!m_player.IsRewinding()) {
             bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.GetState() == PlayerState::DEAD);
+            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished());
         }
 
         drawTransition(hMemDC);
@@ -631,7 +679,6 @@ void Game::Render(HDC hDC) {
         StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY);
     }
 
-    
     SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC);
 }
 

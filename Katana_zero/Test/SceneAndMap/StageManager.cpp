@@ -1,4 +1,4 @@
-#include "StageManager.h"
+﻿#include "StageManager.h"
 #include <algorithm>
 #include <atomic>
 
@@ -28,7 +28,7 @@ void StageManager::ProcessStage(int stage) {
     data.playerStart = { 100, 100 };
     data.stageLimitTime = (stage == 1) ? 30.0f : 60.0f;
 
-    if (!colMap.IsNull()) {
+    if (!colMap.IsNull() && colMap.IsDIBSection()) {
         int w = colMap.GetWidth();
         int h = colMap.GetHeight();
         int pitch = colMap.GetPitch();
@@ -43,21 +43,17 @@ void StageManager::ProcessStage(int stage) {
                 if (visited[y * w + x]) continue;
 
                 BYTE* pPixel = pRow + (x * bpp);
-                // Windows Bitmaps are stored in BGR order
                 BYTE b = pPixel[0];
                 BYTE g = pPixel[1];
                 BYTE r = pPixel[2];
 
-                // Door: Magenta (255, 0, 255)
                 if (r == 255 && g == 0 && b == 255) {
                     int rectW = 0, rectH = 0;
-                    // Find Width
                     while (x + rectW < w) {
                         BYTE* pNext = pRow + ((x + rectW) * bpp);
                         if (pNext[2] == 255 && pNext[1] == 0 && pNext[0] == 255) rectW++;
                         else break;
                     }
-                    // Find Height
                     while (y + rectH < h) {
                         BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
                         if (pNextRow[2] == 255 && pNextRow[1] == 0 && pNextRow[0] == 255) rectH++;
@@ -73,21 +69,17 @@ void StageManager::ProcessStage(int stage) {
                         }
                     }
                 }
-                // Player Start: White (255, 255, 255)
                 else if (r == 255 && g == 255 && b == 255) {
                     data.playerStart = { x, y };
                     visited[y * w + x] = true;
                 }
-                // Clear Zone: Cyan (0, 255, 255)
                 else if (r == 0 && g == 255 && b == 255) {
                     int rectW = 0, rectH = 0;
-                    // Find Width
                     while (x + rectW < w) {
                         BYTE* pNext = pRow + ((x + rectW) * bpp);
                         if (pNext[2] == 0 && pNext[1] == 255 && pNext[0] == 255) rectW++;
                         else break;
                     }
-                    // Find Height
                     while (y + rectH < h) {
                         BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
                         if (pNextRow[2] == 0 && pNextRow[1] == 255 && pNextRow[0] == 255) rectH++;
@@ -96,6 +88,46 @@ void StageManager::ProcessStage(int stage) {
 
                     if (rectW > 0 && rectH > 0) {
                         data.clearZones.push_back({ x, y, x + rectW, y + rectH });
+                        for (int ry = y; ry < y + rectH; ry++) {
+                            for (int rx = x; rx < x + rectW; rx++) {
+                                visited[ry * w + rx] = true;
+                            }
+                        }
+                    }
+                }
+                else if ((r >= 240 && g >= 240 && b <= 50) || // ?몃옉 (Grunt)
+                         (r >= 240 && g >= 140 && g <= 170 && b <= 50) || // 二쇳솴 (Gangster)
+                         (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) || // 蹂대씪 (Pomp)
+                         (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160)) // ?뚯깋 (ShieldCop)
+                {
+                    int enemyType = 1; // 湲곕낯媛?Grunt
+                    if (r >= 240 && g >= 240 && b <= 50) enemyType = 1;      // ?몃옉: Grunt
+                    else if (r >= 240 && g >= 140 && g <= 170 && b <= 50) enemyType = 0; // 二쇳솴: Gangster
+                    else if (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) enemyType = 2; // 蹂대씪: Pomp
+                    else if (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160) enemyType = 3; // ?뚯깋: ShieldCop
+
+                    int rectW = 0, rectH = 0;
+                    BYTE targetR = r, targetG = g, targetB = b;
+
+                    // 媛濡?湲몄씠 痢≪젙 (?숈씪 ?됱긽 踰붿쐞 痢≪젙)
+                    while (x + rectW < w) {
+                        BYTE* pN = pRow + ((x + rectW) * bpp);
+                        if (abs((int)pN[2] - (int)targetR) < 20 && abs((int)pN[1] - (int)targetG) < 20 && abs((int)pN[0] - (int)targetB) < 20) rectW++;
+                        else break;
+                    }
+                    // ?몃줈 湲몄씠 痢≪젙
+                    while (y + rectH < h) {
+                        BYTE* pN = pBits + ((y + rectH) * pitch) + (x * bpp);
+                        if (abs((int)pN[2] - (int)targetR) < 20 && abs((int)pN[1] - (int)targetG) < 20 && abs((int)pN[0] - (int)targetB) < 20) rectH++;
+                        else break;
+                    }
+
+                    if (rectW > 0 && rectH > 0) {
+                        // ?곸쓽 ?뚰솚 ?꾩튂瑜?諛뺤뒪??以묒븰 ?섎떒?쇰줈 ?ㅼ젙 (??吏곴???
+                        float spawnX = (float)x + (float)rectW / 2.0f - 20.0f; // 20.0f?????덈컲 ?덈퉬
+                        float spawnY = (float)y + (float)rectH - 60.0f;       // 60.0f?????믪씠
+                        data.enemySpawns.push_back({ spawnX, spawnY, (float)rectW, enemyType });
+                        
                         for (int ry = y; ry < y + rectH; ry++) {
                             for (int rx = x; rx < x + rectW; rx++) {
                                 visited[ry * w + rx] = true;
@@ -136,13 +168,13 @@ void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
 
         if (i == 2) {
             StageData& data = m_stageDataMap[2];
-            data.camFixedY = 60.0f; 
+            data.camFixedY = 0.0f; 
             data.mapScale = 1.0f; 
-            data.mapRenderOffsetY = 240.0f; // 1/3 of 720
+            data.mapRenderOffsetY = 0.0f;
         }
 
         if (pProgress) {
-            *pProgress = 60 + (i * 10); // 스테이지마다 10%씩 (60 -> 70 -> 80)
+            *pProgress = 60 + (i * 10);
             Sleep(100);
         }
     }
@@ -193,15 +225,29 @@ int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float
         for (int i = 0; i < (int)m_pCurrentDoors->size(); i++) {
             Door& d = (*m_pCurrentDoors)[i];
             DoorOpenEvent de = d.Update(playerX, playerY, playerW, playerH, isA, isD, isAttacking, attackHitX, attackHitY, attackHitW, attackHitH, currentTime, timeScale);
-            if (de != DoorOpenEvent::NONE) {
-                return i; // 열린 문의 인덱스 반환
+            if (de != DoorOpenEvent::DOE_NONE) {
+                return i;
             }
         }
     }
     return -1;
 }
 
-void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight) {
+void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo) {
+    if (!hDC) return;
+
+    if (isSlowMo) {
+        // ?щ줈??紐⑤뱶 ??諛곌꼍??寃??됱쑝濡?梨꾩?
+        HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
+        RECT rect = { 0, 0, virtualWidth, virtualHeight };
+        FillRect(hDC, &rect, hBlack);
+        DeleteObject(hBlack);
+        
+        // 臾?Door)???뚮뜑留?(?꾩슂?섎떎硫??ш린??臾몃룄 寃寃?泥섎━?????덉?留? ?쇰떒 ?뚮뜑留곷쭔 嫄대꼫?곌굅??湲곕낯 ?뚮뜑留??좎?)
+        // ?곷뱾泥섎읆 ?ㅼ삩 ?④낵瑜?二쇱? ?딆쑝誘濡??쇰떒 諛곌꼍怨??④퍡 寃寃?泥섎━?섍린 ?꾪빐 ?뚮뜑留??앸왂
+        return; 
+    }
+
     if (!isFullMapView) {
         if (!m_imgSkylineClouds.IsNull()) {
             float cloudScaleX = 3.0f, cloudScaleY = 1.5f; 
@@ -230,7 +276,6 @@ void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float
                 tMap->Draw(hDC, (int)mapOffsetX, (int)mapOffsetY, (int)(cMW * renderMapScale), (int)(cMH * renderMapScale), 0, 0, cMW, cMH);
             }
             else {
-                // Find current stage data to get offset
                 float currentOffset = 0.0f;
                 for (auto& pair : m_stageDataMap) {
                     if (&m_mapImages[pair.first] == m_imgMap) {

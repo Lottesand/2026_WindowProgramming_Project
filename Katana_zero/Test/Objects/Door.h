@@ -4,17 +4,17 @@
 #include <vector>
 
 enum class DoorState {
-    CLOSED,
-    OPENING,
-    OPENED,
-    BREAKING,
-    BROKEN
+    DS_CLOSED,
+    DS_OPENING,
+    DS_OPENED,
+    DS_BREAKING,
+    DS_BROKEN
 };
 
 enum class DoorOpenEvent {
-    NONE,
-    OPEN_BY_ATTACK,
-    OPEN_BY_WALK
+    DOE_NONE,
+    DOE_OPEN_BY_ATTACK,
+    DOE_OPEN_BY_WALK
 };
 
 class Door {
@@ -40,7 +40,8 @@ public:
     float GetY() const { return m_y; }
     float GetW() const { return m_w; }
     float GetH() const { return m_h; }
-    bool IsClosed() const { return m_state == DoorState::CLOSED; }
+    bool IsClosed() const { return m_state == DoorState::DS_CLOSED; }
+    int GetCurrentFrame() const { return m_currentFrame; }
 
 private:
     float m_x, m_y;

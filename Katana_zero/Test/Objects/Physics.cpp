@@ -3,13 +3,22 @@
 int GetCollisionType(int targetX, int targetY) {
     CImage& imgColMap = StageManager::GetColMap();
     if (imgColMap.IsNull()) return 1;
-    if (targetX < 0 || targetY < 0 || targetX >= imgColMap.GetWidth() || targetY >= imgColMap.GetHeight()) return 1;
+    // 맵 범위를 벗어난 경우 처리
+    if (targetX < 0 || targetX >= imgColMap.GetWidth()) return 1;
+    if (targetY < 0) return 1;
+    if (targetY >= imgColMap.GetHeight()) return 0; // 맵 아래쪽은 뚫려있음 (낙사 구간)
     
     COLORREF pixelColor = imgColMap.GetPixel(targetX, targetY) & 0x00FFFFFF;
     int r = GetRValue(pixelColor); 
     int g = GetGValue(pixelColor); 
     int b = GetBValue(pixelColor);
     
+    // 적 스폰 영역 색상들 (노랑, 주황, 보라, 회색) 충돌체에서 제외
+    if (r >= 240 && g >= 240 && b <= 50) return 0; // 노랑
+    if (r >= 240 && g >= 140 && g <= 170 && b <= 50) return 0; // 주황
+    if (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) return 0; // 보라
+    if (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160) return 0; // 회색
+
     if (g > 200 && r < 50 && b < 50) return 1; // Green
     if (r > 200 && g < 50 && b < 50) return 2; // Red
     if (b > 200 && r < 50 && g < 50) return 3; // Blue
