@@ -1,10 +1,11 @@
-﻿#pragma once
+#pragma once
 #include <windows.h>
 #include <atlimage.h>
 #include <math.h>
 
 enum class EnemyType { GANGSTER, GRUNT, POMP, SHIELDCOP };
-enum class EnemyState { IDLE, WALK, FALL, DEAD };
+enum class EnemyState { IDLE, WALK, FALL, ALERT, ATTACK, DEAD };
+
 enum class GangsterAction { NONE, AIM, FIRE, TURN, RUN, HURT_FLY, HURT_GROUND };
 enum class GruntAction { NONE, ATTACK, SLASH, TURN, RUN, HURT_FLY, HURT_GROUND };
 enum class PompAction { NONE, ATTACK, BOX_IDLE, BOX_HIT, TURN, RUN, HURT_FLY, HURT_GROUND };
@@ -18,16 +19,32 @@ protected:
     int m_CurrentFrame; DWORD m_LastTime, m_patternTimer;
     float m_friction, m_knockbackVx, m_walkDistance;
 
+    // Detection & Alert
+    bool m_isPlayerDetected;
+    DWORD m_alertStartTime;
+    int m_exclaimFrame;
+    static CImage m_ImgExclaim[2];
+
+    // Detection constants
+    float m_detectRange = 400.0f;
+    float m_detectAngle = 45.0f; // Cone angle (half of total field)
+
 public:
     Enemy(float startX, float startY, EnemyType type);
     virtual ~Enemy();
     virtual void Init() = 0;
     virtual void Reset();
-    virtual void Update(float timeScale) = 0;
+    virtual void Update(float timeScale);
     virtual void Render(HDC hdc, float camX, float camY, float mapScale, bool showDebugRect) = 0;
+    virtual void RenderDetectionRange(HDC hdc, float camX, float camY, float mapScale);
     virtual void OnTakeDamage(float damage);
     virtual void ApplyKnockback(float vx);
     static void ReleaseAll();
+
+    bool IsPlayerInCone(float px, float py, float pw, float ph);
+    void UpdateDetection(float px, float py, float pw, float ph, float ts);
+    void RenderExclaim(HDC hdc, float camX, float camY, float mapScale);
+
     EnemyType GetType() const { return m_Type; }
     bool GetIsAlive() const { return m_isAlive; }
     void SetImmortal(bool immortal) { m_isImmortal = immortal; }
@@ -41,7 +58,7 @@ public:
 class Gangster : public Enemy {
 private:
     GangsterAction m_ActionState;
-    static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[7], m_ImgAim_L[7], m_ImgFire_R[6], m_ImgFire_L[6], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10];
+    static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[4], m_ImgAim_L[4], m_ImgFire_R[6], m_ImgFire_L[6], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10], m_ImgGun_R[2], m_ImgGun_L[2], m_ImgArm[2];
 public:
     Gangster(float x, float y); virtual ~Gangster();
     virtual void Init() override; virtual void Update(float ts) override; virtual void Render(HDC h, float cx, float cy, float ms, bool dr) override; virtual void OnTakeDamage(float d) override; virtual void Reset() override;
@@ -77,4 +94,3 @@ public:
     virtual void Init() override; virtual void Update(float ts) override; virtual void Render(HDC h, float cx, float cy, float ms, bool dr) override; virtual void OnTakeDamage(float d) override; virtual void Reset() override;
     static void Release();
 };
-

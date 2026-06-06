@@ -132,6 +132,7 @@
     <ClCompile Include="Core\Input.cpp" />
     <ClCompile Include="Core\main.cpp" />
     <ClCompile Include="Effects\EffectManager.cpp" />
+    <ClCompile Include="Objects\Bullet.cpp" />
     <ClCompile Include="Objects\Door.cpp" />
     <ClCompile Include="Objects\Enemy.cpp" />
     <ClCompile Include="Objects\Physics.cpp" />
@@ -144,6 +145,7 @@
     <ClInclude Include="Core\Game.h" />
     <ClInclude Include="Core\Input.h" />
     <ClInclude Include="Effects\EffectManager.h" />
+    <ClInclude Include="Objects\Bullet.h" />
     <ClInclude Include="Objects\Door.h" />
     <ClInclude Include="Objects\Enemy.h" />
     <ClInclude Include="Objects\Physics.h" />

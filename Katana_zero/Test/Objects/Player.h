@@ -27,6 +27,7 @@ enum class PlayerState {
 
 class Player {
 private:
+    static Player* s_instance;
     float m_x, m_y, m_vx, m_vy;
     PlayerState m_state;
     bool m_isJumping, m_isFacingRight;
@@ -92,10 +93,13 @@ public:
     Player();
     ~Player();
 
+    static Player& GetInstance() { return *s_instance; }
+
     void Init();
     void Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
     void UpdateAnimation();
     void Render(HDC hMemDC, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect);
+    void OnTakeDamage(float damage);
     void SetState(PlayerState state) { 
         if (m_state != state) { 
             m_state = state; 
@@ -122,6 +126,7 @@ public:
     PlayerState GetState() const { return m_state; }
     bool GetIsSlowMo() const { return m_isSlowMo; }
     float GetBatteryLevel() const { return m_batteryLevel; }
+    RECT GetRect() const { return { (int)m_x, (int)m_y, (int)(m_x + m_colW), (int)(m_y + m_colH) }; }
 
     enum class ReplayEvent { ENEMY_DIE, DOOR_OPEN };
     struct ReplayEventData {

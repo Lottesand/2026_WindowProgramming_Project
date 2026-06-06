@@ -31,6 +31,11 @@ public:
     bool IsLoaded() const { return m_isLoaded; }
     int GetLoadingProgress() const { return m_loadingProgress; }
 
+    Player& GetPlayer() { return m_player; }
+    float GetMapScale() const { return mapScale; }
+    bool IsShowDebugRect() const { return m_showDebugRect; }
+    bool IsFullMapView() const { return m_isFullMapView; }
+
 private:
     void UpdateScreenScale();
 

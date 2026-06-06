@@ -16,7 +16,10 @@ float g_slowMoJumpForceScale = 1.0f;
 float g_slowMoMoveForceScale = 1.0f;
 int g_maxJumpHoldTime = 200;
 
+Player* Player::s_instance = nullptr;
+
 Player::Player() {
+    s_instance = this;
     m_x = 100.0f; m_y = 200.0f; m_vx = 0.0f; m_vy = 0.0f;
     m_state = PlayerState::IDLE; m_isJumping = false; m_isFacingRight = true;
     m_currentFrame = 0; m_lastTime = GetTickCount();
@@ -51,7 +54,9 @@ Player::Player() {
     m_snapshots.reserve(3000);
 }
 
-Player::~Player() {}
+Player::~Player() {
+    if (s_instance == this) s_instance = nullptr;
+}
 
 void Player::Init() {
     if (!imgIdle[0].IsNull()) return; // Already loaded
@@ -263,6 +268,12 @@ void Player::UpdateAnimation() {
         if (m_state == PlayerState::WALL_FLIP && m_currentFrame >= 11) m_currentFrame = 10;
         if (m_state == PlayerState::DOOR_KICK && m_currentFrame >= 6) m_currentFrame = 5;
         if (m_state == PlayerState::DOOR_KICK_FULL && m_currentFrame >= 10) m_currentFrame = 9;
+    }
+}
+
+void Player::OnTakeDamage(float damage) {
+    if (!m_isGodMode && m_state != PlayerState::DEAD) {
+        SetState(PlayerState::DEAD);
     }
 }
 

@@ -3,6 +3,7 @@
 #include "../SceneAndMap/Camera.h"
 #include "../SceneAndMap/StageManager.h"
 #include "../Objects/Door.h"
+#include "../Objects/Bullet.h"
 #include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
 #include <time.h>
@@ -61,6 +62,7 @@ void Game::LoadAllAssets() {
 
     // 2. 이펙트 에셋 로드 (10%)
     EffectManager::LoadAssets();
+    Bullet::Init();
     m_loadingProgress = 20;
     Sleep(50);
 
@@ -113,6 +115,7 @@ void Game::LoadStage(int stage) {
 
     StageManager::Init();
     SpawnEnemies();
+    Bullet::ClearAll();
     
     // Stage-specific camera and map scale settings
     StageManager::StageData& data = StageManager::GetStageData(m_currentStage);
@@ -324,9 +327,11 @@ void Game::Update() {
             m_stageTimer = StageManager::GetStageLimitTime(); 
             Camera::StartRewindEffect(); 
             EffectManager::Init(); 
+            Bullet::ClearAll();
             for (auto& e : m_enemies) if (e) e->Reset(); 
             // 리와인드가 시작되었으므로 아래의 리와인드 업데이트 로직으로 넘어감
-        } else {
+        }
+ else {
             // 죽었을 때는 카메라 업데이트만 수행 (정지된 느낌)
             Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
             m_prevTime = ct;
@@ -349,6 +354,7 @@ void Game::Update() {
         m_stageTimer = StageManager::GetStageLimitTime(); // 타이머 리셋
         Camera::StartRewindEffect(); // 카메라 리와인드 효과 시작
         EffectManager::Init(); // 리와인드 시작 시 기존 이펙트(먼지, 잔상 등) 제거
+        Bullet::ClearAll();
         for (auto& e : m_enemies) if (e) e->Reset(); 
     }
     prR = cuR;
@@ -389,6 +395,7 @@ void Game::Update() {
     if (!m_isTimePaused) {
         m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
         for (auto& e : m_enemies) if (e) e->Update(m_player.GetIsSlowMo() ? 0.3f : 1.0f);
+        Bullet::UpdateAll(m_player.GetIsSlowMo() ? 0.3f : 1.0f, m_player);
     }
     float ts = m_player.GetIsSlowMo() ? 0.3f : 1.0f;
     static int laF = -1;
@@ -532,6 +539,8 @@ void Game::Render(HDC hDC) {
     EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
     m_player.Render(hMemDC, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect);
     
+    Bullet::RenderAll(hMemDC, cX, cY, mapScale);
+
     auto drawTransition = [&](HDC dc) {
         if (m_transitionState == TransitionState::NONE) return;
         HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
