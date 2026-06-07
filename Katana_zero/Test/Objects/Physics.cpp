@@ -13,15 +13,9 @@ int GetCollisionType(int targetX, int targetY) {
     int g = GetGValue(pixelColor); 
     int b = GetBValue(pixelColor);
     
-    // 적 스폰 영역 색상들 (노랑, 주황, 보라, 회색) 충돌체에서 제외
-    if (r >= 240 && g >= 240 && b <= 50) return 0; // 노랑
-    if (r >= 240 && g >= 140 && g <= 170 && b <= 50) return 0; // 주황
-    if (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) return 0; // 보라
-    if (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160) return 0; // 회색
-
-    if (g > 200 && r < 50 && b < 50) return 1; // Green
-    if (r > 200 && g < 50 && b < 50) return 2; // Red
-    if (b > 200 && r < 50 && g < 50) return 3; // Blue
+    if (g > 200 && r < 50 && b < 50) return 1; // Green (Wall/Ground)
+    if (r > 200 && g < 50 && b < 50) return 2; // Red (Hazard/Spikes)
+    if (b > 200 && r < 50 && g < 50) return 3; // Blue (Platform)
     return 0;
 }
 
@@ -47,18 +41,71 @@ bool IsMapTransparent(int x, int y) {
 
 bool CheckMapCollision(float x, float y, float w, float h) {
     auto isSolid = [](int t) { return t == 1 || t == 3; };
-    int x1 = (int)x, x2 = (int)(x + w / 2), x3 = (int)(x + w - 1);
-    int y1 = (int)y, y2 = (int)(y + h / 2), y3 = (int)(y + h - 1);
+    
+    // Check points along the edges every 16 pixels for thoroughness
+    for (float px = x; px <= x + w - 1.0f; px += 16.0f) {
+        if (isSolid(GetCollisionType((int)px, (int)y))) return true;           // Top
+        if (isSolid(GetCollisionType((int)px, (int)(y + h - 1.0f)))) return true; // Bottom
+    }
+    // Ensure far right edge is checked
+    if (isSolid(GetCollisionType((int)(x + w - 1.0f), (int)y))) return true;
+    if (isSolid(GetCollisionType((int)(x + w - 1.0f), (int)(y + h - 1.0f)))) return true;
 
-    if (isSolid(GetCollisionType(x1, y1))) return true;
-    if (isSolid(GetCollisionType(x2, y1))) return true;
-    if (isSolid(GetCollisionType(x3, y1))) return true;
-    if (isSolid(GetCollisionType(x1, y2))) return true;
-    if (isSolid(GetCollisionType(x3, y2))) return true;
-    if (isSolid(GetCollisionType(x1, y3))) return true;
-    if (isSolid(GetCollisionType(x2, y3))) return true;
-    if (isSolid(GetCollisionType(x3, y3))) return true;
+    for (float py = y; py <= y + h - 1.0f; py += 16.0f) {
+        if (isSolid(GetCollisionType((int)x, (int)py))) return true;           // Left
+        if (isSolid(GetCollisionType((int)(x + w - 1.0f), (int)py))) return true; // Right
+    }
+    // Ensure midpoint is checked
+    if (isSolid(GetCollisionType((int)(x + w / 2.0f), (int)(y + h / 2.0f)))) return true;
+
     return false;
+}
+
+bool CheckDoorCollision(float x, float y, float w, float h) {
+    auto pDoors = StageManager::GetCurrentDoors();
+    if (!pDoors) return false;
+
+    RECT rect1 = { (int)x, (int)y, (int)(x + w), (int)(y + h) };
+    for (const auto& door : *pDoors) {
+        if (door.IsClosed()) {
+            RECT rect2 = { (int)door.GetX(), (int)door.GetY(), (int)(door.GetX() + door.GetW()), (int)(door.GetY() + door.GetH()) };
+            RECT overlap;
+            if (IntersectRect(&overlap, &rect1, &rect2)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void ResolveMapCollision(float& x, float& y, float w, float h, float oldX, float oldY) {
+    if (!CheckMapCollision(x, y, w, h)) return;
+
+    bool collidesX = CheckMapCollision(x, oldY, w, h);
+    bool collidesY = CheckMapCollision(oldX, y, w, h);
+
+    if (collidesX && !collidesY) {
+        x = oldX;
+    }
+    else if (!collidesX && collidesY) {
+        y = oldY;
+    }
+    else {
+        // Both or neither (corner collision). Revert both to be safe.
+        x = oldX;
+        y = oldY;
+    }
+    
+    // Final emergency push-out if still stuck
+    if (CheckMapCollision(x, y, w, h)) {
+        // Try to find a free spot nearby
+        for (int i = 1; i <= 5; i++) {
+            if (!CheckMapCollision(x - i, y, w, h)) { x -= i; return; }
+            if (!CheckMapCollision(x + i, y, w, h)) { x += i; return; }
+            if (!CheckMapCollision(x, y - i, w, h)) { y -= i; return; }
+            if (!CheckMapCollision(x, y + i, w, h)) { y += i; return; }
+        }
+    }
 }
 
 bool CheckSpecificCollision(float x, float y, float w, float h, int targetType) {

@@ -53,6 +53,7 @@ Player::Player() {
     m_batteryLevel = 11.0f; m_lastTimeScale = 1.0f;
     m_isGodMode = false;
     m_bloodDistance = 0.0f;
+    m_lastBleedTime = 0;
     m_snapshots.reserve(3000);
 }
 
@@ -86,8 +87,15 @@ void Player::Init() {
 
 void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
     bool isDead = IsDead();
-    if (isDead && !m_isRewinding && m_state != PlayerState::PS_DEAD_FLY_BEGIN && m_state != PlayerState::PS_DEAD_FLY_LOOP && m_state != PlayerState::PS_DEAD_GROUND && m_state != PlayerState::PS_PIT_DEATH) return;
-    if (m_state == PlayerState::PS_DEAD_GROUND && !m_isRewinding) return;
+    
+    // Death overrides everything: If dead, ensure we don't process normal movement or attacks
+    if (isDead && !m_isRewinding) {
+        if (m_state == PlayerState::PS_DEAD_GROUND) {
+            m_vx = 0.0f; m_vy = 0.0f; 
+            return; 
+        }
+        // If we just died (Fly Begin/Loop), proceed to physics but skip input processing
+    }
 
     DWORD ct = GetTickCount();
     if (m_isRewinding) {
@@ -117,24 +125,14 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     float ts = m_isSlowMo ? 0.3f : 1.0f;
 
     if (isDead && !m_isRewinding) {
-        m_bloodDistance += (float)sqrt(m_vx * m_vx + m_vy * m_vy) * ts;
-        if (m_bloodDistance >= 15.0f) {
-            m_bloodDistance -= 15.0f;
-            float length = (float)sqrt(m_vx * m_vx + m_vy * m_vy);
-            if (length > 0) {
-                float nvx = m_vx / length; float nvy = m_vy / length;
-                float perpX1 = -nvy; float perpY1 = nvx;
-                float perpX2 = nvy; float perpY2 = -nvx;
-                float angle1 = atan2(perpY1, perpX1); float angle2 = atan2(perpY2, perpX2);
-                float speed1 = 2.0f + (rand() % 30) / 10.0f; float speed2 = 2.0f + (rand() % 30) / 10.0f;
-                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), perpY1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), angle1, ct);
-                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), perpY2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), angle2, ct);
-                
-                // Add persistent map blood only if on visible background
-                if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) {
-                    bool isMovingFast = (sqrt(m_vx * m_vx + m_vy * m_vy) > 2.0f);
-                    EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, atan2(m_vy, m_vx), isMovingFast);
-                }
+        float speedSq = m_vx * m_vx + m_vy * m_vy;
+        float speed = (float)sqrt(speedSq);
+        m_bloodDistance += speed * ts;
+        
+        if (m_bloodDistance >= 120.0f && speed > 2.0f) { 
+            m_bloodDistance -= 120.0f;
+            if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) {
+                EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 0, rand() % 9);
             }
         }
         m_vx *= 0.98f; 
@@ -154,7 +152,8 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     }
     bool curL = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0; static bool prL = false;
     float wx = (mouseX - ox) / rs, wy = (mouseY - oy) / rs; if (!fv) { wx += camX; wy += camY; }
-    if (curL && !prL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_PREVDOWN && m_state != PlayerState::PS_DOWN && m_state != PlayerState::PS_DOOR_KICK && m_state != PlayerState::PS_DOOR_KICK_FULL) {
+    // Prevent starting an attack if dead
+    if (!isDead && curL && !prL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_PREVDOWN && m_state != PlayerState::PS_DOWN && m_state != PlayerState::PS_DOOR_KICK && m_state != PlayerState::PS_DOOR_KICK_FULL) {
         if (ct - m_lastAttackTime >= (DWORD)g_playerAttackCooldown) {
             m_state = PlayerState::PS_ATTACK; m_currentFrame = 0; m_lastAttackTime = ct; m_isAttackClicked = true; if (!air) m_hasLeapedInAir = false;
             float dx = wx - (m_x + m_colW / 2.0f), dy = wy - (m_y + m_colH / 2.0f), dist = sqrt(dx * dx + dy * dy);
@@ -173,9 +172,28 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     } else if (m_state == PlayerState::PS_WALL_GRAB || m_state == PlayerState::PS_WALL_SLIDE) { if (!air) m_state = PlayerState::PS_IDLE; else m_state = PlayerState::PS_FALL; }
     float tvx = 0.0f;
     if (m_state == PlayerState::PS_ATTACK) {
-        float dx = m_attackTargetX - m_x, dy = m_attackTargetY - m_y; float dtt = sqrt(dx * dx + dy * dy);
-        if (dtt > cDSp) { if (!CheckMapCollision(m_x + m_dashDirX * cDSp, m_y, m_colW, m_colH)) m_x += m_dashDirX * cDSp; if (!CheckMapCollision(m_x, m_y + m_dashDirY * cDSp, m_colW, m_colH)) m_y += m_dashDirY * cDSp; }
-        else { m_x = m_attackTargetX; m_y = m_attackTargetY; }
+        float dx = m_attackTargetX - m_x, dy = m_attackTargetY - m_y; 
+        float dtt = sqrt(dx * dx + dy * dy);
+        float moveDist = (dtt > cDSp) ? cDSp : dtt;
+        
+        // Sub-stepping for high-speed dash (3 steps)
+        int steps = 3;
+        float stepDist = moveDist / steps;
+        for (int s = 0; s < steps; s++) {
+            float oldSX = m_x, oldSY = m_y;
+            float nx = m_x + m_dashDirX * stepDist;
+            float ny = m_y + m_dashDirY * stepDist;
+
+            if (!CheckMapCollision(nx, ny, m_colW, m_colH)) {
+                m_x = nx; m_y = ny;
+            } else {
+                m_x = nx; m_y = ny;
+                ResolveMapCollision(m_x, m_y, m_colW, m_colH, oldSX, oldSY);
+                break; // Stop dashing if we hit a wall
+            }
+        }
+        
+        if (dtt <= cDSp) { m_x = m_attackTargetX; m_y = m_attackTargetY; }
         m_vy = 0.0f; m_vx = 0.0f;
     } else if (m_state == PlayerState::PS_ROLL) m_vx = m_isFacingRight ? 15.0f * ts : -15.0f * ts;
     else if (m_state == PlayerState::PS_WALL_GRAB || m_state == PlayerState::PS_WALL_SLIDE || m_state == PlayerState::PS_DOOR_KICK || m_state == PlayerState::PS_DOOR_KICK_FULL) m_vx = 0.0f;
@@ -188,10 +206,28 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         if (fabs(m_vx) < 0.1f) m_vx = 0.0f; 
     }
     if (m_vx != 0.0f && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE) {
+        float oldPX = m_x;
         float nx = m_x + m_vx;
         if (!CheckMapCollision(nx, m_y, m_colW, m_colH - 5)) { m_x = nx; }
-        else { bool stepped = false; for (int i = 1; i <= 16; i++) { if (!CheckMapCollision(m_x, m_y - i, m_colW, m_colH - 5) && !CheckMapCollision(nx, m_y - i, m_colW, m_colH - 5)) { m_x = nx; m_y -= (float)i; stepped = true; break; } }
-            if (!stepped) { float si = (m_vx > 0) ? 1.0f : -1.0f; int f = 0; while (!CheckMapCollision(m_x + si, m_y, m_colW, m_colH - 5) && f++ < (int)fabs(m_vx) + 2) { m_x += si; } if (m_state != PlayerState::PS_WALL_FLIP) m_vx = 0.0f; }
+        else { 
+            bool stepped = false; 
+            for (int i = 1; i <= 16; i++) { 
+                if (!CheckMapCollision(m_x, m_y - i, m_colW, m_colH - 5) && !CheckMapCollision(nx, m_y - i, m_colW, m_colH - 5)) { 
+                    m_x = nx; m_y -= (float)i; stepped = true; break; 
+                } 
+            }
+            if (!stepped) { 
+                float si = (m_vx > 0) ? 1.0f : -1.0f; 
+                int f = 0; 
+                while (!CheckMapCollision(m_x + si, m_y, m_colW, m_colH - 5) && f++ < (int)fabs(m_vx) + 2) { 
+                    m_x += si; 
+                } 
+                if (m_state != PlayerState::PS_WALL_FLIP) m_vx = 0.0f; 
+            }
+        }
+        // Final sanity check to prevent wall sticking
+        if (CheckMapCollision(m_x, m_y, m_colW, m_colH - 5)) {
+            ResolveMapCollision(m_x, m_y, m_colW, m_colH - 5, oldPX, m_y);
         }
     }
     if (isS && !air && m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE && m_state != PlayerState::PS_WALL_FLIP) {
@@ -268,7 +304,7 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     if (m_state == PlayerState::PS_ROLL && !air && !m_isSlowMo) { if (m_currentFrame != m_lastRollFrame) { int cnts[] = { 1, 1, 2, 2, 3, 4 }; int safeFrameForCnt = (m_currentFrame < 5) ? m_currentFrame : 5; int c = cnts[safeFrameForCnt]; for (int i = 0; i < c; i++) EffectManager::AddDustCloudVFX(m_x + (m_isFacingRight ? 0 : m_colW) + (float)(rand() % 21 - 10), m_y + m_colH + (float)(rand() % 11 - 5) + 2.0f, m_isFacingRight, ct); m_lastRollFrame = m_currentFrame; } } else m_lastRollFrame = -1;
     if (m_state == PlayerState::PS_WALL_SLIDE && m_vy > 0.0f && !m_isSlowMo) { static DWORD lwdt = 0; if (ct - lwdt >= 150) { for (int i = 0; i < 2; i++) EffectManager::AddDustCloudVFX(m_x + (m_wallDir == 1 ? m_colW : 0) + (float)(rand() % 11 - 5), m_y + m_colH + (float)(rand() % 11 - 5), m_wallDir == -1, ct); lwdt = ct; } }
     bool leap = false; if (m_state == PlayerState::PS_ATTACK) { float dx = m_attackTargetX - m_x, dy = m_attackTargetY - m_y; if (sqrt(dx * dx + dy * dy) > 1.0f) { if (!m_hasLeapedInAir && m_isAttackClicked && m_currentFrame == 0) { leap = true; m_hasLeapedInAir = true; } } if (m_currentFrame >= 1) m_isAttackClicked = false; }
-    if (leap || m_state == PlayerState::PS_ROLL || m_state == PlayerState::PS_WALL_FLIP || m_state == PlayerState::PS_ATTACK || m_isSlowMo) { 
+    if (!IsDead() && (leap || m_state == PlayerState::PS_ROLL || m_state == PlayerState::PS_WALL_FLIP || m_state == PlayerState::PS_ATTACK || m_isSlowMo)) { 
         DWORD iv = m_isSlowMo ? (DWORD)30 : (DWORD)1; 
         if (ct - m_lastAfterImageTime >= iv) { 
             for (int i = (int)m_afterImages.size() - 1; i > 0; i--) m_afterImages[i] = m_afterImages[i - 1]; 
@@ -279,7 +315,10 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
             m_lastAfterImageTime = ct; 
         } 
     }
-    else { if (ct - m_lastAfterImageTime >= (DWORD)1) { for (int i = (int)m_afterImages.size() - 1; i > 0; i--) m_afterImages[i] = m_afterImages[i - 1]; m_afterImages[0].active = false; m_lastAfterImageTime = ct; } }
+    else { 
+        if (IsDead()) ClearAfterImages();
+        if (ct - m_lastAfterImageTime >= (DWORD)1) { for (int i = (int)m_afterImages.size() - 1; i > 0; i--) m_afterImages[i] = m_afterImages[i - 1]; m_afterImages[0].active = false; m_lastAfterImageTime = ct; } 
+    }
 }
 
 void Player::UpdateAnimation() {
@@ -334,7 +373,7 @@ void Player::Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, fl
     std::map<CImage*, Gdiplus::Bitmap*> bmpCache;
 
     for (int i = (int)m_afterImages.size() - 1; i >= -1; i--) {
-        CImage* img = NULL; float px, py; PlayerState s; int f; bool fac; float a;
+        CImage* img = NULL; float px, py; PlayerState s; int f; bool fac; float a;  
         if (i >= 0) { 
             if (!m_afterImages[i].active) continue; 
             px = m_afterImages[i].x; py = m_afterImages[i].y; s = m_afterImages[i].state; f = m_afterImages[i].frame; fac = m_afterImages[i].isFacingRight; a = m_afterImages[i].attackAngle; 
@@ -516,7 +555,7 @@ void Player::SetState(PlayerState state) {
         m_currentFrame = 0; 
         if (state == PlayerState::PS_DEAD) {
             m_state = PlayerState::PS_DEAD_FLY_BEGIN;
-            // Removed default vx/vy setting to let OnTakeDamage handle it
+            ClearAfterImages();
         }
     } 
 }
@@ -542,6 +581,29 @@ void Player::OnTakeDamage(float damage, float kvx, float kvy) {
             m_vx = kvx;
             m_vy = kvy;
         }
+
+        // 1. 타격 파티클 (넉백 방향 기반, 위/아래 2줄 분사)
+        float length = (float)sqrt(m_vx * m_vx + m_vy * m_vy);
+        if (length > 0) {
+            float nvx = m_vx / length, nvy = m_vy / length;
+            float perpX = -nvy, perpY = nvx; // 수직 벡터
+            DWORD ct = GetTickCount();
+            for (int i = 0; i < 12; i++) {
+                float speed = 3.0f + (rand() % 40) / 10.0f;
+                // 위쪽 줄
+                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 
+                    m_vx * 0.5f + perpX * speed, m_vy * 0.5f + perpY * speed, atan2(nvy, nvx), ct);
+                // 아래쪽 줄
+                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 
+                    m_vx * 0.5f - perpX * speed, m_vy * 0.5f - perpY * speed, atan2(nvy, nvx), ct);
+            }
+        }
+
+        // 2. 배경 혈흔 (0 또는 1만 사용, 크기 키움)
+        if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) {
+            EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 0, rand() % 9);
+        }
+        
         m_bloodDistance = 0.0f;
     }
 }

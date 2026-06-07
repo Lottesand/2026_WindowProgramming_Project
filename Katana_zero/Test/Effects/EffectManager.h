@@ -23,6 +23,7 @@ struct HitVFX {
     int maxFrame;
     DWORD lastTime;
     bool isSlash;
+    bool isGunSpark;
 };
 
 struct JumpCloudVFX {
@@ -55,6 +56,8 @@ struct BloodSplatterVFX {
     float angle;
     int imgIndex;
     DWORD startTime;
+    bool isBleed;
+    bool isDirectional;
 };
 
 struct PendingHit {
@@ -79,15 +82,19 @@ public:
     static void Update(float timeScale, DWORD currentTime);
     static void Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMapView, float cFS, float cFX, float cFY);
     static void RenderMapBlood(HDC hDC, class Gdiplus::Graphics* g, float camX, float camY, float mapScale);
+    
+    // Call this when the stage changes to resize/clear the blood layer
+    static void InitBloodLayer(int mapWidth, int mapHeight);
 
     static void AddNeonTrail(float x, float y, float ux, float uy, float angle);
     static void AddHitVFX(float x, float y, float angle, DWORD currentTime);
+    static void AddGunSparkVFX(float x, float y, float angle, DWORD currentTime);
     static void AddJumpCloudVFX(float x, float y, DWORD currentTime, float angle = 0.0f);
     static void AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime);
     static void AddLandCloudVFX(float x, float y, DWORD currentTime);
     static void AddPendingHit(class Enemy* target, float kvx, float kvy);
     static void AddBloodSplatter(float x, float y, float vx, float vy, float angle, DWORD currentTime);
-    static void AddMapBlood(float x, float y, float angle, bool isDirectional = true);
+    static void AddMapBlood(float x, float y, float angle, int imgIndex);
 
     static bool HasActiveVFX();
     static bool HasActiveHitVFX();
@@ -100,14 +107,23 @@ private:
     static std::vector<LandCloudVFX> m_landCloudVFXs;
     static std::vector<PendingHit> m_pendingHits;
     static std::vector<BloodSplatterVFX> m_bloodSplatters;
-    static std::vector<MapBlood> m_mapBloods;
+    
+    // Blood layer variables
+    static HDC m_hBloodLayerDC;
+    static HBITMAP m_hBloodLayerBmp;
+    static HBITMAP m_hBloodLayerOldBmp;
+    static void* m_pBloodLayerBits;
+    static int m_bloodLayerWidth;
+    static int m_bloodLayerHeight;
 
     static CImage m_imgVfxSlash[5];
     static CImage m_imgVfxHit[6];
+    static CImage m_imgVfxGunSpark[8];
     static CImage m_imgVfxJumpCloud[4];
     static CImage m_imgVfxDustCloud[7];
     static CImage m_imgVfxLandCloud[7];
     static CImage m_imgVfxBloodSplatter[7];
+    static CImage m_imgVfxBloodBleed[9];
     static CImage m_imgVfxMapBloodDir[48];
     static CImage m_imgVfxMapBloodStatic[7];
 

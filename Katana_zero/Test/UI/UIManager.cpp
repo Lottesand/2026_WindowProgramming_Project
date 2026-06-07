@@ -16,8 +16,20 @@ CImage UIManager::m_imgLeftClick;
 CImage UIManager::m_imgRightClick;
 CImage UIManager::m_imgDeathBox;
 CImage UIManager::m_imgTimeoutBox;
+CImage UIManager::m_imgGoText;
+CImage UIManager::m_imgGoArrow;
+GoUIConfig UIManager::m_goConfigs[5];
+int UIManager::m_goAnimFrame = 0;
+DWORD UIManager::m_lastGoAnimTime = 0;
 
 void UIManager::Init() {
+    // Default GO UI configurations for 4 stages
+    SetGoConfig(1, 1100, 150, 40);
+    SetGoConfig(2, 1100, 200, 40);
+    SetGoConfig(3, 1100, 250, 40);
+    SetGoConfig(4, 1100, 300, 40);
+    m_goAnimFrame = 0;
+    m_lastGoAnimTime = GetTickCount();
 }
 
 void UIManager::LoadAssets() {
@@ -35,6 +47,8 @@ void UIManager::LoadAssets() {
     m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
     m_imgDeathBox.Load(TEXT("assets/deathbox.png"));
     m_imgTimeoutBox.Load(TEXT("assets/timeoutbox.png"));
+    m_imgGoText.Load(TEXT("assets/spr_go_text.png"));
+    m_imgGoArrow.Load(TEXT("assets/spr_go_arrow.png"));
 }
 
 void UIManager::ReleaseAssets() {
@@ -53,19 +67,26 @@ void UIManager::ReleaseAssets() {
     m_imgRightClick.Destroy();
     m_imgDeathBox.Destroy();
     m_imgTimeoutBox.Destroy();
+    m_imgGoText.Destroy();
+    m_imgGoArrow.Destroy();
 }
-void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage) {
+
+void UIManager::SetGoConfig(int stage, int x, int y, int arrowOffset) {
+    if (stage >= 1 && stage <= 4) {
+        m_goConfigs[stage] = { x, y, arrowOffset };
+    }
+}
+
+void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, bool isStageCleared, int currentStage) {
     if (!hDC) return;
 
     if (isDead && showDeathMessage) {
         CImage* boxImg = isTimeout ? &m_imgTimeoutBox : &m_imgDeathBox;
         if (boxImg && !boxImg->IsNull()) {
-            // ??諛뺤뒪???먮낯 ?ш린媛 ?ㅻ? ???덉쑝誘濡? 湲곗? ?ш린(deathbox)瑜??뺥븯嫄곕굹 怨좎젙 ?ш린瑜??ъ슜?⑸땲??
-            // ?ш린?쒕뒗 deathbox???먮낯 ?ш린瑜?湲곗??쇰줈 0.65諛??ㅼ??쇱쓣 ?곸슜?⑸땲??
-            int baseW = m_imgDeathBox.GetWidth();
-            int baseH = m_imgDeathBox.GetHeight();
+            int baseW = boxImg->GetWidth();
+            int baseH = boxImg->GetHeight();
             float scale = 0.65f; 
-            float widthScale = isTimeout ? scale * 1.15f : scale; // ??꾩븘??諛뺤뒪留?媛濡쒕줈 15% ???섎┝
+            float widthScale = isTimeout ? scale * 1.15f : scale; 
             int targetW = (int)(baseW * widthScale);
             int targetH = (int)(baseH * scale);
             int startX = (virtualWidth - targetW) / 2;
@@ -81,7 +102,7 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
             Gdiplus::PathGradientBrush pgb(&path);
             pgb.SetCenterColor(Gdiplus::Color(230, 0, 0, 0));
             pgb.SetCenterPoint(Gdiplus::PointF(virtualWidth / 2.0f, virtualHeight / 2.0f));
-            
+
             Gdiplus::Color colors[] = { Gdiplus::Color(0, 0, 0, 0) }; 
             int count = 1;
             pgb.SetSurroundColors(colors, &count);
@@ -101,6 +122,29 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
             } else {
                 boxImg->Draw(hDC, startX, startY, targetW, targetH);
             }
+        }
+    }
+
+    // GO UI Rendering
+    if (isStageCleared && !isDead) {
+        DWORD ct = GetTickCount();
+        if (ct - m_lastGoAnimTime > 150) { // 150ms per frame
+            m_goAnimFrame = (m_goAnimFrame + 1) % 4;
+            m_lastGoAnimTime = ct;
+        }
+
+        int stageIdx = (currentStage >= 1 && currentStage <= 4) ? currentStage : 1;
+        const auto& config = m_goConfigs[stageIdx];
+
+        int animOffset = m_goAnimFrame * 3; // 0, 3, 6, 9 px right
+        int gx = config.x + animOffset;
+        int gy = config.y;
+
+        if (!m_imgGoText.IsNull()) {
+            m_imgGoText.Draw(hDC, gx, gy, m_imgGoText.GetWidth() * 2, m_imgGoText.GetHeight() * 2);
+        }
+        if (!m_imgGoArrow.IsNull()) {
+            m_imgGoArrow.Draw(hDC, gx, gy + config.arrowOffset, m_imgGoArrow.GetWidth() * 2, m_imgGoArrow.GetHeight() * 2);
         }
     }
 

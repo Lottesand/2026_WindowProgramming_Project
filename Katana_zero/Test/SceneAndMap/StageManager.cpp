@@ -1,14 +1,16 @@
-﻿#include "StageManager.h"
+#include "StageManager.h"
 #include "../Effects/EffectManager.h"
 #include <algorithm>
 #include <atomic>
 
 std::map<int, CImage> StageManager::m_mapImages;
 std::map<int, CImage> StageManager::m_colMapImages;
+std::map<int, CImage> StageManager::m_objMapImages;
 std::map<int, StageManager::StageData> StageManager::m_stageDataMap;
 
 CImage* StageManager::m_imgMap = nullptr;
 CImage* StageManager::m_imgColMap = nullptr;
+CImage* StageManager::m_imgObjMap = nullptr;
 
 CImage StageManager::m_imgSkylineBlack;
 CImage StageManager::m_imgSkylineClouds;
@@ -18,121 +20,121 @@ std::vector<RECT> StageManager::m_clearZones;
 float StageManager::m_stageLimitTime = 60.0f;
 
 void StageManager::Init() {
+    EffectManager::Init();
 }
 
 void StageManager::ProcessStage(int stage) {
     StageData& data = m_stageDataMap[stage];
     CImage& colMap = m_colMapImages[stage];
+    CImage& objMap = m_objMapImages[stage];
 
     data.doors.clear();
     data.clearZones.clear();
+    data.enemySpawns.clear();
     data.playerStart = { 100, 100 };
     data.stageLimitTime = (stage == 1) ? 30.0f : 60.0f;
 
+    auto IsColorMatch = [](BYTE r, BYTE g, BYTE b, int tr, int tg, int tb) {
+        return abs((int)r - tr) < 40 && abs((int)g - tg) < 40 && abs((int)b - tb) < 40;
+    };
+
+    // --- 1. Process colMap for Player Start and Clear Zones ---
     if (!colMap.IsNull() && colMap.IsDIBSection()) {
         int w = colMap.GetWidth();
         int h = colMap.GetHeight();
         int pitch = colMap.GetPitch();
         int bpp = colMap.GetBPP() / 8;
         BYTE* pBits = (BYTE*)colMap.GetBits();
-
         std::vector<bool> visited(w * h, false);
 
         for (int y = 0; y < h; y++) {
             BYTE* pRow = pBits + (y * pitch);
             for (int x = 0; x < w; x++) {
                 if (visited[y * w + x]) continue;
-
                 BYTE* pPixel = pRow + (x * bpp);
-                BYTE b = pPixel[0];
-                BYTE g = pPixel[1];
-                BYTE r = pPixel[2];
+                BYTE b = pPixel[0], g = pPixel[1], r = pPixel[2];
 
-                if (r == 255 && g == 0 && b == 255) {
-                    int rectW = 0, rectH = 0;
-                    while (x + rectW < w) {
-                        BYTE* pNext = pRow + ((x + rectW) * bpp);
-                        if (pNext[2] == 255 && pNext[1] == 0 && pNext[0] == 255) rectW++;
-                        else break;
-                    }
-                    while (y + rectH < h) {
-                        BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
-                        if (pNextRow[2] == 255 && pNextRow[1] == 0 && pNextRow[0] == 255) rectH++;
-                        else break;
-                    }
-
-                    if (rectW > 0 && rectH > 0) {
-                        data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
-                        for (int ry = y; ry < y + rectH; ry++) {
-                            for (int rx = x; rx < x + rectW; rx++) {
-                                visited[ry * w + rx] = true;
-                            }
-                        }
-                    }
-                }
-                else if (r == 255 && g == 255 && b == 255) {
+                if (IsColorMatch(r, g, b, 255, 255, 255)) {
                     data.playerStart = { x, y };
                     visited[y * w + x] = true;
                 }
-                else if (r == 0 && g == 255 && b == 255) {
+                else if (IsColorMatch(r, g, b, 0, 255, 255)) {
                     int rectW = 0, rectH = 0;
                     while (x + rectW < w) {
-                        BYTE* pNext = pRow + ((x + rectW) * bpp);
-                        if (pNext[2] == 0 && pNext[1] == 255 && pNext[0] == 255) rectW++;
-                        else break;
+                        BYTE* pN = pRow + ((x + rectW) * bpp);
+                        if (IsColorMatch(pN[2], pN[1], pN[0], 0, 255, 255)) rectW++; else break;
                     }
                     while (y + rectH < h) {
-                        BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
-                        if (pNextRow[2] == 0 && pNextRow[1] == 255 && pNextRow[0] == 255) rectH++;
-                        else break;
+                        BYTE* pNRow = pBits + ((y + rectH) * pitch) + (x * bpp);
+                        if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 0, 255, 255)) rectH++; else break;
                     }
-
                     if (rectW > 0 && rectH > 0) {
                         data.clearZones.push_back({ x, y, x + rectW, y + rectH });
-                        for (int ry = y; ry < y + rectH; ry++) {
-                            for (int rx = x; rx < x + rectW; rx++) {
-                                visited[ry * w + rx] = true;
+                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- 2. Process objMap for Entities (Enemies, Doors) ---
+    if (!objMap.IsNull() && objMap.IsDIBSection()) {
+        int w = objMap.GetWidth();
+        int h = objMap.GetHeight();
+        int pitch = objMap.GetPitch();
+        int bpp = objMap.GetBPP() / 8;
+        BYTE* pBits = (BYTE*)objMap.GetBits();
+        std::vector<bool> visited(w * h, false);
+
+        for (int y = 0; y < h; y++) {
+            BYTE* pRow = pBits + (y * pitch);
+            for (int x = 0; x < w; x++) {
+                if (visited[y * w + x]) continue;
+                BYTE* pPixel = pRow + (x * bpp);
+                BYTE b = pPixel[0], g = pPixel[1], r = pPixel[2];
+
+                // Check for Enemy Category (Yellow or White-to-handle-Pomp-marker)
+                bool isEnemyCategory = IsColorMatch(r, g, b, 255, 255, 0) || IsColorMatch(r, g, b, 255, 255, 255);
+                if (isEnemyCategory) {
+                    if (y + 1 < h) {
+                        BYTE* pSubRow = pBits + ((y + 1) * pitch) + (x * bpp);
+                        BYTE sb = pSubRow[0], sg = pSubRow[1], sr = pSubRow[2];
+                        int enemyType = -1;
+                        if (IsColorMatch(sr, sg, sb, 255, 0, 0)) enemyType = 1;      // 빨강: Grunt
+                        else if (IsColorMatch(sr, sg, sb, 0, 255, 0)) enemyType = 0; // 초록: Gangster
+                        else if (IsColorMatch(sr, sg, sb, 0, 0, 255)) enemyType = 2; // 파랑: Pomp
+
+                        if (enemyType != -1) {
+                            int rectW = 0, rectH = 1;
+                            while (x + rectW < w) {
+                                BYTE* pN = pRow + ((x + rectW) * bpp);
+                                if (IsColorMatch(pN[2], pN[1], pN[0], r, g, b)) rectW++; else break;
                             }
+                            while (y + rectH < h) {
+                                BYTE* pNRow = pBits + ((y + rectH) * pitch) + (x * bpp);
+                                if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], sr, sg, sb)) rectH++; else break;
+                            }
+                            data.enemySpawns.push_back({ (float)x, (float)y, (float)rectW, enemyType });
+                            for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
                         }
                     }
                 }
-                else if ((r >= 240 && g >= 240 && b <= 50) || // ?몃옉 (Grunt)
-                         (r >= 240 && g >= 140 && g <= 170 && b <= 50) || // 二쇳솴 (Gangster)
-                         (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) || // 蹂대씪 (Pomp)
-                         (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160)) // ?뚯깋 (ShieldCop)
-                {
-                    int enemyType = 1; // 湲곕낯媛?Grunt
-                    if (r >= 240 && g >= 240 && b <= 50) enemyType = 1;      // ?몃옉: Grunt
-                    else if (r >= 240 && g >= 140 && g <= 170 && b <= 50) enemyType = 0; // 二쇳솴: Gangster
-                    else if (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) enemyType = 2; // 蹂대씪: Pomp
-                    else if (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160) enemyType = 3; // ?뚯깋: ShieldCop
-
-                    int rectW = 0, rectH = 0;
-                    BYTE targetR = r, targetG = g, targetB = b;
-
-                    // 媛濡?湲몄씠 痢≪젙 (?숈씪 ?됱긽 踰붿쐞 痢≪젙)
+                else if (IsColorMatch(r, g, b, 255, 0, 255)) { // Pink: Object
+                    int rectW = 0, rectH = 1;
                     while (x + rectW < w) {
                         BYTE* pN = pRow + ((x + rectW) * bpp);
-                        if (abs((int)pN[2] - (int)targetR) < 20 && abs((int)pN[1] - (int)targetG) < 20 && abs((int)pN[0] - (int)targetB) < 20) rectW++;
-                        else break;
+                        if (IsColorMatch(pN[2], pN[1], pN[0], 255, 0, 255)) rectW++; else break;
                     }
-                    // ?몃줈 湲몄씠 痢≪젙
-                    while (y + rectH < h) {
-                        BYTE* pN = pBits + ((y + rectH) * pitch) + (x * bpp);
-                        if (abs((int)pN[2] - (int)targetR) < 20 && abs((int)pN[1] - (int)targetG) < 20 && abs((int)pN[0] - (int)targetB) < 20) rectH++;
-                        else break;
-                    }
-
-                    if (rectW > 0 && rectH > 0) {
-                        // ?곸쓽 ?뚰솚 ?꾩튂瑜?諛뺤뒪??以묒븰 ?섎떒?쇰줈 ?ㅼ젙 (??吏곴???
-                        float spawnX = (float)x + (float)rectW / 2.0f - 20.0f; // 20.0f?????덈컲 ?덈퉬
-                        float spawnY = (float)y + (float)rectH - 60.0f;       // 60.0f?????믪씠
-                        data.enemySpawns.push_back({ spawnX, spawnY, (float)rectW, enemyType });
-                        
-                        for (int ry = y; ry < y + rectH; ry++) {
-                            for (int rx = x; rx < x + rectW; rx++) {
-                                visited[ry * w + rx] = true;
+                    if (y + 1 < h) {
+                        BYTE* pSubRow = pBits + ((y + 1) * pitch) + (x * bpp);
+                        BYTE sr2 = pSubRow[2], sg2 = pSubRow[1], sb2 = pSubRow[0];
+                        if (IsColorMatch(sr2, sg2, sb2, 255, 0, 0)) { // Door
+                            while (y + rectH < h) {
+                                BYTE* pNRow = pBits + ((y + rectH) * pitch) + (x * bpp);
+                                if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 255, 0, 0)) rectH++; else break;
                             }
+                            data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                            for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
                         }
                     }
                 }
@@ -158,19 +160,21 @@ void StageManager::Reset() {
 
 void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
     for (int i = 1; i <= 2; ++i) {
-        TCHAR mapPath[256], colPath[256];
+        TCHAR mapPath[256], colPath[256], objPath[256];
         wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), i, i);
         wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), i, i);
+        wsprintf(objPath, TEXT("assets/stage%d/objmap_stage%d.png"), i, i);
 
         m_mapImages[i].Load(mapPath);
         m_colMapImages[i].Load(colPath);
+        m_objMapImages[i].Load(objPath);
         
         ProcessStage(i);
 
         if (i == 2) {
             StageData& data = m_stageDataMap[2];
             data.camFixedY = 0.0f; 
-            data.mapScale = 1.0f; 
+            data.mapScale = 1.1f; 
             data.mapRenderOffsetY = 0.0f;
         }
 
@@ -200,7 +204,12 @@ void StageManager::LoadAssets(int stage) {
     if (m_mapImages.count(stage)) {
         m_imgMap = &m_mapImages[stage];
         m_imgColMap = &m_colMapImages[stage];
+        m_imgObjMap = &m_objMapImages[stage];
         
+        if (m_imgMap && !m_imgMap->IsNull()) {
+            EffectManager::InitBloodLayer(m_imgMap->GetWidth(), m_imgMap->GetHeight());
+        }
+
         StageData& data = m_stageDataMap[stage];
         m_pCurrentDoors = &data.doors;
         m_playerStart = data.playerStart;
@@ -212,8 +221,10 @@ void StageManager::LoadAssets(int stage) {
 void StageManager::ReleaseAssets() {
     for (auto& pair : m_mapImages) pair.second.Destroy();
     for (auto& pair : m_colMapImages) pair.second.Destroy();
+    for (auto& pair : m_objMapImages) pair.second.Destroy();
     m_mapImages.clear();
     m_colMapImages.clear();
+    m_objMapImages.clear();
     m_stageDataMap.clear();
     
     m_imgSkylineBlack.Destroy();
@@ -238,14 +249,10 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
     if (!hDC) return;
 
     if (isSlowMo) {
-        // ?щ줈??紐⑤뱶 ??諛곌꼍??寃??됱쑝濡?梨꾩?
         HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
         RECT rect = { 0, 0, virtualWidth, virtualHeight };
         FillRect(hDC, &rect, hBlack);
         DeleteObject(hBlack);
-        
-        // 臾?Door)???뚮뜑留?(?꾩슂?섎떎硫??ш린??臾몃룄 寃寃?泥섎━?????덉?留? ?쇰떒 ?뚮뜑留곷쭔 嫄대꼫?곌굅??湲곕낯 ?뚮뜑留??좎?)
-        // ?곷뱾泥섎읆 ?ㅼ삩 ?④낵瑜?二쇱? ?딆쑝誘濡??쇰떒 諛곌꼍怨??④퍡 寃寃?泥섎━?섍린 ?꾪빐 ?뚮뜑留??앸왂
         return; 
     }
 
@@ -310,7 +317,6 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
         }
     }
 
-    // Render persistent blood splatters on top of the map background
     if (!isFullMapView) {
         EffectManager::RenderMapBlood(hDC, g, camX, camY, renderMapScale);
     }

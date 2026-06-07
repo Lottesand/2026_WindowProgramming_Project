@@ -24,7 +24,7 @@ public:
         // Stage-specific camera settings
         float camLookAheadX = 150.0f;
         float camFixedY = 60.0f;
-        float mapScale = 1.0f;
+        float mapScale = 1.1f;
         float camLerpSpeedX = 0.08f;
         float camLerpSpeedY = 0.08f;
         float mapRenderOffsetY = 0.0f;
@@ -44,6 +44,7 @@ public:
     
     static CImage& GetMap() { return *m_imgMap; }
     static CImage& GetColMap() { return *m_imgColMap; }
+    static CImage& GetObjMap() { return *m_imgObjMap; }
 
     static float GetPlayerStartX() { return (float)m_playerStart.x; }
     static float GetPlayerStartY() { return (float)m_playerStart.y; }
@@ -51,16 +52,19 @@ public:
 
     static float GetStageLimitTime() { return m_stageLimitTime; }
     static StageData& GetStageData(int stage) { return m_stageDataMap[stage]; }
+    static std::vector<Door>* GetCurrentDoors() { return m_pCurrentDoors; }
 
 private:
     static void ProcessStage(int stage);
 
     static std::map<int, CImage> m_mapImages;
     static std::map<int, CImage> m_colMapImages;
+    static std::map<int, CImage> m_objMapImages;
     static std::map<int, StageData> m_stageDataMap;
 
     static CImage* m_imgMap;
     static CImage* m_imgColMap;
+    static CImage* m_imgObjMap;
 
     static CImage m_imgSkylineBlack;
     static CImage m_imgSkylineClouds;

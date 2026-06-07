@@ -17,6 +17,7 @@ protected:
     float m_x, m_y, m_startX, m_startY, m_vx, m_vy, m_colW, m_colH;
     bool m_isAlive, m_isFacingLeft, m_isImmortal, m_isWaiting;
     float m_bloodDistance;
+    DWORD m_lastBleedTime;
     EnemyType m_Type; EnemyState m_State;
     int m_CurrentFrame; DWORD m_LastTime, m_patternTimer;
     float m_friction, m_knockbackVx, m_walkDistance, m_patrolRange;

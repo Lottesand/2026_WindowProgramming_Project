@@ -30,14 +30,16 @@ void Camera::Update(float playerX, float playerY, float playerColW, float player
     if (isFullMapView) return;
 
     if (m_rewindTimer > 0) {
-        m_rewindTimer -= 0.03f; // ?덉쟾 踰꾩쟾??怨좎젙 ?섏튂 蹂듦뎄
+        m_rewindTimer -= 0.03f;
         if (m_rewindTimer < 0) m_rewindTimer = 0;
         
-        // ?덉쟾 踰꾩쟾??由ъ??몃뱶 ?④낵 蹂듦뎄
+        // 시각 효과 적용 (타이머가 활성화된 동안에만)
         m_curShakeX = (float)sin(m_rewindTimer * 40.0f) * 15.0f;
         m_curShakeY = (float)cos(m_rewindTimer * 30.0f) * 15.0f;
         m_rewindYOffset += 60.0f;
     } else {
+        m_curShakeX = 0;
+        m_curShakeY = 0;
         m_rewindYOffset = 0.0f;
     }
 
@@ -71,18 +73,29 @@ void Camera::Update(float playerX, float playerY, float playerColW, float player
     m_shakeTrauma *= m_shakeDecay;
     if (m_shakeTrauma < 0.01f) m_shakeTrauma = 0;
 
-    if (m_camX < 0) m_camX = 0;
-    if (m_camY < 0) m_camY = 0;
+    const float shakeMargin = 40.0f; // 상하좌우 모든 방향으로 여백 확보
 
     if (mapWidth > 0 && mapHeight > 0) {
         float vW = VIRTUAL_WIDTH / renderMapScale;
         float vH = VIRTUAL_HEIGHT / renderMapScale;
-        float maxCX = (float)mapWidth - vW;
-        if (m_camX > maxCX) m_camX = maxCX;
-        float maxCY = (float)mapHeight - vH;
-        if (m_camY > maxCY) m_camY = maxCY;
-        if (m_camX < 0) m_camX = 0;
-        if (m_camY < 0) m_camY = 0;
+        
+        // 가로 제한 계산 (여백 포함)
+        float minCX = shakeMargin;
+        float maxCX = (float)mapWidth - vW - shakeMargin;
+        if (maxCX < minCX) m_camX = (float)mapWidth / 2.0f - vW / 2.0f;
+        else {
+            if (m_camX < minCX) m_camX = minCX;
+            if (m_camX > maxCX) m_camX = maxCX;
+        }
+
+        // 세로 제한 계산 (여백 포함)
+        float minCY = shakeMargin;
+        float maxCY = (float)mapHeight - vH - shakeMargin;
+        if (maxCY < minCY) m_camY = (float)mapHeight / 2.0f - vH / 2.0f;
+        else {
+            if (m_camY < minCY) m_camY = minCY;
+            if (m_camY > maxCY) m_camY = maxCY;
+        }
     }
 }
 

@@ -40,7 +40,8 @@ public:
     float GetY() const { return m_y; }
     float GetW() const { return m_w; }
     float GetH() const { return m_h; }
-    bool IsClosed() const { return m_state == DoorState::DS_CLOSED; }
+    bool IsClosed() const { return m_state == DoorState::DS_CLOSED || m_state == DoorState::DS_OPENING || m_state == DoorState::DS_BREAKING; }
+    bool IsFullyOpened() const { return m_state == DoorState::DS_OPENED || m_state == DoorState::DS_BROKEN; }
     int GetCurrentFrame() const { return m_currentFrame; }
 
 private:

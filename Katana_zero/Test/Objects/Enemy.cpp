@@ -19,6 +19,7 @@ Enemy::Enemy(float startX, float startY, EnemyType type, float patrolRange) {
     m_patrolRange = patrolRange;
     m_isPlayerDetected = false; m_alertStartTime = 0; m_exclaimFrame = 0;
     m_bloodDistance = 0.0f;
+    m_lastBleedTime = 0;
 }
 Enemy::~Enemy() {}
 
@@ -122,52 +123,117 @@ void Enemy::Reset() {
     m_bloodDistance = 0.0f; m_alertStartTime = 0; m_exclaimFrame = 0;
 }
 
-void Enemy::OnTakeDamage(float kvx, float kvy) { if (!m_isImmortal) { m_isAlive = false; m_State = EnemyState::ES_DEAD; m_vx = kvx; m_vy = kvy; m_CurrentFrame = 0; m_bloodDistance = 0.0f; } }
+void Enemy::OnTakeDamage(float kvx, float kvy) {
+    if (!m_isImmortal) {
+        m_isAlive = false;
+        m_State = EnemyState::ES_DEAD;
+        m_vx = kvx;
+        m_vy = kvy;
+        m_CurrentFrame = 0;
+
+        // 1. 타격 파티클 (넉백 방향 기반, 위/아래 2줄 분사)
+        float length = (float)sqrt(m_vx * m_vx + m_vy * m_vy);
+        if (length > 0) {
+            float nvx = m_vx / length, nvy = m_vy / length;
+            float perpX = -nvy, perpY = nvx; // 수직 벡터
+            DWORD ct = GetTickCount();
+            for (int i = 0; i < 12; i++) {
+                float speed = 3.0f + (rand() % 40) / 10.0f;
+                // 위쪽 줄
+                float pvx1 = m_vx * 0.5f + perpX * speed;
+                float pvy1 = m_vy * 0.5f + perpY * speed;
+                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 
+                    pvx1, pvy1, atan2(pvy1, pvx1), ct);
+                // 아래쪽 줄
+                float pvx2 = m_vx * 0.5f - perpX * speed;
+                float pvy2 = m_vy * 0.5f - perpY * speed;
+                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 
+                    pvx2, pvy2, atan2(pvy2, pvx2), ct);
+            }
+        }
+
+        // 2. 배경 혈흔 (0 또는 1만 사용)
+        if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) {
+            EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 0, rand() % 9);
+        }
+
+        m_bloodDistance = 0.0f;
+    }
+}
 void Enemy::ApplyKnockback(float vx) { m_knockbackVx = vx; m_vx = vx; }
 
 void Enemy::Update(float ts, const Player& player) {
-    if (m_vx != 0.0f) { 
-        float nx = m_x + m_vx * ts; 
-        if (!CheckMapCollision(nx, m_y, m_colW, m_colH)) {
-            if (!m_isAlive) {
-                m_bloodDistance += (float)fabs(m_vx * ts);
-                if (m_bloodDistance >= 15.0f) {
-                    m_bloodDistance -= 15.0f;
-                    float length = (float)sqrt(m_vx * m_vx + m_vy * m_vy);
-                    if (length > 0) {
-                        float nvx = m_vx / length; float nvy = m_vy / length;
-                        float perpX1 = -nvy; float perpY1 = nvx;
-                        float perpX2 = nvy; float perpY2 = -nvx;
-                        float angle1 = atan2(perpY1, perpX1); float angle2 = atan2(perpY2, perpX2);
-                        float speed1 = 2.0f + (rand() % 30) / 10.0f; float speed2 = 2.0f + (rand() % 30) / 10.0f;
-                        EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), perpY1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), angle1, GetTickCount());
-                        EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), perpY2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), angle2, GetTickCount());
-                        
-                        // Add persistent map blood only if on visible background
-                        if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) {
-                            bool isMovingFast = (sqrt(m_vx * m_vx + m_vy * m_vy) > 2.0f);
-                            EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, atan2(m_vy, m_vx), isMovingFast);
-                        }
-                    }
-                }
-            }
-            m_x = nx; 
+    DWORD ct = GetTickCount();
+
+    float oldX = m_x;
+    float oldY = m_y;
+
+    // 1. X축 이동 및 충돌 처리
+    if (m_isAlive && m_vx != 0.0f) {
+        float nx = m_x + m_vx * ts;
+        
+        // 낙사 방지: 이동하려는 방향의 발 밑에 지형이 있는지 확인
+        float checkX = (m_vx > 0) ? (nx + m_colW) : nx;
+        float checkY = m_y + m_colH + 5.0f;
+        if (!CheckCollision((int)checkX, (int)checkY)) {
+            // 발 밑에 땅이 없으면 즉시 정지하고 대기 상태로 전환 (다음 업데이트에서 방향 전환)
+            m_vx = 0.0f;
+            m_isWaiting = true;
+            m_patternTimer = ct;
         } else {
-            if (!m_isAlive) m_vx = -m_vx * 0.5f; // Bounce if dead
-            else m_vx = 0.0f; 
+            if (CheckMapCollision(nx, m_y, m_colW, m_colH) || CheckDoorCollision(nx, m_y, m_colW, m_colH)) {
+                m_vx = 0.0f;
+                ResolveMapCollision(nx, m_y, m_colW, m_colH, oldX, m_y);
+            }
+            m_x = nx;
         }
-        if (!m_isAlive) m_vx *= m_friction; 
+    } else if (!m_isAlive && m_vx != 0.0f) {
+        float nx = m_x + m_vx * ts;
+        if (CheckMapCollision(nx, m_y, m_colW, m_colH) || CheckDoorCollision(nx, m_y, m_colW, m_colH)) {
+            m_vx = -m_vx * 0.5f;
+            ResolveMapCollision(nx, m_y, m_colW, m_colH, oldX, m_y);
+        }
+        m_x = nx;
+        m_vx *= m_friction;
     }
 
+    // 2. Y축(중력) 이동 및 충돌 처리
     float gravity = m_isAlive ? 1.5f : 1.0f;
     m_vy += gravity * ts; if (m_vy > 30.0f) m_vy = 30.0f;
     
-    float nextY = m_y + m_vy * ts; 
-    if (CheckMapCollision(m_x, nextY, m_colW, m_colH)) {
-        if (!m_isAlive && fabs(m_vy) > 2.0f) m_vy = -m_vy * 0.3f; // Bounce
-        else m_vy = 0.0f;
-    } else {
-        m_y = nextY;
+    if (m_vy != 0.0f) {
+        float ny = m_y + m_vy * ts;
+        if (CheckMapCollision(m_x, ny, m_colW, m_colH)) {
+            if (!m_isAlive && fabs(m_vy) > 2.0f) m_vy = -m_vy * 0.3f;
+            else m_vy = 0.0f;
+            ResolveMapCollision(m_x, ny, m_colW, m_colH, m_x, oldY);
+        }
+        m_y = ny;
+    }
+
+    // 3. 거리 기반 혈흔 효과 (사망 상태에서 이동 중일 때)
+    if (!m_isAlive && (m_vx != 0.0f || m_vy != 0.0f)) {
+        float dx = m_x - oldX;
+        float dy = m_y - oldY;
+        float distMoved = (float)sqrt(dx * dx + dy * dy);
+        
+        if (distMoved > 0.1f) {
+            // 파티클 혈흔: 30px마다 생성
+            static float particleAccumulator = 0.0f;
+            particleAccumulator += distMoved;
+            if (particleAccumulator >= 30.0f) {
+                particleAccumulator -= 30.0f;
+                // 이동 반대 방향으로 약간 흩뿌림
+                float angle = atan2(-m_vy, -m_vx);
+                for (int i = 0; i < 3; i++) {
+                    float speed = 2.0f + (rand() % 30) / 10.0f;
+                    float spread = (rand() % 20 - 10) / 10.0f;
+                    float pvx = -m_vx * 0.2f + cos(angle + spread) * speed;
+                    float pvy = -m_vy * 0.2f + sin(angle + spread) * speed;
+                    EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, pvx, pvy, atan2(pvy, pvx), ct);
+                }
+            }
+        }
     }
 
     UpdateDetection(player.GetX(), player.GetY(), player.GetColW(), player.GetColH(), ts);

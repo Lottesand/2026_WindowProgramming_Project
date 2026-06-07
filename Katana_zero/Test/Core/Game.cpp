@@ -76,6 +76,10 @@ void Game::LoadAllAssets() {
     m_loadingProgress = 60;
     Sleep(50);
 
+    UIManager::Init(); // Initialize UIManager configs
+    m_loadingProgress = 65;
+    Sleep(50);
+
     StageManager::LoadAllStages(&m_loadingProgress);
     
     LoadStage(1);
@@ -127,15 +131,9 @@ void Game::SpawnEnemies() {
     m_enemies.clear();
     
     const auto& stageData = StageManager::GetStageData(m_currentStage);
-    int enemyCount = 0;
     for (const auto& info : stageData.enemySpawns) {
         Enemy* ne = nullptr;
         int type = info.type;
-
-        // Force different enemies on Stage 1 for testing
-        if (m_currentStage == 1) {
-            type = enemyCount % 4; // Cycles through 0: Gangster, 1: Grunt, 2: Pomp, 3: ShieldCop
-        }
 
         // 0: Gangster, 1: Grunt, 2: Pomp, 3: ShieldCop
         switch (type) {
@@ -150,7 +148,6 @@ void Game::SpawnEnemies() {
             ne->SetPatrolRange(info.patrolRange);
             m_enemies.push_back(ne);
         }
-        enemyCount++;
     }
 }
 
@@ -210,15 +207,24 @@ void Game::Update() {
         return;
     }
     
-    if (!m_isStageCleared) {
-        bool anyAlive = false;
-        for (auto& e : m_enemies) {
-            if (e && e->GetIsAlive()) {
+    bool anyAlive = false;
+    int activeEnemies = 0;
+    for (auto& e : m_enemies) {
+        if (e) {
+            activeEnemies++;
+            if (e->GetIsAlive()) {
                 anyAlive = true;
                 break;
             }
         }
-        if (!anyAlive) {
+    }
+    
+    if (anyAlive) {
+        m_isStageCleared = false;
+    } else {
+        if (activeEnemies > 0) {
+            m_isStageCleared = true;
+        } else if (StageManager::GetStageData(m_currentStage).enemySpawns.empty()) {
             m_isStageCleared = true;
         }
     }
@@ -320,20 +326,22 @@ void Game::Update() {
             Camera::AddPush(0.0f, 40.0f);
             isDeadShaken = true;
             deadStartTime = ct;
+            m_isTimePaused = false; // Immediately cancel hit-pause on player death
         }
-        if (Input::GetKeyDown(VK_LBUTTON) && (ct - deadStartTime > 500)) {
+        // Only allow rewind after death animation finished and deathbox is shown
+        if (Input::GetKeyDown(VK_LBUTTON) && m_player.IsDeathAnimationFinished() && (ct - deadStartTime > 800)) {
             isDeadShaken = false;
             deadStartTime = 0;
             m_isTimeoutDeath = false;
             m_initialRewindHistorySize = m_player.GetHistorySize();
-            float elapsed = StageManager::GetStageLimitTime() - m_stageTimer;
-            float rewindDur = (std::max)(1.0f, (std::min)(5.0f, elapsed / 6.0f)); // 理쒕? 5珥? 理쒖냼 1珥?            m_rewindSpeed = (rewindDur > 0) ? (int)(m_initialRewindHistorySize / (rewindDur * 60.0f)) : 4;
-            if (m_rewindSpeed < 1) m_rewindSpeed = 1;
+            float historySeconds = (float)m_initialRewindHistorySize / 60.0f;
+            m_rewindSpeed = (int)(4.0f + historySeconds * 2.5f);
+            if (m_rewindSpeed < 4) m_rewindSpeed = 4;
+            if (m_rewindSpeed > 100) m_rewindSpeed = 100;
 
             m_player.StartRewind(m_rewindSpeed); 
             StageManager::Reset(); 
             m_stageTimer = StageManager::GetStageLimitTime(); 
-            Camera::StartRewindEffect(rewindDur); 
             EffectManager::Init(); 
             for (auto& e : m_enemies) if (e) e->Reset(); 
         }
@@ -358,7 +366,7 @@ void Game::Update() {
         m_player.StartRewind(m_rewindSpeed);
         StageManager::Reset();
         m_stageTimer = StageManager::GetStageLimitTime();
-        Camera::StartRewindEffect(rewindDur);
+        // Removed immediate Camera::StartRewindEffect to delay it
         EffectManager::Init();
         for (auto& e : m_enemies) if (e) e->Reset(); 
     }
@@ -378,19 +386,30 @@ void Game::Update() {
 
     if (m_player.IsRewinding()) {
         int currentHist = m_player.GetHistorySize();
+        float progress = (float)currentHist / m_initialRewindHistorySize;
+        
+        // Only trigger camera rewind effect when 20% or less history remains
+        if (progress <= 0.2f && !Camera::IsRewindEffectActive()) {
+            // Calculate remaining duration based on speed (approximate)
+            float remainingSec = (float)currentHist / (m_rewindSpeed * 60.0f);
+            Camera::StartRewindEffect(remainingSec > 0 ? remainingSec : 1.0f);
+        }
+
         if (currentHist > (int)(m_initialRewindHistorySize * 0.2f)) {
             m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
         } else {
-            // 20% ?⑥븯?????ㅽ궢: ?뚮젅?댁뼱瑜??쒖옉 ?꾩튂濡?媛뺤젣 ?대룞?섍퀬 ?덉뒪?좊━ ??젣
+            // 20% 남았을 때 스킵: 플레이어를 시작 위치로 강제 이동하고 히스토리 삭제
             m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH() - 2.0f);
             m_player.ClearHistory();
         }
+
         m_player.UpdateAnimation();
 
         bool forceSnap = (m_player.GetHistorySize() == 0);
         Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, forceSnap);
 
-        if (!Camera::IsRewindEffectActive()) {
+        // Terminate rewind only if history is cleared AND camera effect is finished
+        if (currentHist == 0 && !Camera::IsRewindEffectActive()) {
             m_player.StopRewind();
             m_player.SetState(PlayerState::PS_IDLE);
             m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH() - 2.0f);
@@ -404,7 +423,27 @@ void Game::Update() {
     float ts = m_player.GetIsSlowMo() ? 0.3f : 1.0f;
     if (!m_isTimePaused) {
         m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
-        Bullet::UpdateAll(ts, m_player);
+        
+        // 총알 튕겨내기 로직: 플레이어 업데이트 후, 총알 업데이트 전에 수행
+        if (m_player.GetState() == PlayerState::PS_ATTACK) {
+            RECT attackRect = m_player.GetAttackRect();
+            InflateRect(&attackRect, 15, 15); // 총알 판정을 위해 약간 더 넓게 확장
+            for (auto b : Bullet::GetBullets()) {
+                if (b && b->IsActive() && !b->IsDeflected()) { // 아직 튕겨나가지 않은 총알만 처리
+                    RECT bulletRect = b->GetRect();
+                    RECT overlap;
+                    if (IntersectRect(&overlap, &attackRect, &bulletRect)) {
+                        b->Deflect(-b->GetVX(), -b->GetVY());
+                        // 전용 gunspark 이펙트 생성 (이전보다 크고 명확하게 보임)
+                        EffectManager::AddGunSparkVFX((float)(overlap.left + overlap.right) / 2.0f, 
+                                                    (float)(overlap.top + overlap.bottom) / 2.0f, 
+                                                    atan2(-b->GetVY(), -b->GetVX()), ct);
+                    }
+                }
+            }
+        }
+
+        Bullet::UpdateAll(ts, m_player, m_enemies);
         if (!m_player.IsDead()) {
             for (auto& e : m_enemies) if (e) e->Update(ts, m_player);
         }
@@ -451,14 +490,14 @@ void Game::Update() {
             }
         }
 
-        // 臾몄씠 ?대━???숈븞 ?곴낵 異⑸룎 泥댄겕 (臾?怨듦꺽)
+        // 문이 열리는 동안 적과 충돌 체크 (문 공격)
         auto& stageData = StageManager::GetStageData(m_currentStage);
         for (int i = 0; i < (int)stageData.doors.size(); i++) {
             Door& d = stageData.doors[i];
-            // 臾몄씠 ?대━湲??쒖옉?섎뒗 ?꾨젅??蹂댄넻 珥덈컲遺)?먯꽌 怨듦꺽 ?먯젙
-            if (!d.IsClosed() && d.GetCurrentFrame() >= 1 && d.GetCurrentFrame() <= 5) {
+            // 문이 완전히 열린 상태가 아니면서 애니메이션이 초반(1~5프레임) 진행 중일 때 공격 판정
+            if (d.GetCurrentFrame() >= 1 && d.GetCurrentFrame() <= 5) {
                 RECT dR = { (int)d.GetX(), (int)d.GetY(), (int)(d.GetX() + d.GetW()), (int)(d.GetY() + d.GetH()) };
-                // 臾몄쓽 怨듦꺽 踰붿쐞瑜??쎄컙 ?뺤옣 (醫뚯슦濡?
+                // 문의 공격 범위를 약간 확장 (좌우로)
                 dR.left -= 30; dR.right += 30;
 
                 for (int j = 0; j < (int)m_enemies.size(); j++) {
@@ -472,7 +511,7 @@ void Game::Update() {
                             e->OnTakeDamage(kbx, -5.0f);
                             m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, j);
                             
-                            // ?쒓컖 ?④낵 異붽?
+                            // 시각 효과 추가
                             float angle = (kbx > 0) ? 0.0f : 3.14159f;
                             EffectManager::AddNeonTrail(ex, ey, (kbx > 0 ? 1.0f : -1.0f), 0.0f, angle);
                             EffectManager::AddHitVFX(ex, ey, angle, ct);
@@ -673,7 +712,7 @@ void Game::Render(HDC hDC) {
     } else {
         if (!m_player.IsRewinding()) {
             bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished());
+            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage);
         }
 
         drawTransition(hMemDC);
