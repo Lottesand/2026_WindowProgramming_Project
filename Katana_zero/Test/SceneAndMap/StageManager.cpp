@@ -1,4 +1,5 @@
 ﻿#include "StageManager.h"
+#include "../Effects/EffectManager.h"
 #include <algorithm>
 #include <atomic>
 
@@ -233,7 +234,7 @@ int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float
     return -1;
 }
 
-void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo) {
+void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo) {
     if (!hDC) return;
 
     if (isSlowMo) {
@@ -309,6 +310,10 @@ void StageManager::Render(HDC hDC, bool isFullMapView, bool showDebugRect, float
         }
     }
 
+    // Render persistent blood splatters on top of the map background
+    if (!isFullMapView) {
+        EffectManager::RenderMapBlood(hDC, g, camX, camY, renderMapScale);
+    }
 
     if (m_pCurrentDoors) {
         for (auto& d : *m_pCurrentDoors) {

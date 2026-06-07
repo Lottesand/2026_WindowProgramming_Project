@@ -314,13 +314,16 @@ void Game::Update() {
 
     if (m_player.IsDead() && !m_player.IsRewinding()) {
         static bool isDeadShaken = false;
+        static DWORD deadStartTime = 0;
         if (!isDeadShaken) {
             Camera::AddShake(1.5f);
             Camera::AddPush(0.0f, 40.0f);
             isDeadShaken = true;
+            deadStartTime = ct;
         }
-        if (Input::GetKeyDown(VK_LBUTTON)) {
+        if (Input::GetKeyDown(VK_LBUTTON) && (ct - deadStartTime > 500)) {
             isDeadShaken = false;
+            deadStartTime = 0;
             m_isTimeoutDeath = false;
             m_initialRewindHistorySize = m_player.GetHistorySize();
             float elapsed = StageManager::GetStageLimitTime() - m_stageTimer;
@@ -546,7 +549,7 @@ void Game::Render(HDC hDC) {
     }
 
     Gdiplus::Graphics g(hMemDC);
-    StageManager::Render(hMemDC, m_isFullMapView, m_showDebugRect, mapScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, cX, cY, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetIsSlowMo());
+    StageManager::Render(hMemDC, &g, m_isFullMapView, m_showDebugRect, mapScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, cX, cY, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetIsSlowMo());
     
     if (m_showDebugRect) {
         TCHAR szFps[32]; wsprintf(szFps, TEXT("FPS: %d"), m_fps);

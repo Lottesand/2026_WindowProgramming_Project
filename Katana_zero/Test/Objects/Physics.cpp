@@ -30,6 +30,21 @@ bool CheckCollision(int x, int y) {
     return type == 1 || type == 3;
 }
 
+bool IsMapTransparent(int x, int y) {
+    CImage& imgMap = StageManager::GetMap();
+    if (imgMap.IsNull()) return true;
+    if (x < 0 || x >= imgMap.GetWidth() || y < 0 || y >= imgMap.GetHeight()) return true;
+    
+    if (imgMap.GetBPP() == 32) {
+        BYTE* pBits = (BYTE*)imgMap.GetBits();
+        int pitch = imgMap.GetPitch();
+        int bpp = imgMap.GetBPP() / 8;
+        BYTE* pPixel = pBits + (y * pitch) + (x * bpp);
+        if (pPixel[3] == 0) return true; // Alpha is 0
+    }
+    return false;
+}
+
 bool CheckMapCollision(float x, float y, float w, float h) {
     auto isSolid = [](int t) { return t == 1 || t == 3; };
     int x1 = (int)x, x2 = (int)(x + w / 2), x3 = (int)(x + w - 1);

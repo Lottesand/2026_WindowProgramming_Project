@@ -5,6 +5,7 @@
 #include "../SceneAndMap/Camera.h"
 #include "../Effects/EffectManager.h"
 #include <gdiplus.h>
+#include <cmath>
 #include <map>
 
 CImage Enemy::m_ImgExclaim[2];
@@ -141,6 +142,12 @@ void Enemy::Update(float ts, const Player& player) {
                         float speed1 = 2.0f + (rand() % 30) / 10.0f; float speed2 = 2.0f + (rand() % 30) / 10.0f;
                         EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), perpY1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), angle1, GetTickCount());
                         EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), perpY2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), angle2, GetTickCount());
+                        
+                        // Add persistent map blood only if on visible background
+                        if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) {
+                            bool isMovingFast = (sqrt(m_vx * m_vx + m_vy * m_vy) > 2.0f);
+                            EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, atan2(m_vy, m_vx), isMovingFast);
+                        }
                     }
                 }
             }

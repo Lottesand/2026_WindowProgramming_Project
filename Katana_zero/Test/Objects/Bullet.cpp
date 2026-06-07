@@ -65,6 +65,10 @@ void Bullet::Update(float ts, Player& player) {
     RECT bR = GetRect();
     RECT ol;
     if (IntersectRect(&ol, &pR, &bR)) {
+        if (player.GetState() == PlayerState::PS_ROLL) {
+            // Bullet passes through during roll
+            return;
+        }
         if (!player.IsGodMode() && player.GetState() != PlayerState::PS_DEAD) {
             float kvx = (m_vx > 0) ? 8.0f : -8.0f;
             float kvy = -6.0f;

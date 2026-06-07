@@ -129,6 +129,12 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
                 float speed1 = 2.0f + (rand() % 30) / 10.0f; float speed2 = 2.0f + (rand() % 30) / 10.0f;
                 EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), perpY1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), angle1, ct);
                 EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), perpY2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), angle2, ct);
+                
+                // Add persistent map blood only if on visible background
+                if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) {
+                    bool isMovingFast = (sqrt(m_vx * m_vx + m_vy * m_vy) > 2.0f);
+                    EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, atan2(m_vy, m_vx), isMovingFast);
+                }
             }
         }
         m_vx *= 0.98f; 
@@ -530,7 +536,7 @@ bool Player::IsDeathAnimationFinished() const {
 }
 
 void Player::OnTakeDamage(float damage, float kvx, float kvy) {
-    if (!m_isGodMode && !IsDead()) {
+    if (!m_isGodMode && !IsDead() && m_state != PlayerState::PS_ROLL) {
         SetState(PlayerState::PS_DEAD);
         if (kvx != 0.0f || kvy != 0.0f) {
             m_vx = kvx;
