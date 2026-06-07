@@ -66,7 +66,9 @@ void Bullet::Update(float ts, Player& player) {
     RECT ol;
     if (IntersectRect(&ol, &pR, &bR)) {
         if (!player.IsGodMode() && player.GetState() != PlayerState::PS_DEAD) {
-            player.OnTakeDamage(1.0f);
+            float kvx = (m_vx > 0) ? 8.0f : -8.0f;
+            float kvy = -6.0f;
+            player.OnTakeDamage(1.0f, kvx, kvy);
         }
         m_isActive = false;
         return;

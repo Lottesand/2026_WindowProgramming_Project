@@ -154,5 +154,6 @@ public:
     const std::vector<PlayerSnapshot>& GetSnapshots() const { return m_snapshots; }
     void SetGodMode(bool god) { m_isGodMode = god; }
     bool IsGodMode() const { return m_isGodMode; }
-    void OnTakeDamage(float damage);
+    float m_bloodDistance;
+    void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f);
 };

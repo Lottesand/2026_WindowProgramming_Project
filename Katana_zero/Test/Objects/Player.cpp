@@ -52,6 +52,7 @@ Player::Player() {
     m_isSlowMo = false; m_canSlowMo = true; m_slowMoStartTime = 0;
     m_batteryLevel = 11.0f; m_lastTimeScale = 1.0f;
     m_isGodMode = false;
+    m_bloodDistance = 0.0f;
     m_snapshots.reserve(3000);
 }
 
@@ -114,6 +115,25 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     else { m_isSlowMo = false; m_canSlowMo = true; }
     if (!m_isSlowMo && m_batteryLevel < 11.0f) { m_batteryLevel += (11.0f / 11.0f) * dT; if (m_batteryLevel > 11.0f) m_batteryLevel = 11.0f; }
     float ts = m_isSlowMo ? 0.3f : 1.0f;
+
+    if (isDead && !m_isRewinding) {
+        m_bloodDistance += (float)sqrt(m_vx * m_vx + m_vy * m_vy) * ts;
+        if (m_bloodDistance >= 15.0f) {
+            m_bloodDistance -= 15.0f;
+            float length = (float)sqrt(m_vx * m_vx + m_vy * m_vy);
+            if (length > 0) {
+                float nvx = m_vx / length; float nvy = m_vy / length;
+                float perpX1 = -nvy; float perpY1 = nvx;
+                float perpX2 = nvy; float perpY2 = -nvx;
+                float angle1 = atan2(perpY1, perpX1); float angle2 = atan2(perpY2, perpX2);
+                float speed1 = 2.0f + (rand() % 30) / 10.0f; float speed2 = 2.0f + (rand() % 30) / 10.0f;
+                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), perpY1 * speed1 + ((rand() % 100) / 100.0f - 0.5f), angle1, ct);
+                EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, perpX2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), perpY2 * speed2 + ((rand() % 100) / 100.0f - 0.5f), angle2, ct);
+            }
+        }
+        m_vx *= 0.98f; 
+    }
+
     if (ts != m_lastTimeScale) { float f = ts / m_lastTimeScale; m_vx *= f; m_vy *= f; m_lastTimeScale = ts; }
     float cAcc = 0.6f * ts * ts, cFri = 0.3f * ts * ts, cDSp = 25.0f * ts, cWSp = 12.0f * ts;
     float cJP = -11.0f * ts, cWJP_Y = -11.0f * ts, cWJP_X = 14.0f * (m_isSlowMo ? ts : 1.0f);
@@ -155,8 +175,12 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     else if (m_state == PlayerState::PS_WALL_GRAB || m_state == PlayerState::PS_WALL_SLIDE || m_state == PlayerState::PS_DOOR_KICK || m_state == PlayerState::PS_DOOR_KICK_FULL) m_vx = 0.0f;
     else if (m_state == PlayerState::PS_IDLE_TO_WALK) { if (isA) { tvx = -1.0f * ts; m_isFacingRight = false; } if (isD) { tvx = 1.0f * ts; m_isFacingRight = true; } }
     else if (m_state != PlayerState::PS_WALK_TO_IDLE && m_state != PlayerState::PS_PREVDOWN && m_state != PlayerState::PS_DOWN && m_state != PlayerState::PS_POSTDOWN) { if (isA) { tvx = -cWSp; m_isFacingRight = false; } if (isD) { tvx = cWSp; m_isFacingRight = true; } }
-    if (tvx != 0.0f && m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE && m_state != PlayerState::PS_WALL_FLIP) m_vx += (tvx - m_vx) * cAcc;
-    else if (m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE && m_state != PlayerState::PS_WALL_FLIP) { m_vx += (0.0f - m_vx) * cFri; if (fabs(m_vx) < 0.1f) m_vx = 0.0f; }
+    if (tvx != 0.0f && m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE && m_state != PlayerState::PS_WALL_FLIP && !isDead) m_vx += (tvx - m_vx) * cAcc;
+    else if (m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE && m_state != PlayerState::PS_WALL_FLIP) { 
+        float curFri = isDead ? 0.02f * ts : cFri;
+        m_vx += (0.0f - m_vx) * curFri; 
+        if (fabs(m_vx) < 0.1f) m_vx = 0.0f; 
+    }
     if (m_vx != 0.0f && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE) {
         float nx = m_x + m_vx;
         if (!CheckMapCollision(nx, m_y, m_colW, m_colH - 5)) { m_x = nx; }
@@ -486,8 +510,7 @@ void Player::SetState(PlayerState state) {
         m_currentFrame = 0; 
         if (state == PlayerState::PS_DEAD) {
             m_state = PlayerState::PS_DEAD_FLY_BEGIN;
-            m_vx = m_isFacingRight ? -5.0f : 5.0f; 
-            m_vy = -8.0f;
+            // Removed default vx/vy setting to let OnTakeDamage handle it
         }
     } 
 }
@@ -506,9 +529,14 @@ bool Player::IsDeathAnimationFinished() const {
     return m_state == PlayerState::PS_DEAD_GROUND && m_currentFrame >= 5; 
 }
 
-void Player::OnTakeDamage(float damage) {
+void Player::OnTakeDamage(float damage, float kvx, float kvy) {
     if (!m_isGodMode && !IsDead()) {
         SetState(PlayerState::PS_DEAD);
+        if (kvx != 0.0f || kvy != 0.0f) {
+            m_vx = kvx;
+            m_vy = kvy;
+        }
+        m_bloodDistance = 0.0f;
     }
 }
 

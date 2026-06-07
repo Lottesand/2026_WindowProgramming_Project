@@ -271,7 +271,11 @@ void Grunt::Update(float ts, const Player& player) {
                     float dist = (float)sqrt((px - ex) * (px - ex) + (py - ey) * (py - ey));
                     float angle = atan2(py - ey, px - ex) * 180.0f / 3.14159f;
                     float absAngle = (float)fabs(angle);
-                    if (dist < 100.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) const_cast<Player&>(player).OnTakeDamage(1.0f);
+                    if (dist < 100.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) {
+                        float kvx = m_isFacingLeft ? -8.0f : 8.0f;
+                        float kvy = -6.0f;
+                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy);
+                    }
                 }
                 if (m_CurrentFrame >= 8) { m_ActionState = GruntAction::GR_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
             }
@@ -347,7 +351,11 @@ void Pomp::Update(float ts, const Player& player) {
                     float dist = (float)sqrt((px - ex) * (px - ex) + (py - ey) * (py - ey));
                     float angle = atan2(py - ey, px - ex) * 180.0f / 3.14159f;
                     float absAngle = (float)fabs(angle);
-                    if (dist < 80.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) const_cast<Player&>(player).OnTakeDamage(1.0f);
+                    if (dist < 80.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) {
+                        float kvx = m_isFacingLeft ? -8.0f : 8.0f;
+                        float kvy = -6.0f;
+                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy);
+                    }
                 }
                 if (m_CurrentFrame >= 6) { m_ActionState = PompAction::PA_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
             }
@@ -424,7 +432,11 @@ void ShieldCop::Update(float ts, const Player& player) {
                     float dist = (float)sqrt((px - ex) * (px - ex) + (py - ey) * (py - ey));
                     float angle = atan2(py - ey, px - ex) * 180.0f / 3.14159f;
                     float absAngle = (float)fabs(angle);
-                    if (dist < 70.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) const_cast<Player&>(player).OnTakeDamage(1.0f);
+                    if (dist < 70.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) {
+                        float kvx = m_isFacingLeft ? -8.0f : 8.0f;
+                        float kvy = -6.0f;
+                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy);
+                    }
                 }
                 if (m_CurrentFrame >= 6) { m_ActionState = ShieldCopAction::SA_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
             }
