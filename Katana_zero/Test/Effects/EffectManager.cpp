@@ -8,11 +8,16 @@ std::vector<JumpCloudVFX> EffectManager::m_jumpCloudVFXs;
 std::vector<DustCloudVFX> EffectManager::m_dustCloudVFXs;
 std::vector<LandCloudVFX> EffectManager::m_landCloudVFXs;
 std::vector<PendingHit> EffectManager::m_pendingHits;
+std::vector<BloodSplatterVFX> EffectManager::m_bloodSplatters;
+std::vector<MapBlood> EffectManager::m_mapBloods;
 CImage EffectManager::m_imgVfxSlash[5];
 CImage EffectManager::m_imgVfxHit[6];
 CImage EffectManager::m_imgVfxJumpCloud[4];
 CImage EffectManager::m_imgVfxDustCloud[7];
 CImage EffectManager::m_imgVfxLandCloud[7];
+CImage EffectManager::m_imgVfxBloodSplatter[7];
+CImage EffectManager::m_imgVfxMapBloodDir[48];
+CImage EffectManager::m_imgVfxMapBloodStatic[7];
 
 void EffectManager::Init() {
     m_neonTrails.clear();
@@ -21,29 +26,43 @@ void EffectManager::Init() {
     m_dustCloudVFXs.clear();
     m_landCloudVFXs.clear();
     m_pendingHits.clear();
+    m_bloodSplatters.clear();
+    m_mapBloods.clear();
 }
 
 void EffectManager::LoadAssets() {
     wchar_t path[256];
     for (int i = 0; i < 5; ++i) {
-        swprintf_s(path, L"assets/spr_slashfx/%d.png", i);
+        swprintf_s(path, L"assets/player/spr_slashfx/%d.png", i);
         m_imgVfxSlash[i].Load(path);
     }
     for (int i = 0; i < 6; ++i) {
-        swprintf_s(path, L"assets/spr_hit_impact/%d.png", i);
+        swprintf_s(path, L"assets/player/spr_hit_impact/%d.png", i);
         m_imgVfxHit[i].Load(path);
     }
     for (int i = 0; i < 4; ++i) {
-        swprintf_s(path, L"assets/spr_jumpcloud/%d.png", i);
+        swprintf_s(path, L"assets/player/spr_jumpcloud/%d.png", i);
         m_imgVfxJumpCloud[i].Load(path);
     }
     for (int i = 0; i < 7; ++i) {
-        swprintf_s(path, L"assets/spr_dustcloud/%d.png", i);
+        swprintf_s(path, L"assets/player/spr_dustcloud/%d.png", i);
         m_imgVfxDustCloud[i].Load(path);
     }
     for (int i = 0; i < 7; ++i) {
-        swprintf_s(path, L"assets/spr_landcloud/spr_landcloud_%d.png", i);
+        swprintf_s(path, L"assets/player/spr_landcloud/spr_landcloud_%d.png", i);
         m_imgVfxLandCloud[i].Load(path);
+    }
+    for (int i = 0; i < 7; ++i) {
+        swprintf_s(path, L"assets/blood/spr_bloodsplatter_nondir/%d.png", i);
+        m_imgVfxBloodSplatter[i].Load(path);
+    }
+    for (int i = 0; i < 48; ++i) {
+        swprintf_s(path, L"assets/blood/bg_blood_directional/%d.png", i);
+        m_imgVfxMapBloodDir[i].Load(path);
+    }
+    for (int i = 0; i < 7; ++i) {
+        swprintf_s(path, L"assets/blood/bg_blood/%d.png", i);
+        m_imgVfxMapBloodStatic[i].Load(path);
     }
 }
 
@@ -53,6 +72,9 @@ void EffectManager::ReleaseAssets() {
     for (int i = 0; i < 4; ++i) m_imgVfxJumpCloud[i].Destroy();
     for (int i = 0; i < 7; ++i) m_imgVfxDustCloud[i].Destroy();
     for (int i = 0; i < 7; ++i) m_imgVfxLandCloud[i].Destroy();
+    for (int i = 0; i < 7; ++i) m_imgVfxBloodSplatter[i].Destroy();
+    for (int i = 0; i < 48; ++i) m_imgVfxMapBloodDir[i].Destroy();
+    for (int i = 0; i < 7; ++i) m_imgVfxMapBloodStatic[i].Destroy();
 }
 
 void EffectManager::Update(float timeScale, DWORD currentTime) {
@@ -101,13 +123,22 @@ void EffectManager::Update(float timeScale, DWORD currentTime) {
         it->remainingFrames--;
         if (it->remainingFrames <= 0) {
             if (it->target && it->target->GetIsAlive()) {
-                it->target->OnTakeDamage(1.0f);
-                it->target->ApplyKnockback(it->kbForce);
+                it->target->OnTakeDamage(it->kvx, it->kvy);
             }
             it = m_pendingHits.erase(it);
         } else it++;
     }
+    for (auto it = m_bloodSplatters.begin(); it != m_bloodSplatters.end(); ) {
+        if (currentTime - it->startTime > 500) {
+            it = m_bloodSplatters.erase(it);
+        } else {
+            it->x += it->vx * timeScale;
+            it->y += it->vy * timeScale;
+            it++;
+        }
+    }
 }
+
 
 void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMapView, float cFS, float cFX, float cFY) {
     for (const auto& tr : m_neonTrails) {
@@ -212,7 +243,27 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
         }
     }
-
+    for (const auto& v : m_bloodSplatters) {
+        CImage* vI = &m_imgVfxBloodSplatter[v.imgIndex];
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 4.0f * (isFullMapView ? cFS : mapScale);
+            int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY;
+            if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
+            else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) {
+                if (v.angle != 0.0f) {
+                    XFORM xF, oldXF; int oldMode = GetGraphicsMode(hDC); SetGraphicsMode(hDC, GM_ADVANCED); GetWorldTransform(hDC, &oldXF);
+                    xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
+                    SetWorldTransform(hDC, &xF); 
+                    vI->Draw(hDC, -vW / 2, -vH / 2, vW, vH);
+                    SetWorldTransform(hDC, &oldXF); SetGraphicsMode(hDC, oldMode);
+                } else {
+                    vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH / 2, vW, vH);
+                }
+            }
+        }
+    }
 }
 
 void EffectManager::AddNeonTrail(float x, float y, float ux, float uy, float angle) {
@@ -240,10 +291,56 @@ void EffectManager::AddLandCloudVFX(float x, float y, DWORD currentTime) {
     LandCloudVFX c; c.x = x; c.y = y; c.currentFrame = 0; c.maxFrame = 7; c.lastTime = currentTime; m_landCloudVFXs.push_back(c);
 }
 
-void EffectManager::AddPendingHit(Enemy* target, float kbForce) {
-    PendingHit p; p.target = target; p.kbForce = kbForce; p.remainingFrames = 6; m_pendingHits.push_back(p);
+void EffectManager::AddBloodSplatter(float x, float y, float vx, float vy, float angle, DWORD currentTime) {
+    BloodSplatterVFX b;
+    b.x = x; b.y = y; b.vx = vx; b.vy = vy; b.angle = angle;
+    b.imgIndex = rand() % 7;
+    b.startTime = currentTime;
+    m_bloodSplatters.push_back(b);
+}
+
+void EffectManager::AddPendingHit(Enemy* target, float kvx, float kvy) {
+    PendingHit p; p.target = target; p.kvx = kvx; p.remainingFrames = 6; m_pendingHits.push_back(p);
+}
+
+void EffectManager::AddMapBlood(float x, float y, float angle, bool isDirectional) {
+    MapBlood mb;
+    mb.x = x;
+    mb.y = y;
+    mb.angle = angle;
+    mb.isDirectional = isDirectional;
+    mb.imgIndex = isDirectional ? (rand() % 48) : (rand() % 7);
+    m_mapBloods.push_back(mb);
+}
+
+void EffectManager::RenderMapBlood(HDC hDC, Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!g) return;
+    for (const auto& v : m_mapBloods) {
+        CImage* vI = v.isDirectional ? &m_imgVfxMapBloodDir[v.imgIndex] : &m_imgVfxMapBloodStatic[v.imgIndex];
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 2.0f * mapScale;
+            float dX = (v.x - camX) * mapScale;
+            float dY = (v.y - camY) * mapScale;
+            
+            void* bits = vI->GetBits();
+            if (bits) {
+                Gdiplus::Bitmap bmp(vI->GetWidth(), vI->GetHeight(), vI->GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+                float sw = (float)vI->GetWidth() * vfxScale;
+                float sh = (float)vI->GetHeight() * vfxScale;
+                
+                g->TranslateTransform(dX, dY);
+                if (v.isDirectional) {
+                    g->RotateTransform(v.angle * 180.0f / 3.14159f);
+                } else {
+                    // Random rotation for static blood to add variety
+                    g->RotateTransform((float)(v.imgIndex * 45)); 
+                }
+                g->DrawImage(&bmp, -sw / 2.0f, -sh / 2.0f, sw, sh);
+                g->ResetTransform();
+            }
+        }
+    }
 }
 
 bool EffectManager::HasActiveHitVFX() { return !m_hitVFXs.empty(); }
 bool EffectManager::HasActiveVFX() { return !m_neonTrails.empty() || !m_hitVFXs.empty() || !m_jumpCloudVFXs.empty() || !m_dustCloudVFXs.empty() || !m_landCloudVFXs.empty(); }
-

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <windows.h>
 #include <atlimage.h>
 #include <vector>
@@ -8,10 +8,17 @@
 
 class StageManager {
 public:
+    struct EnemySpawnInfo {
+        float x, y;
+        float patrolRange;
+        int type; 
+    };
+
     struct StageData {
         std::vector<Door> doors;
         POINT playerStart;
         std::vector<RECT> clearZones;
+        std::vector<EnemySpawnInfo> enemySpawns;
         float stageLimitTime;
 
         // Stage-specific camera settings
@@ -23,12 +30,12 @@ public:
         float mapRenderOffsetY = 0.0f;
     };
 
-    static void Init(); // 현재 스테이지 데이터 활성화
+    static void Init();
     static void Reset(); 
-    static void LoadAllStages(std::atomic<int>* pProgress = nullptr); // 전역 로딩 및 모든 스테이지 전처리
+    static void LoadAllStages(std::atomic<int>* pProgress = nullptr);
     static void LoadAssets(int stage = 1);
     static void ReleaseAssets();
-    static void Render(HDC hDC, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight);
+    static void Render(HDC hDC, class Gdiplus::Graphics* g, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo = false);
     static int UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale);
 
 
@@ -46,14 +53,12 @@ public:
     static StageData& GetStageData(int stage) { return m_stageDataMap[stage]; }
 
 private:
-    static void ProcessStage(int stage); // 특정 스테이지 맵 분석 및 데이터 추출
+    static void ProcessStage(int stage);
 
-    // 전역 저장소
     static std::map<int, CImage> m_mapImages;
     static std::map<int, CImage> m_colMapImages;
     static std::map<int, StageData> m_stageDataMap;
 
-    // 현재 스테이지 포인터 및 데이터
     static CImage* m_imgMap;
     static CImage* m_imgColMap;
 

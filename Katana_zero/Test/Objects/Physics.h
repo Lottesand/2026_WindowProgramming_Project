@@ -9,6 +9,7 @@ extern const int VIRTUAL_HEIGHT;
 
 int GetCollisionType(int x, int y);
 bool CheckCollision(int x, int y);
+bool IsMapTransparent(int x, int y);
 bool CheckMapCollision(float x, float y, float w, float h);
 bool CheckSpecificCollision(float x, float y, float w, float h, int targetType);
 

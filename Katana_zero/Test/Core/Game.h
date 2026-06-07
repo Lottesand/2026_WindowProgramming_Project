@@ -31,11 +31,6 @@ public:
     bool IsLoaded() const { return m_isLoaded; }
     int GetLoadingProgress() const { return m_loadingProgress; }
 
-    Player& GetPlayer() { return m_player; }
-    float GetMapScale() const { return mapScale; }
-    bool IsShowDebugRect() const { return m_showDebugRect; }
-    bool IsFullMapView() const { return m_isFullMapView; }
-
 private:
     void UpdateScreenScale();
 
@@ -57,6 +52,7 @@ private:
     CImage m_imgLoading;
 
     bool m_isTimePaused;
+    bool m_isTimeoutDeath;
     bool m_showDebugRect;
     bool m_showGrid;
     bool m_isFullMapView;
@@ -83,6 +79,11 @@ private:
 
     int m_maxRewindTime = 10; 
     int m_rewindSpeed = 4;    
+    int m_initialRewindHistorySize = 0;
+
+    int m_fps = 0;
+    int m_frameCount = 0;
+    DWORD m_lastFpsTime = 0;
 
     static constexpr int VIRTUAL_WIDTH = 1280;
     static constexpr int VIRTUAL_HEIGHT = 720;

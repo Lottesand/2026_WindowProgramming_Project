@@ -7,7 +7,7 @@ public:
     static void Init();
     static void LoadAssets();
     static void ReleaseAssets();
-    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead);
+    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout = false, bool showDeathMessage = false);
 
 private:
     static CImage m_imgHudBase;
@@ -22,5 +22,6 @@ private:
     static CImage m_imgLeftClick;
     static CImage m_imgRightClick;
     static CImage m_imgDeathBox;
+    static CImage m_imgTimeoutBox;
 };
 

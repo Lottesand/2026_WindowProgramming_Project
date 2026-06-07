@@ -4,7 +4,9 @@
 #include <math.h>
 #include <algorithm>
 #include <vector>
+#include <deque>
 
+// ?꾩뿭 蹂???좎뼵
 extern int g_playerAfterImageInterval;
 extern int g_playerAfterImageIntervalSlowMo;
 extern int g_playerAfterImageCount;
@@ -13,21 +15,19 @@ extern int g_slowMoDurationLimit;
 extern float g_slowMoJumpForceScale;
 extern float g_slowMoMoveForceScale;
 extern int g_maxJumpHoldTime;
-#include "Physics.h"
 
 enum class PlayerState {
-    IDLE, IDLE_TO_WALK, WALK, WALK_TO_IDLE, RUN,
-    JUMP_UP, FALL,
-    PREVDOWN, DOWN, POSTDOWN,
-    ROLL, ATTACK,
-    WALL_GRAB, WALL_SLIDE, WALL_FLIP,
-    DOOR_KICK, DOOR_KICK_FULL,
-    DEAD
+    PS_IDLE, PS_IDLE_TO_WALK, PS_WALK, PS_WALK_TO_IDLE, PS_RUN,
+    PS_JUMP_UP, PS_FALL,
+    PS_PREVDOWN, PS_DOWN, PS_POSTDOWN,
+    PS_ROLL, PS_ATTACK,
+    PS_WALL_GRAB, PS_WALL_SLIDE, PS_WALL_FLIP,
+    PS_DOOR_KICK, PS_DOOR_KICK_FULL,
+    PS_DEAD, PS_DEAD_FLY_BEGIN, PS_DEAD_FLY_LOOP, PS_DEAD_GROUND, PS_PIT_DEATH
 };
 
 class Player {
 private:
-    static Player* s_instance;
     float m_x, m_y, m_vx, m_vy;
     PlayerState m_state;
     bool m_isJumping, m_isFacingRight;
@@ -84,32 +84,19 @@ private:
 
     bool m_isGodMode;
 
-    float GetBatteryConsumptionPerSec() const { return m_batteryMax / m_slowMoDuration; }
-    float GetBatteryRecoveryPerSec() const { return m_batteryMax / m_slowMoRecoveryTime; }
-
     CImage imgIdle[11], imgWalk[10], imgRun[10], imgJumpUp[4], imgFall[4], imgPrevDown[2], imgDown[1], imgPostDown[2], imgRoll[6], imgAttack[7], imgSlashFX[5], imgWallGrab[2], imgWallSlide[1], imgWallFlip[11], imgIdleToWalk[4], imgWalkToIdle[5], imgDoorKick[6], imgDoorKickFull[10];
+    CImage imgHurtFlyBegin[2], imgHurtFlyLoop[4], imgHurtGround[6];
 
 public:
     Player();
     ~Player();
 
-    static Player& GetInstance() { return *s_instance; }
-
     void Init();
     void Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
     void UpdateAnimation();
-    void Render(HDC hMemDC, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect);
-    void OnTakeDamage(float damage);
-    void SetState(PlayerState state) { 
-        if (m_state != state) { 
-            m_state = state; 
-            m_currentFrame = 0; 
-            if (state == PlayerState::DEAD) {
-                m_vx = 0;
-                m_vy = 0;
-            }
-        } 
-    }
+    void Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect, float stageTimer = 10.0f);
+    
+    void SetState(PlayerState state);
 
     float GetX() const { return m_x; }
     float GetY() const { return m_y; }
@@ -117,6 +104,8 @@ public:
     float GetColH() const { return m_colH; }
     float GetAttackDirX() const { return m_attackDirX; }
     float GetAttackDirY() const { return m_attackDirY; }
+    float GetDashDirX() const { return m_dashDirX; }
+    float GetDashDirY() const { return m_dashDirY; }
     float GetAttackHitW() const { return m_attackHitW; }
     float GetAttackHitH() const { return m_attackHitH; }
     float GetAttackHitX() const { return m_x + m_colW / 2.0f + m_attackDirX * m_attackHitOffset - m_attackHitW / 2.0f; }
@@ -126,12 +115,14 @@ public:
     PlayerState GetState() const { return m_state; }
     bool GetIsSlowMo() const { return m_isSlowMo; }
     float GetBatteryLevel() const { return m_batteryLevel; }
-    RECT GetRect() const { return { (int)m_x, (int)m_y, (int)(m_x + m_colW), (int)(m_y + m_colH) }; }
+    bool IsDead() const;
+    bool IsDeathAnimationFinished() const;
+    bool IsPitFalling() const { return m_state == PlayerState::PS_PIT_DEATH; }
 
     enum class ReplayEvent { ENEMY_DIE, DOOR_OPEN };
     struct ReplayEventData {
         ReplayEvent type;
-        int targetIdx; // 적 인덱스 또는 문 인덱스
+        int targetIdx;
     };
 
     struct PlayerSnapshot {
@@ -142,29 +133,17 @@ public:
         float attackAngle;
         std::vector<ReplayEventData> events;
     };
-    std::vector<PlayerSnapshot> m_history;
+    std::deque<PlayerSnapshot> m_history;
     std::vector<PlayerSnapshot> m_snapshots;
     
-    void AddReplayEvent(ReplayEvent type, int idx) {
-        if (!m_snapshots.empty()) {
-            m_snapshots.back().events.push_back({ type, idx });
-        }
-    }
+    void AddReplayEvent(ReplayEvent type, int idx);
+
     bool m_isRewinding = false;
     int m_rewindSpeed = 1;
     int m_maxHistorySize = 600;
 
-    void ClearAfterImages() {
-        for (auto& img : m_afterImages) img.active = false;
-    }
-
-    void StartRewind(int speed = 2) { 
-        m_isRewinding = true; 
-        m_rewindSpeed = speed; 
-        m_isSlowMo = false; // 리와인드 시작 시 슬로우 모션 강제 종료
-        m_batteryLevel = m_batteryMax; // 배터리(슬로우 모드 게이지) 풀 회복
-        ClearAfterImages();
-    }
+    void ClearAfterImages();
+    void StartRewind(int speed = 2);
     void StopRewind() { m_isRewinding = false; }
     bool IsRewinding() const { return m_isRewinding; }
     void SetMaxHistory(int seconds) { m_maxHistorySize = seconds * 60; ClearHistory(); }
@@ -175,5 +154,6 @@ public:
     const std::vector<PlayerSnapshot>& GetSnapshots() const { return m_snapshots; }
     void SetGodMode(bool god) { m_isGodMode = god; }
     bool IsGodMode() const { return m_isGodMode; }
+    float m_bloodDistance;
+    void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f);
 };
-
