@@ -175,9 +175,9 @@ void Enemy::Update(float ts, const Player& player) {
 
 // Gangster
 CImage Gangster::m_ImgIdle_R[8], Gangster::m_ImgIdle_L[8], Gangster::m_ImgWalk_R[8], Gangster::m_ImgWalk_L[8], Gangster::m_ImgAim_R[4], Gangster::m_ImgAim_L[4], Gangster::m_ImgTurn_R[6], Gangster::m_ImgTurn_L[6], Gangster::m_ImgFall_R[12], Gangster::m_ImgFall_L[12], Gangster::m_ImgHurtFly_R[2], Gangster::m_ImgHurtFly_L[2], Gangster::m_ImgHurtGround_R[14], Gangster::m_ImgHurtGround_L[14], Gangster::m_ImgRun_R[10], Gangster::m_ImgRun_L[10], Gangster::m_ImgGun_R[2], Gangster::m_ImgGun_L[2], Gangster::m_ImgArm[2];
-Gangster::Gangster(float x, float y) : Enemy(x, y, EnemyType::GANGSTER) { m_ActionState = GangsterAction::GA_NONE; }
+Gangster::Gangster(float x, float y) : Enemy(x, y, EnemyType::GANGSTER) { m_ActionState = GangsterAction::GA_NONE; m_aimAngle = 0.0f; }
 Gangster::~Gangster() {}
-void Gangster::Reset() { Enemy::Reset(); m_ActionState = GangsterAction::GA_NONE; }
+void Gangster::Reset() { Enemy::Reset(); m_ActionState = GangsterAction::GA_NONE; m_aimAngle = 0.0f; }
 void Gangster::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = GangsterAction::GA_HURT_FLY; }
 void Gangster::Init() { if (!m_ImgIdle_R[0].IsNull()) return; TCHAR p[256]; for (int i = 0; i < 8; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsteridle/%d.png"), i); m_ImgIdle_R[i].Load(p); m_ImgIdle_L[i].Load(p); } for (int i = 0; i < 8; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterwalk/%d.png"), i); m_ImgWalk_R[i].Load(p); m_ImgWalk_L[i].Load(p); } for (int i = 0; i < 4; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangster_aim/%d.png"), i); m_ImgAim_R[i].Load(p); m_ImgAim_L[i].Load(p); } for (int i = 0; i < 6; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterturn/%d.png"), i); m_ImgTurn_R[i].Load(p); m_ImgTurn_L[i].Load(p); } for (int i = 0; i < 12; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterfall/%d.png"), i); m_ImgFall_R[i].Load(p); m_ImgFall_L[i].Load(p); } for (int i = 0; i < 2; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterhurtfly/%d.png"), i); m_ImgHurtFly_R[i].Load(p); m_ImgHurtFly_L[i].Load(p); } for (int i = 0; i < 14; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterhurtground/%d.png"), i); m_ImgHurtGround_R[i].Load(p); m_ImgHurtGround_L[i].Load(p); } for (int i = 0; i < 10; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterrun/%d.png"), i); m_ImgRun_R[i].Load(p); m_ImgRun_L[i].Load(p); } for (int i = 0; i < 2; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangstergun/%d.png"), i); m_ImgGun_R[i].Load(p); m_ImgGun_L[i].Load(p); } for (int i = 0; i < 2; i++) { wsprintf(p, TEXT("assets/enemy/spr_arm/%d.png"), i); m_ImgArm[i].Load(p); } }
 void Gangster::Release() { for (int i = 0; i < 8; i++) { m_ImgIdle_R[i].Destroy(); m_ImgIdle_L[i].Destroy(); } for (int i = 0; i < 8; i++) { m_ImgWalk_R[i].Destroy(); m_ImgWalk_L[i].Destroy(); } for (int i = 0; i < 4; i++) { m_ImgAim_R[i].Destroy(); m_ImgAim_L[i].Destroy(); } for (int i = 0; i < 6; i++) { m_ImgTurn_R[i].Destroy(); m_ImgTurn_L[i].Destroy(); } for (int i = 0; i < 12; i++) { m_ImgFall_R[i].Destroy(); m_ImgFall_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgHurtFly_R[i].Destroy(); m_ImgHurtFly_L[i].Destroy(); } for (int i = 0; i < 14; i++) { m_ImgHurtGround_R[i].Destroy(); m_ImgHurtGround_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgRun_R[i].Destroy(); m_ImgRun_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgGun_R[i].Destroy(); m_ImgGun_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgArm[i].Destroy(); } }
@@ -193,6 +193,8 @@ void Gangster::Update(float ts, const Player& player) {
     Enemy::Update(ts, player); DWORD ct = GetTickCount();
     if (m_isPlayerDetected) {
         float dx = player.GetX() - m_x;
+        float dy = player.GetY() - m_y;
+        m_aimAngle = atan2(dy, dx) * 180.0f / 3.14159f;
         bool nextFacingLeft = (dx < 0);
         if (m_isFacingLeft != nextFacingLeft && m_ActionState != GangsterAction::GA_TURN) {
             m_ActionState = GangsterAction::GA_TURN;
@@ -218,20 +220,15 @@ void Gangster::Update(float ts, const Player& player) {
             m_State = EnemyState::ES_IDLE; m_vx = 0; m_ActionState = GangsterAction::GA_AIM; m_CurrentFrame = 0; m_patternTimer = ct; m_LastTime = ct;
         } else if (m_ActionState == GangsterAction::GA_AIM) {
             m_vx = 0; m_State = EnemyState::ES_IDLE;
-            if (ct - m_LastTime >= (DWORD)(100.0f / ts)) {
-                if (m_CurrentFrame < 3) m_CurrentFrame++;
-                else { if (ct - m_patternTimer > (DWORD)(800.0f / ts)) { m_ActionState = GangsterAction::GA_FIRE; m_CurrentFrame = 0; m_patternTimer = ct; } }
-                m_LastTime = ct;
-            }
-        } else if (m_ActionState == GangsterAction::GA_FIRE) {
-            m_vx = 0; m_State = EnemyState::ES_IDLE;
-            if (ct - m_LastTime >= (DWORD)(80.0f / ts)) {
-                if (m_CurrentFrame < 5) { m_CurrentFrame++; if (m_CurrentFrame == 2) { 
-                    // 총구 위치 오프셋 적용 (Y축은 위가 - 이므로 주의)
-                    Bullet::AddBullet(m_x + (m_isFacingLeft ? gunOffX : gunOffX + 40.0f), m_y - gunOffY, m_isFacingLeft ? -20.0f : 20.0f, 0.0f); 
-                } }
-                else { m_ActionState = GangsterAction::GA_AIM; m_patternTimer = ct; m_CurrentFrame = 3; }
-                m_LastTime = ct;
+            if (ct - m_patternTimer > 600) { // 600ms
+                float rad = m_aimAngle * 3.14159f / 180.0f;
+                float speed = 20.0f;
+                float bvx = speed * cos(rad);
+                float bvy = speed * sin(rad);
+                if (!m_isFacingLeft && bvx < 0) bvx = -bvx;
+                else if (m_isFacingLeft && bvx > 0) bvx = -bvx;
+                Bullet::AddBullet(m_x + (m_isFacingLeft ? gunOffX : gunOffX + 40.0f), m_y - gunOffY, bvx, bvy);
+                m_patternTimer = ct;
             }
         }
     } else {
@@ -262,19 +259,23 @@ void Gangster::Update(float ts, const Player& player) {
 }
 void Gangster::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) {
     if (!m_isAlive && m_ActionState != GangsterAction::GA_HURT_FLY && m_ActionState != GangsterAction::GA_HURT_GROUND) return;
-
-    // === [조절 가능] 렌더링용 오프셋 변수 ===
-    // 왼쪽/오른쪽을 바라볼 때 팔과 총의 위치를 각각 조절할 수 있습니다.
-    float armOffX = m_isFacingLeft ? -0.0f : 0.0f; 
+    
+    // ==========================================================
+    // [사용자 조정 가능] 갱스터 팔 및 총의 위치 오프셋
+    // ==========================================================
+    float armOffX = m_isFacingLeft ? -0.0f : 0.0f; // 값 조정: -10.0f로 이동 (오른쪽으로)
     float armOffY = -30.0f;
-    float gunOffX = m_isFacingLeft ? -20.0f : 20.0f; 
+    float gunOffX = m_isFacingLeft ? -20.0f : 20.0f;
     float gunOffY = -35.0f;
-    // ===========================================
+    // ==========================================================
 
-    RenderExclaim(hdc, camX, camY, mapScale); int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
-    CImage *imgBody = nullptr, *imgGun = nullptr, *imgArm = nullptr; float msX = 1.0f, msY = 1.0f, es = 1.8f;
+    RenderExclaim(hdc, camX, camY, mapScale);
+    int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
+    CImage *imgBody = nullptr, *imgGun = nullptr, *imgArm = nullptr;
+    float es = 1.8f, msX = 1.0f, msY = 1.0f;
+
     if (m_isFacingLeft) {
-        imgArm = &m_ImgArm[0];
+        imgArm = &m_ImgArm[1]; // Left uses 1.png
         if (m_ActionState == GangsterAction::GA_HURT_FLY) { imgBody = &m_ImgHurtFly_L[m_CurrentFrame % 2]; imgArm = nullptr; }
         else if (m_ActionState == GangsterAction::GA_HURT_GROUND || m_State == EnemyState::ES_DEAD) { imgBody = &m_ImgHurtGround_L[m_CurrentFrame % 14]; imgArm = nullptr; }
         else if (m_State == EnemyState::ES_FALL) { imgBody = &m_ImgFall_L[m_CurrentFrame % 12]; imgArm = nullptr; }
@@ -289,7 +290,7 @@ void Gangster::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, flo
             }
         }
     } else {
-        imgArm = &m_ImgArm[0];
+        imgArm = &m_ImgArm[0]; // 오른쪽은 0.png
         if (m_ActionState == GangsterAction::GA_HURT_FLY) { imgBody = &m_ImgHurtFly_R[m_CurrentFrame % 2]; imgArm = nullptr; }
         else if (m_ActionState == GangsterAction::GA_HURT_GROUND || m_State == EnemyState::ES_DEAD) { imgBody = &m_ImgHurtGround_R[m_CurrentFrame % 14]; imgArm = nullptr; }
         else if (m_State == EnemyState::ES_FALL) { imgBody = &m_ImgFall_R[m_CurrentFrame % 12]; imgArm = nullptr; }
@@ -304,16 +305,25 @@ void Gangster::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, flo
             }
         }
     }
-    auto DrawImg = [&](CImage* im, float sX, float sY, float oX = 0, float oY = 0, bool forceNoFlip = false) {
-        if (!im || im->IsNull()) return; int fw = (int)(im->GetWidth() * es * sX * mapScale), fh = (int)(im->GetHeight() * es * sY * mapScale);
-        int fy = sy + (int)(m_colH * mapScale) - fh + (int)(oY * mapScale), dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2) + (int)(oX * mapScale);
-        if (m_isFacingLeft && !forceNoFlip) { int om = SetGraphicsMode(hdc, GM_ADVANCED); XFORM xo; GetWorldTransform(hdc, &xo); XFORM xl = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * dx + fw), 0.0f }; SetWorldTransform(hdc, &xl); im->Draw(hdc, dx, fy, fw, fh); SetWorldTransform(hdc, &xo); SetGraphicsMode(hdc, om); }
-        else im->Draw(hdc, dx, fy, fw, fh);
+    
+    auto Draw = [&](CImage* im, float sX, float sY, float oX = 0, float oY = 0, bool forceNoFlip = false) {
+        if (!im || im->IsNull()) return;
+        int fw = (int)(im->GetWidth() * es * sX * mapScale), fh = (int)(im->GetHeight() * es * sY * mapScale);
+        int dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2) + (int)(oX * mapScale), dy = sy + (int)(m_colH * mapScale) - fh + (int)(oY * mapScale);
+        if (m_isFacingLeft && !forceNoFlip) {
+            int om = SetGraphicsMode(hdc, GM_ADVANCED); XFORM xo; GetWorldTransform(hdc, &xo);
+            XFORM xl = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * dx + fw), 0.0f }; SetWorldTransform(hdc, &xl);
+            im->Draw(hdc, dx, dy, fw, fh);
+            SetWorldTransform(hdc, &xo); SetGraphicsMode(hdc, om);
+        } else im->Draw(hdc, dx, dy, fw, fh);
     };
-    DrawImg(imgBody, msX, msY);
-    if (imgGun) DrawImg(imgGun, 1.0f, 1.0f, gunOffX, gunOffY);
-    if (imgArm && (m_ActionState == GangsterAction::GA_AIM || m_ActionState == GangsterAction::GA_FIRE)) DrawImg(imgArm, 1.0f, 1.0f, armOffX, armOffY);
+
+    Draw(imgBody, msX, msY);
+    if (imgGun) Draw(imgGun, 1.0f, 1.0f, gunOffX, gunOffY);
+    if (imgArm && (m_ActionState == GangsterAction::GA_AIM || m_ActionState == GangsterAction::GA_FIRE)) Draw(imgArm, 1.0f, 1.0f, armOffX, armOffY, true);
     if (showDebugRect) RenderDebug(hdc, camX, camY, mapScale);
+
+    
 }
 
 // Grunt
@@ -362,7 +372,7 @@ void Grunt::Update(float ts, const Player& player) {
                 if (m_CurrentFrame >= 8) { m_ActionState = GruntAction::GR_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
             }
         } else if (fabs(dx) > 60.0f) { m_ActionState = GruntAction::GR_RUN; m_State = EnemyState::ES_WALK; m_vx = m_isFacingLeft ? -9.0f : 9.0f; }
-        else { if (m_ActionState == GruntAction::GR_RUN) m_ActionState = GruntAction::GR_NONE; m_State = EnemyState::ES_IDLE; m_vx = 0; if (ct - m_patternTimer > (DWORD)(800.0f / ts)) { m_ActionState = GruntAction::GR_ATTACK; m_CurrentFrame = 0; m_patternTimer = ct; m_LastTime = ct; } }
+        else { if (m_ActionState == GruntAction::GR_RUN) m_ActionState = GruntAction::GR_NONE; m_State = EnemyState::ES_IDLE; m_vx = 0; if (ct - m_patternTimer > 500) { m_ActionState = GruntAction::GR_ATTACK; m_CurrentFrame = 0; m_patternTimer = ct; } }
     } else {
         if (m_isWaiting) { 
             m_vx = 0.0f; m_State = EnemyState::ES_IDLE; 
@@ -476,7 +486,7 @@ void Pomp::Update(float ts, const Player& player) {
                 if (m_CurrentFrame >= 6) { m_ActionState = PompAction::PA_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
             }
         } else if (fabs(dx) > 50.0f) { m_ActionState = PompAction::PA_RUN; m_State = EnemyState::ES_WALK; m_vx = m_isFacingLeft ? -10.0f : 10.0f; }
-        else { if (m_ActionState == PompAction::PA_RUN) m_ActionState = PompAction::PA_NONE; m_State = EnemyState::ES_IDLE; m_vx = 0; if (ct - m_patternTimer > (DWORD)(600.0f / ts)) { m_ActionState = PompAction::PA_ATTACK; m_CurrentFrame = 0; m_patternTimer = ct; m_LastTime = ct; } }
+        else { if (m_ActionState == PompAction::PA_RUN) m_ActionState = PompAction::PA_NONE; m_State = EnemyState::ES_IDLE; m_vx = 0; if (ct - m_patternTimer > 400) { m_ActionState = PompAction::PA_ATTACK; m_CurrentFrame = 0; m_patternTimer = ct; } }
     } else {
         if (m_isWaiting) { 
             m_vx = 0.0f; m_State = EnemyState::ES_IDLE; 
@@ -591,7 +601,7 @@ void ShieldCop::Update(float ts, const Player& player) {
                 if (m_CurrentFrame >= 6) { m_ActionState = ShieldCopAction::SA_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
             }
         } else if (fabs(dx) > 40.0f) { m_ActionState = ShieldCopAction::SA_RUN; m_State = EnemyState::ES_WALK; m_vx = m_isFacingLeft ? -7.0f : 7.0f; }
-        else { if (m_ActionState == ShieldCopAction::SA_RUN) m_ActionState = ShieldCopAction::SA_NONE; m_State = EnemyState::ES_IDLE; m_vx = 0; if (ct - m_patternTimer > (DWORD)(1000.0f / ts)) { m_ActionState = ShieldCopAction::SA_BASH; m_CurrentFrame = 0; m_patternTimer = ct; m_LastTime = ct; } }
+        else { if (m_ActionState == ShieldCopAction::SA_RUN) m_ActionState = ShieldCopAction::SA_NONE; m_State = EnemyState::ES_IDLE; m_vx = 0; if (ct - m_patternTimer > 500) { m_ActionState = ShieldCopAction::SA_BASH; m_CurrentFrame = 0; m_patternTimer = ct; } }
     } else {
         if (m_isWaiting) { 
             m_vx = 0.0f; m_State = EnemyState::ES_IDLE; 

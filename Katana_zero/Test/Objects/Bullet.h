@@ -25,6 +25,7 @@ private:
     float m_x, m_y;
     float m_vx, m_vy;
     float m_width, m_height;
+    float m_angle;
     bool m_isActive;
 
     static CImage m_imgBullet;

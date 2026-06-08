@@ -58,6 +58,7 @@ public:
 class Gangster : public Enemy {
 private:
     GangsterAction m_ActionState;
+    float m_aimAngle;
     static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[4], m_ImgAim_L[4], m_ImgFire_R[6], m_ImgFire_L[6], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10], m_ImgGun_R[2], m_ImgGun_L[2], m_ImgArm[2];
 public:
     Gangster(float x, float y); virtual ~Gangster();

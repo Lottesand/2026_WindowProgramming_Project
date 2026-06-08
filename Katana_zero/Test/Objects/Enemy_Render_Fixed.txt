@@ -1,0 +1,81 @@
+void Gangster::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) {
+    if (!m_isAlive && m_ActionState != GangsterAction::GA_HURT_FLY && m_ActionState != GangsterAction::GA_HURT_GROUND) return;
+    
+    // ==========================================================
+    // [사용자 조정 가능] 갱스터 팔 및 총의 위치 오프셋
+    // ==========================================================
+    float armOffX = m_isFacingLeft ? -10.0f : 0.0f; 
+    float armOffY = -30.0f;
+    float gunOffX = m_isFacingLeft ? -35.0f : 20.0f;
+    float gunOffY = -35.0f;
+    // ==========================================================
+
+    RenderExclaim(hdc, camX, camY, mapScale);
+    int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
+    CImage *imgBody = nullptr, *imgGun = nullptr, *imgArm = nullptr;
+    float es = 1.8f, msX = 1.0f, msY = 1.0f;
+
+    if (m_isFacingLeft) {
+        imgArm = &m_ImgArm[1]; // Left uses 1.png
+        if (m_ActionState == GangsterAction::GA_HURT_FLY) { imgBody = &m_ImgHurtFly_L[m_CurrentFrame % 2]; imgArm = nullptr; }
+        else if (m_ActionState == GangsterAction::GA_HURT_GROUND || m_State == EnemyState::ES_DEAD) { imgBody = &m_ImgHurtGround_L[m_CurrentFrame % 14]; imgArm = nullptr; }
+        else if (m_State == EnemyState::ES_FALL) { imgBody = &m_ImgFall_L[m_CurrentFrame % 12]; imgArm = nullptr; }
+        else {
+            switch (m_ActionState) {
+            case GangsterAction::GA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { imgBody = &m_ImgIdle_L[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) imgBody = &m_ImgWalk_L[m_CurrentFrame % 8]; break;
+            case GangsterAction::GA_AIM: imgBody = &m_ImgAim_L[m_CurrentFrame % 4]; imgGun = &m_ImgGun_L[0]; break;
+            case GangsterAction::GA_FIRE: imgBody = &m_ImgAim_L[3]; imgGun = &m_ImgGun_L[m_CurrentFrame == 2 ? 1 : 0]; break;
+            case GangsterAction::GA_TURN: imgBody = &m_ImgTurn_L[m_CurrentFrame % 6]; break;
+            case GangsterAction::GA_RUN: imgBody = &m_ImgRun_L[m_CurrentFrame % 10]; break;
+            default: imgBody = &m_ImgIdle_L[0]; break;
+            }
+        }
+    } else {
+        imgArm = &m_ImgArm[0]; // Right uses 0.png
+        if (m_ActionState == GangsterAction::GA_HURT_FLY) { imgBody = &m_ImgHurtFly_R[m_CurrentFrame % 2]; imgArm = nullptr; }
+        else if (m_ActionState == GangsterAction::GA_HURT_GROUND || m_State == EnemyState::ES_DEAD) { imgBody = &m_ImgHurtGround_R[m_CurrentFrame % 14]; imgArm = nullptr; }
+        else if (m_State == EnemyState::ES_FALL) { imgBody = &m_ImgFall_R[m_CurrentFrame % 12]; imgArm = nullptr; }
+        else {
+            switch (m_ActionState) {
+            case GangsterAction::GA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { imgBody = &m_ImgIdle_R[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) imgBody = &m_ImgWalk_R[m_CurrentFrame % 8]; break;
+            case GangsterAction::GA_AIM: imgBody = &m_ImgAim_R[m_CurrentFrame % 4]; imgGun = &m_ImgGun_R[0]; break;
+            case GangsterAction::GA_FIRE: imgBody = &m_ImgAim_R[3]; imgGun = &m_ImgGun_R[m_CurrentFrame == 2 ? 1 : 0]; break;
+            case GangsterAction::GA_TURN: imgBody = &m_ImgTurn_R[m_CurrentFrame % 6]; break;
+            case GangsterAction::GA_RUN: imgBody = &m_ImgRun_R[m_CurrentFrame % 10]; break;
+            default: imgBody = &m_ImgIdle_R[0]; break;
+            }
+        }
+    }
+    
+    auto Draw = [&](CImage* im, float sX, float sY, float oX = 0, float oY = 0, bool rotate = false) {
+        if (!im || im->IsNull()) return;
+        int fw = (int)(im->GetWidth() * es * sX * mapScale), fh = (int)(im->GetHeight() * es * sY * mapScale);
+        int dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2) + (int)(oX * mapScale), dy = sy + (int)(m_colH * mapScale) - fh + (int)(oY * mapScale);
+        
+        int om = SetGraphicsMode(hdc, GM_ADVANCED);
+        XFORM xo; GetWorldTransform(hdc, &xo);
+        
+        if (rotate) {
+            float rad = m_aimAngle * 3.14159f / 180.0f;
+            float cosA = cos(rad), sinA = sin(rad);
+            float px = (float)(dx + fw / 2), py = (float)(dy + fh / 2);
+            XFORM rot = { cosA, sinA, -sinA, cosA, px - px * cosA + py * sinA, py - px * sinA - py * cosA };
+            XFORM combined; CombineTransform(&combined, &rot, &xo);
+            SetWorldTransform(hdc, &combined);
+        } else if (m_isFacingLeft) {
+            XFORM flip = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * dx + fw), 0.0f };
+            XFORM combined; CombineTransform(&combined, &flip, &xo);
+            SetWorldTransform(hdc, &combined);
+        }
+        
+        im->Draw(hdc, dx, dy, fw, fh);
+        
+        SetWorldTransform(hdc, &xo);
+        SetGraphicsMode(hdc, om);
+    };
+
+    Draw(imgBody, msX, msY);
+    if (imgGun) Draw(imgGun, 1.0f, 1.0f, gunOffX, gunOffY, true);
+    if (imgArm && (m_ActionState == GangsterAction::GA_AIM || m_ActionState == GangsterAction::GA_FIRE)) Draw(imgArm, 1.0f, 1.0f, armOffX, armOffY, true);
+    if (showDebugRect) RenderDebug(hdc, camX, camY, mapScale);
+}

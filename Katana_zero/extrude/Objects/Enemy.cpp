@@ -144,9 +144,9 @@ void Enemy::Update(float ts) {
 
 // Gangster
 CImage Gangster::m_ImgIdle_R[8], Gangster::m_ImgIdle_L[8], Gangster::m_ImgWalk_R[8], Gangster::m_ImgWalk_L[8], Gangster::m_ImgAim_R[4], Gangster::m_ImgAim_L[4], Gangster::m_ImgFire_R[6], Gangster::m_ImgFire_L[6], Gangster::m_ImgTurn_R[6], Gangster::m_ImgTurn_L[6], Gangster::m_ImgFall_R[12], Gangster::m_ImgFall_L[12], Gangster::m_ImgHurtFly_R[2], Gangster::m_ImgHurtFly_L[2], Gangster::m_ImgHurtGround_R[14], Gangster::m_ImgHurtGround_L[14], Gangster::m_ImgRun_R[10], Gangster::m_ImgRun_L[10], Gangster::m_ImgGun_R[2], Gangster::m_ImgGun_L[2], Gangster::m_ImgArm[2];
-Gangster::Gangster(float x, float y) : Enemy(x, y, EnemyType::GANGSTER) { m_ActionState = GangsterAction::NONE; }
+Gangster::Gangster(float x, float y) : Enemy(x, y, EnemyType::GANGSTER) { m_ActionState = GangsterAction::NONE; m_aimAngle = 0.0f; }
 Gangster::~Gangster() {}
-void Gangster::Reset() { Enemy::Reset(); m_ActionState = GangsterAction::NONE; }
+void Gangster::Reset() { Enemy::Reset(); m_ActionState = GangsterAction::NONE; m_aimAngle = 0.0f; }
 void Gangster::Init() {
     if (!m_ImgIdle_R[0].IsNull()) return;
     TCHAR p[256];
@@ -201,7 +201,9 @@ void Gangster::Update(float ts) {
     if (m_isPlayerDetected) {
         float px = Player::GetInstance().GetX(), py = Player::GetInstance().GetY();
         float dx = px - m_x;
-        m_isFacingLeft = (dx < 0);
+        float dy = py - m_y;
+        m_aimAngle = atan2(dy, dx) * 180.0f / 3.14159f;
+        bool nextFacingLeft = (dx < 0);
 
         if (fabs(dx) > 250.0f) {
             m_ActionState = GangsterAction::RUN;
