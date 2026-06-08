@@ -12,9 +12,10 @@ public:
     static void AddPush(float x, float y);
     static void ApplyShake(float& x, float& y);
     
-    static void StartRewindEffect();
+    static void StartRewindEffect(float duration);
     static bool IsRewindEffectActive() { return m_rewindTimer > 0; }
     static float GetRewindYOffset() { return m_rewindYOffset; }
+    static float GetRewindProgress() { return m_rewindDuration > 0 ? (m_rewindTimer / m_rewindDuration) : 0; }
 
     static void SetLookAheadX(float val) { m_camLookAheadX = val; }
     static void SetFixedY(float val) { m_camY_Fixed = val; }
@@ -31,6 +32,7 @@ private:
     static float m_shakeTrauma;
     
     static float m_rewindTimer;
+    static float m_rewindDuration;
     static float m_rewindYOffset;
 
     // Configurable parameters

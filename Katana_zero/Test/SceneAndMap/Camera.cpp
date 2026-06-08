@@ -48,12 +48,20 @@ void Camera::Update(float playerX, float playerY, float playerColW, float player
     float vHW = (VIRTUAL_WIDTH / renderMapScale) / 2.0f;
     float tCamX = pMidX - vHW + (mOffX * m_camLookAheadX);
     
+    // 만약 m_camY_Fixed 값이 0 미만이라면 플레이어의 Y 좌표를 따라가도록 설정 (Y축 카메라 언락)
+    float tCamY = m_camY_Fixed;
+    if (m_camY_Fixed < 0.0f) {
+        float pMidY = playerY + playerColH / 2.0f;
+        float vHH = (VIRTUAL_HEIGHT / renderMapScale) / 2.0f;
+        tCamY = pMidY - vHH;
+    }
+    
     if (forceSnap) {
         m_camX = tCamX;
-        m_camY = m_camY_Fixed;
+        m_camY = tCamY;
     } else {
         m_camX += (tCamX - m_camX) * m_camLerpSpeedX;
-        m_camY += (m_camY_Fixed - m_camY) * m_camLerpSpeedY;
+        m_camY += (tCamY - m_camY) * m_camLerpSpeedY;
     }
 
     m_camPushX *= m_shakeDecay;

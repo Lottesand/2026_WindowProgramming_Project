@@ -187,13 +187,13 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
             if (!CheckMapCollision(nx, ny, m_colW, m_colH)) {
                 m_x = nx; m_y = ny;
             } else {
+                // nx, ny is colliding. Resolve using previous safe position oldSX, oldSY
                 m_x = nx; m_y = ny;
                 ResolveMapCollision(m_x, m_y, m_colW, m_colH, oldSX, oldSY);
                 break; // Stop dashing if we hit a wall
             }
         }
         
-        if (dtt <= cDSp) { m_x = m_attackTargetX; m_y = m_attackTargetY; }
         m_vy = 0.0f; m_vx = 0.0f;
     } else if (m_state == PlayerState::PS_ROLL) m_vx = m_isFacingRight ? 15.0f * ts : -15.0f * ts;
     else if (m_state == PlayerState::PS_WALL_GRAB || m_state == PlayerState::PS_WALL_SLIDE || m_state == PlayerState::PS_DOOR_KICK || m_state == PlayerState::PS_DOOR_KICK_FULL) m_vx = 0.0f;
@@ -302,7 +302,18 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     if (!air && (m_state == PlayerState::PS_WALK || m_state == PlayerState::PS_RUN) && !m_isSlowMo) { static bool lfr = m_isFacingRight; if (!m_wasMoving || (m_isFacingRight != lfr)) { for (int i = 0; i < 3; i++) EffectManager::AddDustCloudVFX(m_x + (m_isFacingRight ? 0 : m_colW) + (m_isFacingRight ? m_dustOffsetX[i] : -m_dustOffsetX[i]), m_y + m_colH + m_dustOffsetY[i], m_isFacingRight, ct); } lfr = m_isFacingRight; }
     m_wasMoving = !air && (m_state == PlayerState::PS_WALK || m_state == PlayerState::PS_RUN);
     if (m_state == PlayerState::PS_ROLL && !air && !m_isSlowMo) { if (m_currentFrame != m_lastRollFrame) { int cnts[] = { 1, 1, 2, 2, 3, 4 }; int safeFrameForCnt = (m_currentFrame < 5) ? m_currentFrame : 5; int c = cnts[safeFrameForCnt]; for (int i = 0; i < c; i++) EffectManager::AddDustCloudVFX(m_x + (m_isFacingRight ? 0 : m_colW) + (float)(rand() % 21 - 10), m_y + m_colH + (float)(rand() % 11 - 5) + 2.0f, m_isFacingRight, ct); m_lastRollFrame = m_currentFrame; } } else m_lastRollFrame = -1;
-    if (m_state == PlayerState::PS_WALL_SLIDE && m_vy > 0.0f && !m_isSlowMo) { static DWORD lwdt = 0; if (ct - lwdt >= 150) { for (int i = 0; i < 2; i++) EffectManager::AddDustCloudVFX(m_x + (m_wallDir == 1 ? m_colW : 0) + (float)(rand() % 11 - 5), m_y + m_colH + (float)(rand() % 11 - 5), m_wallDir == -1, ct); lwdt = ct; } }
+    if (m_state == PlayerState::PS_WALL_SLIDE && m_vy > 0.0f && !m_isSlowMo) { 
+        static DWORD lwdt = 0; 
+        if (ct - lwdt >= 150) { 
+            for (int i = 0; i < 2; i++) {
+                // 벽 쪽으로 위치 조정 및 90도 회전 (라디안: 1.5708f)
+                float dx = m_x + (m_wallDir == 1 ? m_colW : 0);
+                float dy = m_y + m_colH / 2.0f + (float)(rand() % 21 - 10);
+                EffectManager::AddDustCloudVFX(dx, dy, m_wallDir == -1, ct, 1.5708f); 
+            }
+            lwdt = ct; 
+        } 
+    }
     bool leap = false; if (m_state == PlayerState::PS_ATTACK) { float dx = m_attackTargetX - m_x, dy = m_attackTargetY - m_y; if (sqrt(dx * dx + dy * dy) > 1.0f) { if (!m_hasLeapedInAir && m_isAttackClicked && m_currentFrame == 0) { leap = true; m_hasLeapedInAir = true; } } if (m_currentFrame >= 1) m_isAttackClicked = false; }
     if (!IsDead() && (leap || m_state == PlayerState::PS_ROLL || m_state == PlayerState::PS_WALL_FLIP || m_state == PlayerState::PS_ATTACK || m_isSlowMo)) { 
         DWORD iv = m_isSlowMo ? (DWORD)30 : (DWORD)1; 

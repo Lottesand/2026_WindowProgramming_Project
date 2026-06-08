@@ -100,8 +100,9 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
                     // Visual feedback: Neon trail and Hit VFX
                     float ex = e->GetX() + e->GetColW() / 2.0f;
                     float ey = e->GetY() + e->GetColH() / 2.0f;
-                    float ux = (m_vx > 0) ? 1.0f : -1.0f;
-                    float uy = 0.0f; // Bullets are mostly horizontal
+                    float distV = sqrt(m_vx * m_vx + m_vy * m_vy);
+                    float ux = (distV > 0) ? m_vx / distV : 1.0f;
+                    float uy = (distV > 0) ? m_vy / distV : 0.0f;
                     float angle = atan2(uy, ux);
                     
                     EffectManager::AddNeonTrail(ex, ey, ux, uy, angle);
@@ -126,27 +127,33 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
 }
 void Bullet::Render(HDC hdc, float camX, float camY, float mapScale) {
     if (!m_isActive) return;
-
     if (m_imgBullet.IsNull()) return;
 
-    // Use original image dimensions
     int imgW = m_imgBullet.GetWidth();
     int imgH = m_imgBullet.GetHeight();
 
     int sw = (int)(imgW * 1.0f * mapScale); 
     int sh = (int)(imgH * 1.0f * mapScale);
     int sx = (int)((m_x - camX) * mapScale);
-    int sy = (int)((m_y - camY) * mapScale) - sh / 2;
+    int sy = (int)((m_y - camY) * mapScale);
 
-    if (m_vx < 0) {
-        int om = SetGraphicsMode(hdc, GM_ADVANCED);
-        XFORM xo; GetWorldTransform(hdc, &xo);
-        XFORM xl = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * sx + sw), 0.0f };
-        SetWorldTransform(hdc, &xl);
-        m_imgBullet.TransparentBlt(hdc, sx, sy, sw, sh, 0, 0, imgW, imgH, RGB(0, 0, 0));
-        SetWorldTransform(hdc, &xo);
-        SetGraphicsMode(hdc, om);
-    } else {
-        m_imgBullet.TransparentBlt(hdc, sx, sy, sw, sh, 0, 0, imgW, imgH, RGB(0, 0, 0));
-    }
+    int om = SetGraphicsMode(hdc, GM_ADVANCED);
+    XFORM xo; GetWorldTransform(hdc, &xo);
+
+    float angle = atan2(m_vy, m_vx); // Radian
+    float cosA = cos(angle), sinA = sin(angle);
+    float px = (float)(sx + sw / 2.0f), py = (float)(sy); // Center of rotation
+
+    // If the sprite default is facing right, we rotate it by 'angle'
+    // If the sprite is moving left, atan2 will give +/- PI, which flips it correctly.
+    XFORM rot = { cosA, sinA, -sinA, cosA, px - px * cosA + py * sinA, py - px * sinA - py * cosA };
+    
+    XFORM combined;
+    CombineTransform(&combined, &rot, &xo);
+    SetWorldTransform(hdc, &combined);
+
+    m_imgBullet.TransparentBlt(hdc, sx - sw / 2, sy - sh / 2, sw, sh, 0, 0, imgW, imgH, RGB(0, 0, 0));
+
+    SetWorldTransform(hdc, &xo);
+    SetGraphicsMode(hdc, om);
 }

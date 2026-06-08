@@ -5,6 +5,7 @@
 #include <map>
 #include <atomic>
 #include "../Objects/Door.h"
+#include "../Objects/GlassDome.h"
 
 class StageManager {
 public:
@@ -16,6 +17,7 @@ public:
 
     struct StageData {
         std::vector<Door> doors;
+        std::vector<GlassDome> glassDomes;
         POINT playerStart;
         std::vector<RECT> clearZones;
         std::vector<EnemySpawnInfo> enemySpawns;
@@ -37,6 +39,7 @@ public:
     static void ReleaseAssets();
     static void Render(HDC hDC, class Gdiplus::Graphics* g, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo = false);
     static int UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale);
+    static void UpdateGlassDomes(bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime);
 
 
     static int GetMapWidth() { return m_imgMap == nullptr || m_imgMap->IsNull() ? 0 : m_imgMap->GetWidth(); }
@@ -53,6 +56,7 @@ public:
     static float GetStageLimitTime() { return m_stageLimitTime; }
     static StageData& GetStageData(int stage) { return m_stageDataMap[stage]; }
     static std::vector<Door>* GetCurrentDoors() { return m_pCurrentDoors; }
+    static std::vector<GlassDome>* GetCurrentGlassDomes() { return m_pCurrentGlassDomes; }
 
 private:
     static void ProcessStage(int stage);
@@ -70,6 +74,7 @@ private:
     static CImage m_imgSkylineClouds;
     
     static std::vector<Door>* m_pCurrentDoors;
+    static std::vector<GlassDome>* m_pCurrentGlassDomes;
     static POINT m_playerStart;
     static std::vector<RECT> m_clearZones;
     static float m_stageLimitTime;

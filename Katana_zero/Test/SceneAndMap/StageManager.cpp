@@ -15,6 +15,7 @@ CImage* StageManager::m_imgObjMap = nullptr;
 CImage StageManager::m_imgSkylineBlack;
 CImage StageManager::m_imgSkylineClouds;
 std::vector<Door>* StageManager::m_pCurrentDoors = nullptr;
+std::vector<GlassDome>* StageManager::m_pCurrentGlassDomes = nullptr;
 POINT StageManager::m_playerStart = { 0, 0 };
 std::vector<RECT> StageManager::m_clearZones;
 float StageManager::m_stageLimitTime = 60.0f;
@@ -29,16 +30,18 @@ void StageManager::ProcessStage(int stage) {
     CImage& objMap = m_objMapImages[stage];
 
     data.doors.clear();
+    data.glassDomes.clear();
     data.clearZones.clear();
     data.enemySpawns.clear();
     data.playerStart = { 100, 100 };
     data.stageLimitTime = (stage == 1) ? 30.0f : 60.0f;
 
     auto IsColorMatch = [](BYTE r, BYTE g, BYTE b, int tr, int tg, int tb) {
-        return abs((int)r - tr) < 40 && abs((int)g - tg) < 40 && abs((int)b - tb) < 40;
+        return abs((int)r - tr) < 60 && abs((int)g - tg) < 60 && abs((int)b - tb) < 60;
     };
 
     // --- 1. Process colMap for Player Start and Clear Zones ---
+// ... (lines 45-90) ...
     if (!colMap.IsNull() && colMap.IsDIBSection()) {
         int w = colMap.GetWidth();
         int h = colMap.GetHeight();
@@ -77,7 +80,7 @@ void StageManager::ProcessStage(int stage) {
         }
     }
 
-    // --- 2. Process objMap for Entities (Enemies, Doors) ---
+    // --- 2. Process objMap for Entities (Enemies, Doors, GlassDomes) ---
     if (!objMap.IsNull() && objMap.IsDIBSection()) {
         int w = objMap.GetWidth();
         int h = objMap.GetHeight();
@@ -125,17 +128,36 @@ void StageManager::ProcessStage(int stage) {
                         BYTE* pN = pRow + ((x + rectW) * bpp);
                         if (IsColorMatch(pN[2], pN[1], pN[0], 255, 0, 255)) rectW++; else break;
                     }
+                    
+                    bool foundType = false;
                     if (y + 1 < h) {
-                        BYTE* pSubRow = pBits + ((y + 1) * pitch) + (x * bpp);
-                        BYTE sr2 = pSubRow[2], sg2 = pSubRow[1], sb2 = pSubRow[0];
-                        if (IsColorMatch(sr2, sg2, sb2, 255, 0, 0)) { // Door
-                            while (y + rectH < h) {
-                                BYTE* pNRow = pBits + ((y + rectH) * pitch) + (x * bpp);
-                                if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 255, 0, 0)) rectH++; else break;
+                        // PINK 라인 아래의 전체 너비를 검사하여 타입 확인
+                        for (int rx = x; rx < x + rectW; rx++) {
+                            BYTE* pSubPixel = pBits + ((y + 1) * pitch) + (rx * bpp);
+                            BYTE sb2 = pSubPixel[0], sg2 = pSubPixel[1], sr2 = pSubPixel[2];
+                            
+                            if (IsColorMatch(sr2, sg2, sb2, 255, 0, 0)) { // Door (Red)
+                                while (y + rectH < h) {
+                                    BYTE* pNRow = pBits + ((y + rectH) * pitch) + (rx * bpp);
+                                    if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 255, 0, 0)) rectH++; else break;
+                                }
+                                data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                                foundType = true; break;
+                            } else if (IsColorMatch(sr2, sg2, sb2, 0, 0, 255)) { // GlassDome (Blue)
+                                while (y + rectH < h) {
+                                    BYTE* pNRow = pBits + ((y + rectH) * pitch) + (rx * bpp);
+                                    if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 0, 0, 255)) rectH++; else break;
+                                }
+                                data.glassDomes.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                                foundType = true; break;
                             }
-                            data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
-                            for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
                         }
+                    }
+                    if (foundType) {
+                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
+                    } else {
+                        // 타입을 찾지 못했더라도 해당 핑크 라인은 건너뜀
+                        for (int rx = x; rx < x + rectW; rx++) visited[y * w + rx] = true;
                     }
                 }
             }
@@ -156,10 +178,13 @@ void StageManager::Reset() {
     if (m_pCurrentDoors) {
         for (auto& d : *m_pCurrentDoors) d.Reset();
     }
+    if (m_pCurrentGlassDomes) {
+        for (auto& gd : *m_pCurrentGlassDomes) gd.Reset();
+    }
 }
 
 void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
-    for (int i = 1; i <= 2; ++i) {
+    for (int i = 1; i <= 5; ++i) {
         TCHAR mapPath[256], colPath[256], objPath[256];
         wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), i, i);
         wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), i, i);
@@ -171,16 +196,16 @@ void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
         
         ProcessStage(i);
 
-        if (i == 2) {
-            StageData& data = m_stageDataMap[2];
-            data.camFixedY = 0.0f; 
+        if (i >= 2 && i <= 5) {
+            StageData& data = m_stageDataMap[i];
+            data.camFixedY = -1.0f; // 음수값으로 설정하여 카메라 Y축 고정 해제 (플레이어 추적)
             data.mapScale = 1.1f; 
             data.mapRenderOffsetY = 0.0f;
         }
 
         if (pProgress) {
-            *pProgress = 60 + (i * 10);
-            Sleep(100);
+            *pProgress = 60 + (i * 5); // 진행률 분배 조정
+            Sleep(50);
         }
     }
 
@@ -193,6 +218,7 @@ void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
     }
 
     Door::LoadAssets();
+    GlassDome::LoadAssets();
 
     if (pProgress) {
         *pProgress = 90;
@@ -212,6 +238,7 @@ void StageManager::LoadAssets(int stage) {
 
         StageData& data = m_stageDataMap[stage];
         m_pCurrentDoors = &data.doors;
+        m_pCurrentGlassDomes = &data.glassDomes;
         m_playerStart = data.playerStart;
         m_clearZones = data.clearZones;
         m_stageLimitTime = data.stageLimitTime;
@@ -230,6 +257,7 @@ void StageManager::ReleaseAssets() {
     m_imgSkylineBlack.Destroy();
     m_imgSkylineClouds.Destroy();
     Door::ReleaseAssets();
+    GlassDome::ReleaseAssets();
 }
 
 int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale) {
@@ -243,6 +271,14 @@ int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float
         }
     }
     return -1;
+}
+
+void StageManager::UpdateGlassDomes(bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime) {
+    if (m_pCurrentGlassDomes) {
+        for (auto& gd : *m_pCurrentGlassDomes) {
+            gd.Update(attackHitX, attackHitY, attackHitW, attackHitH, isAttacking, currentTime);
+        }
+    }
 }
 
 void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo) {
@@ -319,6 +355,12 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
 
     if (!isFullMapView) {
         EffectManager::RenderMapBlood(hDC, g, camX, camY, renderMapScale);
+    }
+
+    if (m_pCurrentGlassDomes) {
+        for (auto& gd : *m_pCurrentGlassDomes) {
+            gd.Render(hDC, camX, camY, mapScale, showDebugRect);
+        }
     }
 
     if (m_pCurrentDoors) {

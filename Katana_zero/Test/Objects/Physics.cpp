@@ -1,6 +1,19 @@
 ﻿#include "Physics.h"
 
 int GetCollisionType(int targetX, int targetY) {
+    // 1. Check GlassDomes first (Platform logic)
+    auto domes = StageManager::GetCurrentGlassDomes();
+    if (domes) {
+        for (const auto& gd : *domes) {
+            if (!gd.IsBroken()) {
+                if (targetX >= gd.GetX() && targetX <= gd.GetX() + gd.GetW() &&
+                    targetY >= gd.GetY() && targetY <= gd.GetY() + gd.GetH()) {
+                    return 2; // Treat as platform (type 2)
+                }
+            }
+        }
+    }
+
     CImage& imgColMap = StageManager::GetColMap();
     if (imgColMap.IsNull()) return 1;
     // 맵 범위를 벗어난 경우 처리
@@ -96,14 +109,14 @@ void ResolveMapCollision(float& x, float& y, float w, float h, float oldX, float
         y = oldY;
     }
     
-    // Final emergency push-out if still stuck
+    // Final emergency push-out if still stuck (can happen if oldX/oldY was also slightly inside)
     if (CheckMapCollision(x, y, w, h)) {
-        // Try to find a free spot nearby
-        for (int i = 1; i <= 5; i++) {
-            if (!CheckMapCollision(x - i, y, w, h)) { x -= i; return; }
-            if (!CheckMapCollision(x + i, y, w, h)) { x += i; return; }
-            if (!CheckMapCollision(x, y - i, w, h)) { y -= i; return; }
-            if (!CheckMapCollision(x, y + i, w, h)) { y += i; return; }
+        // Try to find a free spot nearby, prioritizing Up (for floor clipping)
+        for (int i = 1; i <= 32; i++) {
+            if (!CheckMapCollision(x, y - (float)i, w, h)) { y -= (float)i; return; }
+            if (!CheckMapCollision(x - (float)i, y, w, h)) { x -= (float)i; return; }
+            if (!CheckMapCollision(x + (float)i, y, w, h)) { x += (float)i; return; }
+            if (!CheckMapCollision(x, y + (float)i, w, h)) { y += (float)i; return; }
         }
     }
 }

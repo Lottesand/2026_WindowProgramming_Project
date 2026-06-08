@@ -176,7 +176,7 @@ void Game::Update() {
                 if (m_transitionToNextStage) {
                     m_gameMode = GameMode::PLAYING;
                     m_player.ClearSnapshots();
-                    if (m_currentStage < 2) LoadStage(m_currentStage + 1);
+                    if (m_currentStage < 5) LoadStage(m_currentStage + 1);
                     else LoadStage(1);
                     m_transitionToNextStage = false;
                 }
@@ -222,9 +222,9 @@ void Game::Update() {
     if (anyAlive) {
         m_isStageCleared = false;
     } else {
+        // 적이 한 마리라도 스폰되었고 모두 죽었을 때만 클리어 처리
+        // (적이 아예 없는 빈 스테이지에서 시작하자마자 GO가 뜨는 것을 방지하여 이전 스테이지의 판정이 넘어왔다는 오해를 막음)
         if (activeEnemies > 0) {
-            m_isStageCleared = true;
-        } else if (StageManager::GetStageData(m_currentStage).enemySpawns.empty()) {
             m_isStageCleared = true;
         }
     }
@@ -353,6 +353,9 @@ void Game::Update() {
 
     if (Input::GetKeyDown('1')) LoadStage(1);
     if (Input::GetKeyDown('2')) LoadStage(2);
+    if (Input::GetKeyDown('3')) LoadStage(3);
+    if (Input::GetKeyDown('4')) LoadStage(4);
+    if (Input::GetKeyDown('5')) LoadStage(5);
 
     static bool prevR_local = false; bool cuR = GetAsyncKeyState('R') & 0x8000;
     if (cuR && !prevR_local) {
@@ -455,6 +458,24 @@ void Game::Update() {
             float cX = m_player.GetX() + m_player.GetColW() / 2.0f, cY = m_player.GetY() + m_player.GetColH() / 2.0f;
             float hX = cX + m_player.GetAttackDirX() * 40.0f - 40.0f, hY = cY + m_player.GetAttackDirY() * 40.0f - 30.0f;
             RECT aR = { (int)hX, (int)hY, (int)(hX + 80.0f), (int)(hY + 60.0f) };
+            
+            // GlassDome 파괴 로직 (하단 공격 검사)
+            if (m_player.GetAttackDirY() > 0.5f) { // 마우스가 캐릭터보다 아래쪽을 향할 때
+                auto glassDomes = StageManager::GetCurrentGlassDomes();
+                if (glassDomes) {
+                    for (auto& gd : *glassDomes) {
+                        if (!gd.IsBroken()) {
+                            RECT gdR = { (int)gd.GetX(), (int)gd.GetY(), (int)(gd.GetX() + gd.GetW()), (int)(gd.GetY() + gd.GetH()) };
+                            RECT ol;
+                            if (IntersectRect(&ol, &aR, &gdR)) {
+                                gd.Break(ct);
+                                Camera::AddShake(2.0f); // 돔이 깨질 때 약간의 화면 흔들림
+                            }
+                        }
+                    }
+                }
+            }
+
             for (int i = 0; i < (int)m_enemies.size(); i++) {
                 Enemy* e = m_enemies[i];
                 if (e && e->GetIsAlive()) {
@@ -466,14 +487,26 @@ void Game::Update() {
                         float ex = e->GetX() + e->GetColW() / 2.0f, ey = e->GetY() + e->GetColH() / 2.0f;
                         float dx = ex - cX, dy = ey - cY, dist = (std::max)(1.0f, (float)sqrt(dx * dx + dy * dy));
                         float ux = dx / dist, uy = dy / dist;
+                        
+                        // 타격 이펙트는 적 중심에서 타격점 반대 방향으로 발생하도록 유지
                         EffectManager::AddNeonTrail(ex, ey, ux, uy, atan2(uy, ux));
                         EffectManager::AddHitVFX(ex, ey, atan2(uy, ux), ct);
                         Camera::AddPush(ux * 30.0f, uy * 30.0f); Camera::AddShake(1.0f);
                         
-                        // Knockback with dramatic force
-                        float kbPowerX = 30.0f;
-                        float kbPowerY = -15.0f; // Always fly up slightly
-                        EffectManager::AddPendingHit(e, m_player.GetDashDirX() * kbPowerX, (m_player.GetDashDirY() * 20.0f) + kbPowerY);
+                        // 넉백 로직: 플레이어가 클릭하여 검을 휘두른 방향(AttackDir)을 직접 사용
+                        float kbPower = 25.0f; // 40.0f에서 25.0f로 넉백 힘 감소
+                        float attackDx = m_player.GetAttackDirX();
+                        float attackDy = m_player.GetAttackDirY();
+                        
+                        float kvx = attackDx * kbPower;
+                        float kvy = attackDy * kbPower;
+                        
+                        // 수평 베기이거나 아래로 내리꽂는 공격일 경우, 땅에 쓸리지 않게 위로 살짝 띄워줌
+                        if (kvy > -5.0f) kvy -= 8.0f; // 위로 띄워주는 보정값도 살짝 줄임
+                        
+                        // 지연 처리(AddPendingHit)를 제거하고 즉시 데미지/넉백 적용
+                        // 플레이어가 대시 중이라 위치가 계속 변하므로, 지연 처리를 하면 엉뚱한 위치에서 날아감
+                        e->OnTakeDamage(kvx, kvy);
                     }
                 }
             }
@@ -482,6 +515,7 @@ void Game::Update() {
     } else if (!m_isTimePaused) laF = -1;
     if (!m_isTimePaused) {
         int openedDoorIdx = StageManager::UpdateDoors(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), (GetAsyncKeyState('A') & 0x8000) != 0, (GetAsyncKeyState('D') & 0x8000) != 0, m_player.GetState() == PlayerState::PS_ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct, ts);
+        StageManager::UpdateGlassDomes(m_player.GetState() == PlayerState::PS_ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct);
         if (openedDoorIdx != -1) {
             m_player.AddReplayEvent(Player::ReplayEvent::DOOR_OPEN, openedDoorIdx);
             // ?뚮젅?댁뼱媛 怨듦꺽 以묒씠 ?꾨땲?덈떎硫?臾몄쓣 諛쒕줈 李⑥꽌 ?щ뒗 ?좊땲硫붿씠???ъ깮

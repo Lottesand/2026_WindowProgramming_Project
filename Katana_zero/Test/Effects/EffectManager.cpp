@@ -216,8 +216,8 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
         else vI = &m_imgVfxHit[f];
 
         if (vI && !vI->IsNull()) {
-            float customMultiplier = v.isSlash ? 1.5f : 1.8f;
-            if (v.isGunSpark) customMultiplier = 1.5f; // Reduced size and colored assets used
+            float customMultiplier = v.isSlash ? 1.5f : 1.1f; // Reduced from 1.8f to 1.1f
+            if (v.isGunSpark) customMultiplier = 1.2f; // Adjusted for gunspark as well
             
             float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale) * customMultiplier;
             int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
@@ -242,7 +242,20 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             float dX, dY;
             if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
             else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
-            if (vW > 0 && vH > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
+            
+            int oldMode = SetGraphicsMode(hDC, GM_ADVANCED);
+            XFORM xF, oldXF; GetWorldTransform(hDC, &oldXF);
+            
+            float angle = v.angle;
+            float cosA = cos(angle), sinA = sin(angle);
+            XFORM rot = { cosA, sinA, -sinA, cosA, dX, dY };
+            CombineTransform(&xF, &rot, &oldXF);
+            SetWorldTransform(hDC, &xF);
+
+            if (vW > 0 && vH > 0) vI->Draw(hDC, -vW / 2, -vH, vW, vH);
+            
+            SetWorldTransform(hDC, &oldXF);
+            SetGraphicsMode(hDC, oldMode);
         }
     }
     for (const auto& v : m_dustCloudVFXs) {
@@ -327,8 +340,8 @@ void EffectManager::AddJumpCloudVFX(float x, float y, DWORD currentTime, float a
     JumpCloudVFX c; c.x = x; c.y = y; c.angle = angle; c.currentFrame = 0; c.maxFrame = 4; c.lastTime = currentTime; m_jumpCloudVFXs.push_back(c);
 }
 
-void EffectManager::AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime) {
-    static int bc = 0; DustCloudVFX c; c.x = x; c.y = y; c.isFacingRight = isFacingRight; c.currentFrame = 0; c.maxFrame = 7;
+void EffectManager::AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime, float angle) {
+    static int bc = 0; DustCloudVFX c; c.x = x; c.y = y; c.isFacingRight = isFacingRight; c.angle = angle; c.currentFrame = 0; c.maxFrame = 7;
     c.startTick = currentTime + (bc * 60); c.lastTime = c.startTick; m_dustCloudVFXs.push_back(c); bc = (bc + 1) % 3;
 }
 

@@ -36,6 +36,7 @@ struct JumpCloudVFX {
 
 struct DustCloudVFX {
     float x, y;
+    float angle;
     int currentFrame;
     int maxFrame;
     DWORD lastTime;
@@ -90,7 +91,7 @@ public:
     static void AddHitVFX(float x, float y, float angle, DWORD currentTime);
     static void AddGunSparkVFX(float x, float y, float angle, DWORD currentTime);
     static void AddJumpCloudVFX(float x, float y, DWORD currentTime, float angle = 0.0f);
-    static void AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime);
+    static void AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime, float angle = 0.0f);
     static void AddLandCloudVFX(float x, float y, DWORD currentTime);
     static void AddPendingHit(class Enemy* target, float kvx, float kvy);
     static void AddBloodSplatter(float x, float y, float vx, float vy, float angle, DWORD currentTime);
@@ -130,4 +131,5 @@ private:
     static constexpr int m_neonTrailLife = 6;
     static constexpr float m_slashWidth = 10.0f;
 };
+
 
