@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include <deque>
+#include "Item.h"
 
 // ?꾩뿭 蹂???좎뼵
 extern int g_playerAfterImageInterval;
@@ -58,7 +59,7 @@ private:
     float m_attackTargetX, m_attackTargetY, m_attackDirX, m_attackDirY, m_dashDirX, m_dashDirY, m_attackAngle, m_attackHitW, m_attackHitH, m_attackHitOffset;
 
     bool m_hasLeapedInAir, m_isAttackClicked;
-
+    
     struct AfterImageData {
         float x, y;
         PlayerState state;
@@ -156,4 +157,11 @@ public:
     bool IsGodMode() const { return m_isGodMode; }
     float m_bloodDistance;
     void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f);
+
+    // Item management
+    class Item* m_pHeldItem = nullptr;
+    float m_itemPopupTimer = 0.0f;
+    ItemType m_popupItemType;
+    void PickUpItem(class Item* item);
+    void ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
 };

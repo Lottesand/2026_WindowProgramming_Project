@@ -8,6 +8,7 @@
 #include <map>
 #include <deque>
 #include <cstring>
+#include <cmath>
 
 int g_playerAttackCooldown = 130; 
 int g_playerAttackDuration = 2;
@@ -106,6 +107,55 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     }
     m_snapshots.push_back(snap);
 
+    // Item interaction
+    bool curR = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    static bool prR = false;
+    
+    bool pickupHappened = false;
+    auto items = StageManager::GetCurrentItems();
+    if (items) {
+        for (auto it = items->begin(); it != items->end(); ) {
+            if (it->GetState() == ItemState::ON_GROUND) {
+                float dx = it->GetX() - (m_x + m_colW / 2.0f);
+                float dy = it->GetY() - (m_y + m_colH / 2.0f);
+                float dist = sqrt(dx * dx + dy * dy);
+                
+                // 디버그: 거리 출력
+                // TCHAR buf[128]; wsprintf(buf, TEXT("Dist: %f, Auto: %d\n"), dist, (m_pHeldItem == nullptr && dist < 30.0f)); OutputDebugString(buf);
+
+                // 자동 습득: 들고 있는 아이템이 없을 때만 가까이 가면 습득
+                bool canAutoPickup = (m_pHeldItem == nullptr && dist < 30.0f);
+                // 수동 습득: 들고 있는 아이템이 있어도 우클릭 시 교체 가능 (200px)
+                bool canManualPickup = (curR && !prR && dist < 200.0f);
+
+                if (canAutoPickup || canManualPickup) {
+                    Item* pickedItem = new Item(*it); 
+                    PickUpItem(pickedItem);
+                    it = items->erase(it);
+                    pickupHappened = true;
+                    continue; // erase 후에는 it++를 하지 않음
+                }
+
+                // 화살표 표시 (항상 가능)
+                if (dist < 200.0f) {
+                    it->SetShowIndicator(true);
+                } else {
+                    it->SetShowIndicator(false);
+                }
+                it++;
+            } else {
+                it++;
+            }
+        }
+    }
+
+    // 아이템 습득이 일어나지 않았고, 아이템을 들고 있는 상태에서 우클릭 시 던지기
+    if (curR && !prR && !pickupHappened && m_pHeldItem) {
+        ThrowItem(mouseX, mouseY, camX, camY, rs, ox, oy, fv);
+    }
+    prR = curR;
+    
+    // Original update code continues...
     bool isW = false, isA = false, isS = false, isD = false, isJ = false;
     if (!isDead) { isW = GetAsyncKeyState('W') & 0x8000; isA = GetAsyncKeyState('A') & 0x8000; isS = GetAsyncKeyState('S') & 0x8000; isD = GetAsyncKeyState('D') & 0x8000; isJ = (GetAsyncKeyState('W') & 0x8000) || (GetAsyncKeyState(VK_SPACE) & 0x8000); }
     int twd = 0; if (CheckSpecificCollision(m_x - 3.0f, m_y, m_colW, m_colH, 3)) twd = -1; else if (CheckSpecificCollision(m_x + 3.0f, m_y, m_colW, m_colH, 3)) twd = 1;
@@ -115,6 +165,10 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     else { m_isSlowMo = false; m_canSlowMo = true; }
     if (!m_isSlowMo && m_batteryLevel < 11.0f) { m_batteryLevel += (11.0f / 11.0f) * dT; if (m_batteryLevel > 11.0f) m_batteryLevel = 11.0f; }
     float ts = m_isSlowMo ? 0.3f : 1.0f;
+
+    if (m_itemPopupTimer > 0) {
+        m_itemPopupTimer -= dT * ts;
+    }
 
     if (isDead && !m_isRewinding) {
         m_bloodDistance += (float)sqrt(m_vx * m_vx + m_vy * m_vy) * ts;
@@ -476,6 +530,53 @@ void Player::Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, fl
         bmpCache.clear();
     }
 
+    // 아이템 획득 팝업 렌더링
+    if (m_itemPopupTimer > 0) {
+        // 모든 아이템에 대해 인덱스 1 이미지를 사용
+        int imgIndex = 1;
+        
+        CImage& icon = Item::GetItemImage(m_popupItemType, imgIndex);
+        if (!icon.IsNull()) {
+            float vx, vy;
+            if (g_isFullMapView) {
+                float fsW = 1280.0f / (float)(mapW > 0 ? mapW : 1);
+                float fsH = 720.0f / (float)(mapH > 0 ? mapH : 1);
+                float fs = (fsW < fsH) ? fsW : fsH;
+                vx = m_x * fs + (1280.0f - mapW * fs) / 2.0f;
+                vy = m_y * fs + (720.0f - mapH * fs) / 2.0f;
+                pFS = fs;
+            } else {
+                vx = (m_x - camX) * mapScale;
+                vy = (m_y - camY) * mapScale;
+                pFS = mapScale;
+            }
+
+            int iw = (int)(icon.GetWidth() * pFS * 1.2f);
+            int ih = (int)(icon.GetHeight() * pFS * 1.2f);
+            int ix = (int)(vx + (40.0f * pFS) / 2.0f - iw / 2.0f);
+            
+            // 둥실거리는 효과와 서서히 위로 올라가는 효과
+            float upOffset = (1.0f - m_itemPopupTimer) * 30.0f; 
+            int iy = (int)(vy - ih - 20.0f * pFS - upOffset);
+
+            void* bits = icon.GetBits();
+            if (bits) {
+                Gdiplus::Bitmap bmp(icon.GetWidth(), icon.GetHeight(), icon.GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+                Gdiplus::ImageAttributes at;
+                float alpha = (m_itemPopupTimer > 0.8f) ? 1.0f : m_itemPopupTimer / 0.8f;
+                Gdiplus::ColorMatrix mat = {
+                    1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, alpha, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+                };
+                at.SetColorMatrix(&mat);
+                g->DrawImage(&bmp, Gdiplus::RectF((float)ix, (float)iy, (float)iw, (float)ih), 0, 0, (float)icon.GetWidth(), (float)icon.GetHeight(), Gdiplus::UnitPixel, &at);
+            }
+        }
+    }
+
     if (g_showDebugRect) {
         float vx, vy; 
         if (g_isFullMapView) { 
@@ -535,8 +636,66 @@ bool Player::IsDeathAnimationFinished() const {
     return m_state == PlayerState::PS_DEAD_GROUND && m_currentFrame >= 5; 
 }
 
+void Player::PickUpItem(Item* item) {
+    if (m_pHeldItem) {
+        // 기존 아이템 버리기 (삭제 또는 맵에 드롭)
+        delete m_pHeldItem;
+        m_pHeldItem = nullptr;
+    }
+    m_pHeldItem = item;
+    item->OnPickUp();
+
+    // 아이템 획득 팝업 설정
+    m_itemPopupTimer = 1.0f; // 1초 동안 표시
+    m_popupItemType = item->GetType();
+}
+
+#include "../Core/Input.h"
+#include "../SceneAndMap/Camera.h"
+// ... (rest of includes)
+
+void Player::ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
+    if (!m_pHeldItem) return;
+    
+    // 마우스 위치 계산 (카메라 오프셋 고려)
+    float wx = (mouseX - ox) / rs, wy = (mouseY - oy) / rs;
+    if (!fv) { wx += camX; wy += camY; }
+    
+    // 던지는 시작 위치 (플레이어 중심에서 약간 오프셋을 주어 즉시 충돌 방지)
+    float spawnX = m_x + m_colW / 2.0f + (m_isFacingRight ? 20.0f : -20.0f);
+    float spawnY = m_y + m_colH / 2.0f;
+    
+    float dirX = wx - spawnX;
+    float dirY = wy - spawnY;
+    float dist = std::sqrt(dirX * dirX + dirY * dirY);
+    
+    float vx = 0, vy = 0;
+    if (dist > 1.0f) {
+        vx = (dirX / dist) * 25.0f;
+        vy = (dirY / dist) * 25.0f;
+    } else {
+        vx = m_isFacingRight ? 25.0f : -25.0f;
+        vy = -8.0f;
+    }
+    
+    // 먼저 아이템을 리스트에 추가
+    auto items = StageManager::GetCurrentItems();
+    if (items) {
+        items->push_back(*m_pHeldItem);
+        // 리스트에 추가된 아이템의 상태를 직접 수정하여 복사 문제 방지
+        items->back().OnThrow(spawnX, spawnY, vx, vy);
+    }
+    
+    delete m_pHeldItem; 
+    m_pHeldItem = nullptr;
+}
+
 void Player::OnTakeDamage(float damage, float kvx, float kvy) {
     if (!m_isGodMode && !IsDead() && m_state != PlayerState::PS_ROLL) {
+        if (m_pHeldItem) {
+            // Drop item when taking damage
+            m_pHeldItem = nullptr;
+        }
         SetState(PlayerState::PS_DEAD);
         if (kvx != 0.0f || kvy != 0.0f) {
             m_vx = kvx;

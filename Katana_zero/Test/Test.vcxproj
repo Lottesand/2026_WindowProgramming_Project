@@ -135,6 +135,7 @@
     <ClCompile Include="Objects\Bullet.cpp" />
     <ClCompile Include="Objects\Door.cpp" />
     <ClCompile Include="Objects\Enemy.cpp" />
+    <ClCompile Include="Objects\Item.cpp" />
     <ClCompile Include="Objects\Physics.cpp" />
     <ClCompile Include="Objects\Player.cpp" />
     <ClCompile Include="SceneAndMap\Camera.cpp" />

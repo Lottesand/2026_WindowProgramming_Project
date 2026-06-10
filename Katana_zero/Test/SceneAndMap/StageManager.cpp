@@ -1,5 +1,6 @@
 ﻿#include "StageManager.h"
 #include "../Effects/EffectManager.h"
+#include "../Objects/Item.h"
 #include <algorithm>
 #include <atomic>
 
@@ -13,11 +14,14 @@ CImage* StageManager::m_imgColMap = nullptr;
 CImage StageManager::m_imgSkylineBlack;
 CImage StageManager::m_imgSkylineClouds;
 std::vector<Door>* StageManager::m_pCurrentDoors = nullptr;
+std::vector<Enemy*> StageManager::m_currentEnemies;
+std::vector<Item>* StageManager::m_pCurrentItems = nullptr;
 POINT StageManager::m_playerStart = { 0, 0 };
 std::vector<RECT> StageManager::m_clearZones;
 float StageManager::m_stageLimitTime = 60.0f;
 
 void StageManager::Init() {
+    Item::LoadAssets();
 }
 
 void StageManager::ProcessStage(int stage) {
@@ -25,9 +29,22 @@ void StageManager::ProcessStage(int stage) {
     CImage& colMap = m_colMapImages[stage];
 
     data.doors.clear();
+    data.items.clear();
     data.clearZones.clear();
+    data.enemySpawns.clear(); // 적 스폰 정보도 초기화
     data.playerStart = { 100, 100 };
+    
+    // 아이템 배치 초기화 (테스트용)
+    data.items.emplace_back(ItemType::BEER_BOTTLE, 300.0f, 400.0f);
+    data.items.emplace_back(ItemType::BUTCHER_KNIFE, 400.0f, 400.0f);
+    data.items.emplace_back(ItemType::BUST, 500.0f, 400.0f);
+    data.items.emplace_back(ItemType::POTTED_PLANT, 600.0f, 400.0f);
+    data.items.emplace_back(ItemType::KNIFE, 700.0f, 400.0f);
+
     data.stageLimitTime = (stage == 1) ? 30.0f : 60.0f;
+
+    // 포인터 강제 갱신
+    m_pCurrentItems = &data.items;
 
     if (!colMap.IsNull() && colMap.IsDIBSection()) {
         int w = colMap.GetWidth();
@@ -154,6 +171,12 @@ void StageManager::Reset() {
     if (m_pCurrentDoors) {
         for (auto& d : *m_pCurrentDoors) d.Reset();
     }
+    // 현재 스테이지 데이터를 다시 불러와 아이템 리스트 초기화
+    if (m_pCurrentItems) {
+        m_pCurrentItems->clear();
+        // m_pCurrentItems가 가리키는 데이터는 StageData 내부에 있으므로
+        // ProcessStage에서 갱신한 데이터가 반영되도록 함
+    }
 }
 
 void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
@@ -203,6 +226,7 @@ void StageManager::LoadAssets(int stage) {
         
         StageData& data = m_stageDataMap[stage];
         m_pCurrentDoors = &data.doors;
+        m_pCurrentItems = &data.items;
         m_playerStart = data.playerStart;
         m_clearZones = data.clearZones;
         m_stageLimitTime = data.stageLimitTime;
@@ -234,8 +258,26 @@ int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float
     return -1;
 }
 
+void StageManager::UpdateItems(float ts, Player& player) {
+    if (m_pCurrentItems != nullptr) {
+        // 적 목록을 안전하게 가져옴
+        const std::vector<Enemy*>& enemies = m_currentEnemies;
+             
+        for (auto& item : *m_pCurrentItems) {
+            item.Update(ts, player, enemies);
+        }
+    }
+}
+
 void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo) {
     if (!hDC) return;
+
+    // [최상단 강제 디버그] Render 호출 확인
+    TCHAR status[100];
+    wsprintf(status, TEXT("Render Called. ItemsPtr: %s"), m_pCurrentItems ? TEXT("Valid") : TEXT("NULL"));
+    SetBkMode(hDC, TRANSPARENT);
+    SetTextColor(hDC, RGB(255, 255, 0));
+    TextOut(hDC, 10, 150, status, lstrlen(status));
 
     if (isSlowMo) {
         // ?щ줈??紐⑤뱶 ??諛곌꼍??寃??됱쑝濡?梨꾩?
@@ -324,6 +366,12 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
                 cFX = (virtualWidth - mapW * cFS) / 2.0f; cFY = (virtualHeight - mapH * cFS) / 2.0f;
             }
             d.Render(hDC, camX, camY, mapScale, isFullMapView, cFS, cFX, cFY);
+        }
+    }
+
+    if (m_pCurrentItems) {
+        for (auto& item : *m_pCurrentItems) {
+            item.Render(hDC, g, camX, camY, mapScale);
         }
     }
 }

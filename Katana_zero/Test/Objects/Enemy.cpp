@@ -122,7 +122,9 @@ void Enemy::Reset() {
     m_bloodDistance = 0.0f; m_alertStartTime = 0; m_exclaimFrame = 0;
 }
 
-void Enemy::OnTakeDamage(float kvx, float kvy) { if (!m_isImmortal) { m_isAlive = false; m_State = EnemyState::ES_DEAD; m_vx = kvx; m_vy = kvy; m_CurrentFrame = 0; m_bloodDistance = 0.0f; } }
+void Enemy::OnTakeDamage(float kvx, float kvy) { 
+    OutputDebugString(TEXT("OnTakeDamage called\n"));
+    if (!m_isImmortal) { m_isAlive = false; m_State = EnemyState::ES_DEAD; m_vx = kvx; m_vy = kvy; m_CurrentFrame = 0; m_bloodDistance = 0.0f; } }
 void Enemy::ApplyKnockback(float vx) { m_knockbackVx = vx; m_vx = vx; }
 
 void Enemy::Update(float ts, const Player& player) {
@@ -258,6 +260,7 @@ void Gangster::Update(float ts, const Player& player) {
     if (ct - m_LastTime >= (DWORD)(100.0f / ts)) { m_CurrentFrame++; m_LastTime = ct; }
 }
 void Gangster::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) {
+    if (!m_isAlive) OutputDebugString(TEXT("Gangster Rendering while dead\n"));
     if (!m_isAlive && m_ActionState != GangsterAction::GA_HURT_FLY && m_ActionState != GangsterAction::GA_HURT_GROUND) return;
     
     // ==========================================================

@@ -23,6 +23,7 @@ struct HitVFX {
     int maxFrame;
     DWORD lastTime;
     bool isSlash;
+    bool isBlunt;
 };
 
 struct JumpCloudVFX {
@@ -57,10 +58,25 @@ struct BloodSplatterVFX {
     DWORD startTime;
 };
 
+struct GlassShardVFX {
+    float x, y;
+    float vx, vy;
+    float angle;
+    float rotation;
+    int life;
+};
+
 struct PendingHit {
     class Enemy* target;
     float kvx, kvy;
     int remainingFrames;
+};
+
+struct HitSpriteVFX {
+    float x, y;
+    float angle;
+    int life;
+    int maxLife;
 };
 
 struct MapBlood {
@@ -85,6 +101,9 @@ public:
     static void AddJumpCloudVFX(float x, float y, DWORD currentTime, float angle = 0.0f);
     static void AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime);
     static void AddLandCloudVFX(float x, float y, DWORD currentTime);
+    static void AddHitSpriteVFX(float x, float y, float angle);
+    static void AddGlassShards(float x, float y);
+    static void AddBluntImpactVFX(float x, float y, float angle, DWORD currentTime);
     static void AddPendingHit(class Enemy* target, float kvx, float kvy);
     static void AddBloodSplatter(float x, float y, float vx, float vy, float angle, DWORD currentTime);
     static void AddMapBlood(float x, float y, float angle, bool isDirectional = true);
@@ -98,12 +117,16 @@ private:
     static std::vector<JumpCloudVFX> m_jumpCloudVFXs;
     static std::vector<DustCloudVFX> m_dustCloudVFXs;
     static std::vector<LandCloudVFX> m_landCloudVFXs;
+    static std::vector<GlassShardVFX> m_glassShardVFXs;
+    static std::vector<HitSpriteVFX> m_hitSprites;
     static std::vector<PendingHit> m_pendingHits;
     static std::vector<BloodSplatterVFX> m_bloodSplatters;
     static std::vector<MapBlood> m_mapBloods;
 
     static CImage m_imgVfxSlash[5];
     static CImage m_imgVfxHit[6];
+    static CImage m_imgVfxBluntImpact[6];
+    static CImage m_imgVfxItemTrail;
     static CImage m_imgVfxJumpCloud[4];
     static CImage m_imgVfxDustCloud[7];
     static CImage m_imgVfxLandCloud[7];

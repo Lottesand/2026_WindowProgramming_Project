@@ -104,7 +104,12 @@ void Game::LoadStage(int stage) {
     }
 
     StageManager::Init();
+    StageManager::ProcessStage(m_currentStage); // 스테이지 데이터(아이템 포함)를 새로 갱신
+    StageManager::LoadAssets(m_currentStage); // 아이템 포인터 재연결
+    
     SpawnEnemies();
+    // 적 목록을 안전하게 업데이트
+    StageManager::SetCurrentEnemies(m_enemies);
     Bullet::ClearAll();
     
     StageManager::StageData& data = StageManager::GetStageData(m_currentStage);
@@ -332,6 +337,8 @@ void Game::Update() {
 
             m_player.StartRewind(m_rewindSpeed); 
             StageManager::Reset(); 
+            StageManager::ProcessStage(m_currentStage);
+            StageManager::LoadAssets(m_currentStage);
             m_stageTimer = StageManager::GetStageLimitTime(); 
             Camera::StartRewindEffect(rewindDur); 
             EffectManager::Init(); 
@@ -357,6 +364,8 @@ void Game::Update() {
 
         m_player.StartRewind(m_rewindSpeed);
         StageManager::Reset();
+        StageManager::ProcessStage(m_currentStage);
+        StageManager::LoadAssets(m_currentStage);
         m_stageTimer = StageManager::GetStageLimitTime();
         Camera::StartRewindEffect(rewindDur);
         EffectManager::Init();
@@ -405,6 +414,7 @@ void Game::Update() {
     if (!m_isTimePaused) {
         m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
         Bullet::UpdateAll(ts, m_player);
+        StageManager::UpdateItems(ts, m_player);
         if (!m_player.IsDead()) {
             for (auto& e : m_enemies) if (e) e->Update(ts, m_player);
         }
@@ -673,7 +683,7 @@ void Game::Render(HDC hDC) {
     } else {
         if (!m_player.IsRewinding()) {
             bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished());
+            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_player.m_pHeldItem);
         }
 
         drawTransition(hMemDC);

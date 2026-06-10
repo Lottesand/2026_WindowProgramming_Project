@@ -1,5 +1,6 @@
 ﻿#include "UIManager.h"
 #include "../Objects/Enemy.h"
+#include "../Objects/Item.h"
 #include <gdiplus.h>
 #include <algorithm>
 
@@ -54,7 +55,7 @@ void UIManager::ReleaseAssets() {
     m_imgDeathBox.Destroy();
     m_imgTimeoutBox.Destroy();
 }
-void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage) {
+void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, class Item* pHeldItem) {
     if (!hDC) return;
 
     if (isDead && showDeathMessage) {
@@ -154,8 +155,21 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         }
     }
 
-    if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
-        m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+    if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0) {
+        int invX = virtualWidth - m_imgHudInven.GetWidth() * 2 - 40;
+        int invY = 0;
+        
+        // 아이템을 들고 있고 해당 아이템의 전용 인벤토리 이미지가 있다면 그것을 사용, 아니면 기본 인벤토리 이미지 사용
+        CImage* targetInvenImg = &m_imgHudInven;
+        if (pHeldItem) {
+            CImage& itemHudIcon = Item::GetHUDImage(pHeldItem->GetType());
+            if (!itemHudIcon.IsNull()) {
+                targetInvenImg = &itemHudIcon;
+            }
+        }
+
+        targetInvenImg->Draw(hDC, invX, invY, targetInvenImg->GetWidth() * 2, targetInvenImg->GetHeight() * 2);
+    }
 
     int mouseIconScale = 2, mouseIconY = 30, mouseIconX = virtualWidth - 110;
     if (!m_imgLeftClick.IsNull()) m_imgLeftClick.Draw(hDC, mouseIconX, mouseIconY, m_imgLeftClick.GetWidth() * mouseIconScale, m_imgLeftClick.GetHeight() * mouseIconScale);
