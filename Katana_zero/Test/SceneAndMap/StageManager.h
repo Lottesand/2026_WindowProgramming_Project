@@ -78,4 +78,5 @@ private:
     static POINT m_playerStart;
     static std::vector<RECT> m_clearZones;
     static float m_stageLimitTime;
+    static int m_currentStage;
 };

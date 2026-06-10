@@ -128,7 +128,7 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
     // GO UI Rendering
     if (isStageCleared && !isDead) {
         DWORD ct = GetTickCount();
-        if (ct - m_lastGoAnimTime > 150) { // 150ms per frame
+        if (ct - m_lastGoAnimTime > 150) {
             m_goAnimFrame = (m_goAnimFrame + 1) % 4;
             m_lastGoAnimTime = ct;
         }
@@ -136,7 +136,7 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         int stageIdx = (currentStage >= 1 && currentStage <= 4) ? currentStage : 1;
         const auto& config = m_goConfigs[stageIdx];
 
-        int animOffset = m_goAnimFrame * 3; // 0, 3, 6, 9 px right
+        int animOffset = m_goAnimFrame * 3;
         int gx = config.x + animOffset;
         int gy = config.y;
 
@@ -146,18 +146,6 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         if (!m_imgGoArrow.IsNull()) {
             m_imgGoArrow.Draw(hDC, gx, gy + config.arrowOffset, m_imgGoArrow.GetWidth() * 2, m_imgGoArrow.GetHeight() * 2);
         }
-    }
-
-    if (!bGameStarted) {
-        SetBkMode(hDC, TRANSPARENT);
-        SetTextColor(hDC, RGB(255, 255, 255));
-        HFONT hFont = CreateFont(40, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
-            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH | FF_SWISS, TEXT("Arial"));
-        HFONT hOldFont = (HFONT)SelectObject(hDC, hFont);
-        RECT rect = { 0, 0, virtualWidth, virtualHeight };
-        DrawText(hDC, TEXT("Left Click to Start"), -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        SelectObject(hDC, hOldFont);
-        DeleteObject(hFont);
     }
 
     if (!m_imgHudBase.IsNull() && m_imgHudBase.GetWidth() > 0 && m_imgHudBase.GetHeight() > 0)

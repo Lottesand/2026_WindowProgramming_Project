@@ -137,7 +137,8 @@ void Door::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMa
         
         // 중앙 하단 정렬 보정 + 우측 오프셋 추가 (핑크색 구역 정렬)
         float offsetX = 18.0f; 
-        float drawX = dX + (m_w * pFS - drawW) / 2.0f + offsetX * pFS;
+        float doorOffsetX = offsetX + 5.0f; // 문 본체만 추가로 오른쪽으로 이동
+        float drawX = dX + (m_w * pFS - drawW) / 2.0f + doorOffsetX * pFS;
         float drawY = dY + (m_h * pFS - drawH);
 
         if (drawW > 0 && drawH > 0) {
@@ -145,7 +146,7 @@ void Door::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMa
         }
         
         if (m_state == DoorState::DS_CLOSED) {
-            // Glow 이미지 렌더링 (Glow와 Door 위치 통일)
+            // Glow 이미지 렌더링 (Glow는 기존 위치 유지)
             int glowFrame = (GetTickCount() / m_glowDelay) % 4;
             CImage* gImg = &m_imgGlow[glowFrame];
             if (gImg && !gImg->IsNull()) {

@@ -42,6 +42,9 @@
     <ClCompile Include="SceneAndMap\StageManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="UI\StartScene.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
     <ClCompile Include="UI\UIManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>

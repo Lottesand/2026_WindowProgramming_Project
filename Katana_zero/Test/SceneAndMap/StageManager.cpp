@@ -18,7 +18,8 @@ std::vector<Door>* StageManager::m_pCurrentDoors = nullptr;
 std::vector<GlassDome>* StageManager::m_pCurrentGlassDomes = nullptr;
 POINT StageManager::m_playerStart = { 0, 0 };
 std::vector<RECT> StageManager::m_clearZones;
-float StageManager::m_stageLimitTime = 60.0f;
+float StageManager::m_stageLimitTime = 0.0f;
+int StageManager::m_currentStage = 1;
 
 void StageManager::Init() {
     EffectManager::Init();
@@ -227,6 +228,7 @@ void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
 }
 
 void StageManager::LoadAssets(int stage) {
+    m_currentStage = stage;
     if (m_mapImages.count(stage)) {
         m_imgMap = &m_mapImages[stage];
         m_imgColMap = &m_colMapImages[stage];
@@ -293,7 +295,7 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
     }
 
     if (!isFullMapView) {
-        if (!m_imgSkylineClouds.IsNull()) {
+        if (!m_imgSkylineClouds.IsNull() && (m_currentStage == 1 || m_currentStage == 2)) {
             float cloudScaleX = 3.0f, cloudScaleY = 1.5f; 
             int cW = (int)(m_imgSkylineClouds.GetWidth() * cloudScaleX), cH = (int)(m_imgSkylineClouds.GetHeight() * cloudScaleY);
             int mapW = GetMapWidth(); float maxCamX = (float)(mapW - (virtualWidth / renderMapScale)), ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0, pX = -ratioX * (cW - virtualWidth);
@@ -301,7 +303,7 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
                 m_imgSkylineClouds.Draw(hDC, (int)pX, 0, cW, cH, 0, 0, m_imgSkylineClouds.GetWidth(), m_imgSkylineClouds.GetHeight());
             }
         }
-        if (!m_imgSkylineBlack.IsNull()) {
+        if (!m_imgSkylineBlack.IsNull() && m_currentStage == 1) {
             int mapW = GetMapWidth(); float skylineScale = 3.0f; int sW = (int)(m_imgSkylineBlack.GetWidth() * skylineScale), sH = (int)(m_imgSkylineBlack.GetHeight() * skylineScale);
             float maxCamX = (float)(mapW - (virtualWidth / renderMapScale)), ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0, pX = -ratioX * (sW - virtualWidth);
             int pY = (virtualHeight / 2) - (sH / 2) - 150;

@@ -6,6 +6,7 @@
 #include "../Objects/Bullet.h"
 #include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
+#include "../UI/StartScene.h"
 #include <time.h>
 #include <stdlib.h>
 #include <gdiplus.h>
@@ -73,11 +74,15 @@ void Game::LoadAllAssets() {
     Sleep(50);
 
     m_player.Init();
-    m_loadingProgress = 60;
+    m_loadingProgress = 50;
     Sleep(50);
 
     UIManager::Init(); // Initialize UIManager configs
-    m_loadingProgress = 65;
+    m_loadingProgress = 60; // 65에서 70으로 수정하여 역행 방지
+    Sleep(50);
+
+    StartScene::LoadAssets();
+    m_loadingProgress = 80; // 70에서 80으로 수정
     Sleep(50);
 
     StageManager::LoadAllStages(&m_loadingProgress);
@@ -93,7 +98,15 @@ void Game::LoadAllAssets() {
 void Game::LoadStage(int stage) {
     m_currentStage = stage;
     m_isStageCleared = false; 
-    m_bGameStarted = false;   
+    
+    // Stage 1일 때만 클릭 대기 상태로 시작, 그 외에는 바로 시작
+    if (m_currentStage == 1) {
+        m_bGameStarted = false;
+        StartScene::SetActive(true);
+    } else {
+        m_bGameStarted = true;
+        StartScene::SetActive(false);
+    }
     
     StageManager::LoadAssets(m_currentStage);
     
@@ -198,9 +211,13 @@ void Game::Update() {
     }
 
     if (!m_bGameStarted) {
-        if (Input::GetKeyDown(VK_LBUTTON)) {
-            m_bGameStarted = true;
-            m_prevTime = GetTickCount();
+        if (StartScene::IsActive()) {
+            StartScene::Update(dT, m_bGameStarted);
+        } else {
+            if (Input::GetKeyDown(VK_LBUTTON)) {
+                m_bGameStarted = true;
+                m_prevTime = GetTickCount();
+            }
         }
         Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
         m_prevTime = ct;
@@ -658,7 +675,9 @@ void Game::Render(HDC hDC) {
     float scX = fW / fCW, scY = fH / fCH, cFS = (scX < scY) ? scX : scY;
     float cFX = (fW - fCW * cFS) / 2.0f, cFY = (fH - fCH * cFS) / 2.0f;
     EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
-    m_player.Render(hMemDC, &g, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect, m_stageTimer);
+    if (!StartScene::IsActive()) {
+        m_player.Render(hMemDC, &g, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect, m_stageTimer);
+    }
     
     auto drawTransition = [&](HDC dc) {
         if (m_transitionState == TransitionState::NONE) return;
@@ -747,6 +766,9 @@ void Game::Render(HDC hDC) {
         if (!m_player.IsRewinding()) {
             bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
             UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage);
+            if (StartScene::IsActive()) {
+                StartScene::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), mapScale);
+            }
         }
 
         drawTransition(hMemDC);

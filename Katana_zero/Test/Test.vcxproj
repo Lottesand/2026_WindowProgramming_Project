@@ -140,6 +140,7 @@
     <ClCompile Include="Objects\Player.cpp" />
     <ClCompile Include="SceneAndMap\Camera.cpp" />
     <ClCompile Include="SceneAndMap\StageManager.cpp" />
+    <ClCompile Include="UI\StartScene.cpp" />
     <ClCompile Include="UI\UIManager.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -154,6 +155,7 @@
     <ClInclude Include="Objects\Player.h" />
     <ClInclude Include="SceneAndMap\Camera.h" />
     <ClInclude Include="SceneAndMap\StageManager.h" />
+    <ClInclude Include="UI\StartScene.h" />
     <ClInclude Include="UI\UIManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

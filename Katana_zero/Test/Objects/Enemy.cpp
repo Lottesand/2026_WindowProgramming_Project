@@ -353,16 +353,18 @@ void Gangster::Update(float ts, const Player& player) {
                 if (m_CurrentFrame >= 6) { m_ActionState = GangsterAction::GA_NONE; }
             }
         }
-        else if (fabs(dx) > 250.0f) {
+        else if (fabs(dx) > 450.0f) {
             m_ActionState = GangsterAction::GA_RUN;
             m_State = EnemyState::ES_WALK;
             m_vx = m_isFacingLeft ? -8.0f : 8.0f;
         }
         else if (m_ActionState == GangsterAction::GA_NONE || m_ActionState == GangsterAction::GA_RUN) {
-            m_State = EnemyState::ES_IDLE; m_vx = 0; m_ActionState = GangsterAction::GA_AIM; m_CurrentFrame = 0; m_patternTimer = ct; m_LastTime = ct;
+            m_State = EnemyState::ES_IDLE; m_vx = 0; m_ActionState = GangsterAction::GA_AIM; m_CurrentFrame = 0; 
+            m_patternTimer = ct - 500; // 첫 발사는 조금 더 빠르게 (500ms 대기 후 발사)
+            m_LastTime = ct;
         } else if (m_ActionState == GangsterAction::GA_AIM) {
             m_vx = 0; m_State = EnemyState::ES_IDLE;
-            if (ct - m_patternTimer > 300) { // 300ms
+            if (ct - m_patternTimer > (DWORD)(1000.0f / ts)) { // 1000ms (연사 속도 조절)
                 float rad = m_aimAngle * 3.14159f / 180.0f;
                 float speed = 20.0f;
                 float bvx = speed * cos(rad);
