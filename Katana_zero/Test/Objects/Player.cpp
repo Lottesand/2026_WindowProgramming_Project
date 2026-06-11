@@ -124,6 +124,46 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     if (!m_isSlowMo && m_batteryLevel < 11.0f) { m_batteryLevel += (11.0f / 11.0f) * dT; if (m_batteryLevel > 11.0f) m_batteryLevel = 11.0f; }
     float ts = m_isSlowMo ? 0.3f : 1.0f;
 
+    if (m_itemPopupTimer > 0) {
+        m_itemPopupTimer -= dT * ts;
+    }
+
+    bool pickupHappened = false;
+    static bool prR = false;
+    bool curR = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+
+    auto items = StageManager::GetCurrentItems();
+    if (items) {
+        for (auto it = items->begin(); it != items->end(); ) {
+            if (it->GetState() == ItemState::ON_GROUND) {
+                float dx = it->GetX() - (m_x + m_colW / 2.0f);
+                float dy = it->GetY() - (m_y + m_colH / 2.0f);
+                float dist = sqrt(dx * dx + dy * dy);
+
+                bool canAutoPickup = (m_pHeldItem == nullptr && dist < 30.0f);
+                bool canManualPickup = (curR && !prR && dist < 200.0f);
+
+                if (canAutoPickup || canManualPickup) {
+                    Item* pickedItem = new Item(*it);
+                    PickUpItem(pickedItem);
+                    it = items->erase(it);
+                    pickupHappened = true;
+                    break;
+                } else {
+                    it->SetShowIndicator(dist < 200.0f);
+                    ++it;
+                }
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    if (curR && !prR && !pickupHappened && m_pHeldItem) {
+        ThrowItem(mouseX, mouseY, camX, camY, rs, ox, oy, fv);
+    }
+    prR = curR;
+
     if (isDead && !m_isRewinding) {
         float speedSq = m_vx * m_vx + m_vy * m_vy;
         float speed = (float)sqrt(speedSq);
@@ -526,6 +566,53 @@ void Player::Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, fl
         bmpCache.clear();
     }
 
+    // 아이템 획득 팝업 렌더링
+    if (m_itemPopupTimer > 0) {
+        // 모든 아이템에 대해 인덱스 1 이미지를 사용
+        int imgIndex = 1;
+
+        CImage& icon = Item::GetItemImage(m_popupItemType, imgIndex);
+        if (!icon.IsNull()) {
+            float vx, vy;
+            if (g_isFullMapView) {
+                float fsW = 1280.0f / (float)(mapW > 0 ? mapW : 1);
+                float fsH = 720.0f / (float)(mapH > 0 ? mapH : 1);
+                float fs = (fsW < fsH) ? fsW : fsH;
+                vx = m_x * fs + (1280.0f - mapW * fs) / 2.0f;
+                vy = m_y * fs + (720.0f - mapH * fs) / 2.0f;
+                pFS = fs;
+            } else {
+                vx = (m_x - camX) * mapScale;
+                vy = (m_y - camY) * mapScale;
+                pFS = mapScale;
+            }
+
+            int iw = (int)(icon.GetWidth() * pFS * 1.2f);
+            int ih = (int)(icon.GetHeight() * pFS * 1.2f);
+            int ix = (int)(vx + (40.0f * pFS) / 2.0f - iw / 2.0f);
+
+            // 둥실거리는 효과와 서서히 위로 올라가는 효과
+            float upOffset = (1.0f - m_itemPopupTimer) * 30.0f;
+            int iy = (int)(vy - ih - 20.0f * pFS - upOffset);
+
+            void* bits = icon.GetBits();
+            if (bits) {
+                Gdiplus::Bitmap bmp(icon.GetWidth(), icon.GetHeight(), icon.GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+                Gdiplus::ImageAttributes at;
+                float alpha = (m_itemPopupTimer > 0.8f) ? 1.0f : m_itemPopupTimer / 0.8f;
+                Gdiplus::ColorMatrix mat = {
+                    1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, alpha, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+                };
+                at.SetColorMatrix(&mat);
+                g->DrawImage(&bmp, Gdiplus::RectF((float)ix, (float)iy, (float)iw, (float)ih), 0, 0, (float)icon.GetWidth(), (float)icon.GetHeight(), Gdiplus::UnitPixel, &at);
+            }
+        }
+    }
+
     if (g_showDebugRect) {
         float vx, vy; 
         if (g_isFullMapView) { 
@@ -635,4 +722,57 @@ void Player::StartRewind(int speed) {
     m_isSlowMo = false; 
     m_batteryLevel = m_batteryMax; 
     ClearAfterImages();
+}
+
+void Player::PickUpItem(Item* item) {
+    if (m_pHeldItem) {
+        // Drop existing item or just replace
+        delete m_pHeldItem;
+        m_pHeldItem = nullptr;
+    }
+    m_pHeldItem = item;
+    item->OnPickUp();
+
+    // Show popup
+    m_itemPopupTimer = 1.0f; // 1 second
+    m_popupItemType = item->GetType();
+}
+
+void Player::ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
+    if (!m_pHeldItem) return;
+
+    float wx = (mouseX - ox) / rs, wy = (mouseY - oy) / rs;
+    if (!fv) { wx += camX; wy += camY; }
+
+    float dx = wx - (m_x + m_colW / 2.0f);
+    float dy = wy - (m_y + m_colH / 2.0f);
+    float dist = sqrt(dx * dx + dy * dy);
+    float vx = 0, vy = 0;
+    if (dist > 0) {
+        vx = (dx / dist) * 45.0f; // Throw speed increased to 45.0f
+        vy = (dy / dist) * 45.0f;
+    } else {
+        vx = m_isFacingRight ? 45.0f : -45.0f;
+        vy = 0;
+    }
+
+    // Spawn point
+    float spawnX = m_x + m_colW / 2.0f;
+    float spawnY = m_y + m_colH / 2.0f;
+
+    auto items = StageManager::GetCurrentItems();
+    if (items) {
+        items->push_back(*m_pHeldItem);
+        items->back().OnThrow(spawnX, spawnY, vx, vy);
+    }
+
+    delete m_pHeldItem;
+    m_pHeldItem = nullptr;
+}
+
+int Player::GetHeldItemType() const {
+    if (m_pHeldItem) {
+        return static_cast<int>(m_pHeldItem->GetType());
+    }
+    return -1;
 }

@@ -16,6 +16,7 @@ CImage StageManager::m_imgSkylineBlack;
 CImage StageManager::m_imgSkylineClouds;
 std::vector<Door>* StageManager::m_pCurrentDoors = nullptr;
 std::vector<GlassDome>* StageManager::m_pCurrentGlassDomes = nullptr;
+std::vector<Item>* StageManager::m_pCurrentItems = nullptr;
 POINT StageManager::m_playerStart = { 0, 0 };
 std::vector<RECT> StageManager::m_clearZones;
 float StageManager::m_stageLimitTime = 0.0f;
@@ -32,10 +33,20 @@ void StageManager::ProcessStage(int stage) {
 
     data.doors.clear();
     data.glassDomes.clear();
+    data.items.clear();
     data.clearZones.clear();
     data.enemySpawns.clear();
     data.playerStart = { 100, 100 };
     data.stageLimitTime = (stage == 1) ? 30.0f : 60.0f;
+
+    // 테스트를 위해 Stage 1에 아이템 임의 배치
+    if (stage == 1) {
+        data.items.push_back(Item(ItemType::BEER_BOTTLE, 300.0f, 400.0f));
+        data.items.push_back(Item(ItemType::BUTCHER_KNIFE, 400.0f, 400.0f));
+        data.items.push_back(Item(ItemType::BUST, 500.0f, 400.0f));
+        data.items.push_back(Item(ItemType::POTTED_PLANT, 600.0f, 400.0f));
+        data.items.push_back(Item(ItemType::KNIFE, 700.0f, 400.0f));
+    }
 
     auto IsColorMatch = [](BYTE r, BYTE g, BYTE b, int tr, int tg, int tb) {
         return abs((int)r - tr) < 60 && abs((int)g - tg) < 60 && abs((int)b - tb) < 60;
@@ -241,6 +252,7 @@ void StageManager::LoadAssets(int stage) {
         StageData& data = m_stageDataMap[stage];
         m_pCurrentDoors = &data.doors;
         m_pCurrentGlassDomes = &data.glassDomes;
+        m_pCurrentItems = &data.items;
         m_playerStart = data.playerStart;
         m_clearZones = data.clearZones;
         m_stageLimitTime = data.stageLimitTime;
@@ -374,6 +386,20 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
                 cFX = (virtualWidth - mapW * cFS) / 2.0f; cFY = (virtualHeight - mapH * cFS) / 2.0f;
             }
             d.Render(hDC, camX, camY, mapScale, isFullMapView, cFS, cFX, cFY);
+        }
+    }
+
+    if (m_pCurrentItems) {
+        for (auto& item : *m_pCurrentItems) {
+            item.Render(hDC, g, camX, camY, mapScale);
+        }
+    }
+}
+
+void StageManager::UpdateItems(float ts, Player& player, const std::vector<class Enemy*>& enemies) {
+    if (m_pCurrentItems != nullptr) {
+        for (auto& item : *m_pCurrentItems) {
+            item.Update(ts, player, enemies);
         }
     }
 }

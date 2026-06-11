@@ -7,6 +7,7 @@
 #include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
 #include "../UI/StartScene.h"
+#include "../Objects/Item.h"
 #include <time.h>
 #include <stdlib.h>
 #include <gdiplus.h>
@@ -28,6 +29,7 @@ Game::~Game() {
     for (auto& e : m_enemies) if (e) delete e;
     m_enemies.clear();
     Bullet::Release();
+    Item::ReleaseAssets();
 }
 
 void Game::Init(HWND hWnd, HINSTANCE hInst) {
@@ -74,6 +76,7 @@ void Game::LoadAllAssets() {
     Sleep(50);
 
     m_player.Init();
+    Item::LoadAssets();
     m_loadingProgress = 50;
     Sleep(50);
 
@@ -464,6 +467,7 @@ void Game::Update() {
         }
 
         Bullet::UpdateAll(ts, m_player, m_enemies);
+        StageManager::UpdateItems(ts, m_player, m_enemies);
         if (!m_player.IsDead()) {
             for (auto& e : m_enemies) if (e) e->Update(ts, m_player);
         }
@@ -765,7 +769,7 @@ void Game::Render(HDC hDC) {
     } else {
         if (!m_player.IsRewinding()) {
             bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage);
+            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage, m_player.GetHeldItemType());
             if (StartScene::IsActive()) {
                 StartScene::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), mapScale);
             }

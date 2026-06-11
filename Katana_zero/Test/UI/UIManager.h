@@ -12,7 +12,7 @@ public:
     static void Init();
     static void LoadAssets();
     static void ReleaseAssets();
-    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout = false, bool showDeathMessage = false, bool isStageCleared = false, int currentStage = 1);
+    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout = false, bool showDeathMessage = false, bool isStageCleared = false, int currentStage = 1, int heldItemType = -1);
 
     static void SetGoConfig(int stage, int x, int y, int arrowOffset);
 

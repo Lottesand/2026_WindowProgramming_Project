@@ -4,6 +4,7 @@
 #include <math.h>
 #include <algorithm>
 #include <vector>
+#include "Item.h"
 #include <deque>
 
 // ?꾩뿭 蹂???좎뼵
@@ -162,4 +163,14 @@ public:
     float m_bloodDistance;
     DWORD m_lastBleedTime;
     void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f);
+
+    // Item management
+    class Item* m_pHeldItem = nullptr;
+    float m_itemPopupTimer = 0.0f;
+    ItemType m_popupItemType;
+    void PickUpItem(class Item* item);
+    void ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
+    
+    bool HasHeldItem() const { return m_pHeldItem != nullptr; }
+    int GetHeldItemType() const;
 };

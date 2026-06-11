@@ -1,5 +1,6 @@
 ﻿#include "UIManager.h"
 #include "../Objects/Enemy.h"
+#include "../Objects/Item.h"
 #include <gdiplus.h>
 #include <algorithm>
 
@@ -77,7 +78,7 @@ void UIManager::SetGoConfig(int stage, int x, int y, int arrowOffset) {
     }
 }
 
-void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, bool isStageCleared, int currentStage) {
+void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, bool isStageCleared, int currentStage, int heldItemType) {
     if (!hDC) return;
 
     if (isDead && showDeathMessage) {
@@ -186,8 +187,17 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         }
     }
 
-    if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
-        m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+    if (heldItemType != -1) {
+        CImage& heldImg = Item::GetHUDImage(static_cast<ItemType>(heldItemType));
+        if (!heldImg.IsNull() && heldImg.GetWidth() > 0 && heldImg.GetHeight() > 0) {
+            heldImg.Draw(hDC, virtualWidth - heldImg.GetWidth() - 80, 0, heldImg.GetWidth() * 2, heldImg.GetHeight() * 2);
+        } else if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0) {
+            m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+        }
+    } else {
+        if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
+            m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+    }
 
     int mouseIconScale = 2, mouseIconY = 30, mouseIconX = virtualWidth - 110;
     if (!m_imgLeftClick.IsNull()) m_imgLeftClick.Draw(hDC, mouseIconX, mouseIconY, m_imgLeftClick.GetWidth() * mouseIconScale, m_imgLeftClick.GetHeight() * mouseIconScale);
