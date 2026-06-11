@@ -17,8 +17,20 @@ CImage UIManager::m_imgLeftClick;
 CImage UIManager::m_imgRightClick;
 CImage UIManager::m_imgDeathBox;
 CImage UIManager::m_imgTimeoutBox;
+CImage UIManager::m_imgGoText;
+CImage UIManager::m_imgGoArrow;
+GoUIConfig UIManager::m_goConfigs[5];
+int UIManager::m_goAnimFrame = 0;
+DWORD UIManager::m_lastGoAnimTime = 0;
 
 void UIManager::Init() {
+    // Default GO UI configurations for 4 stages
+    SetGoConfig(1, 1100, 150, 40);
+    SetGoConfig(2, 1100, 200, 40);
+    SetGoConfig(3, 1100, 250, 40);
+    SetGoConfig(4, 1100, 300, 40);
+    m_goAnimFrame = 0;
+    m_lastGoAnimTime = GetTickCount();
 }
 
 void UIManager::LoadAssets() {
@@ -36,6 +48,8 @@ void UIManager::LoadAssets() {
     m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
     m_imgDeathBox.Load(TEXT("assets/deathbox.png"));
     m_imgTimeoutBox.Load(TEXT("assets/timeoutbox.png"));
+    m_imgGoText.Load(TEXT("assets/spr_go_text.png"));
+    m_imgGoArrow.Load(TEXT("assets/spr_go_arrow.png"));
 }
 
 void UIManager::ReleaseAssets() {
@@ -54,19 +68,26 @@ void UIManager::ReleaseAssets() {
     m_imgRightClick.Destroy();
     m_imgDeathBox.Destroy();
     m_imgTimeoutBox.Destroy();
+    m_imgGoText.Destroy();
+    m_imgGoArrow.Destroy();
 }
-void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, class Item* pHeldItem) {
+
+void UIManager::SetGoConfig(int stage, int x, int y, int arrowOffset) {
+    if (stage >= 1 && stage <= 4) {
+        m_goConfigs[stage] = { x, y, arrowOffset };
+    }
+}
+
+void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, bool isStageCleared, int currentStage, int heldItemType) {
     if (!hDC) return;
 
     if (isDead && showDeathMessage) {
         CImage* boxImg = isTimeout ? &m_imgTimeoutBox : &m_imgDeathBox;
         if (boxImg && !boxImg->IsNull()) {
-            // ??諛뺤뒪???먮낯 ?ш린媛 ?ㅻ? ???덉쑝誘濡? 湲곗? ?ш린(deathbox)瑜??뺥븯嫄곕굹 怨좎젙 ?ш린瑜??ъ슜?⑸땲??
-            // ?ш린?쒕뒗 deathbox???먮낯 ?ш린瑜?湲곗??쇰줈 0.65諛??ㅼ??쇱쓣 ?곸슜?⑸땲??
-            int baseW = m_imgDeathBox.GetWidth();
-            int baseH = m_imgDeathBox.GetHeight();
+            int baseW = boxImg->GetWidth();
+            int baseH = boxImg->GetHeight();
             float scale = 0.65f; 
-            float widthScale = isTimeout ? scale * 1.15f : scale; // ??꾩븘??諛뺤뒪留?媛濡쒕줈 15% ???섎┝
+            float widthScale = isTimeout ? scale * 1.15f : scale; 
             int targetW = (int)(baseW * widthScale);
             int targetH = (int)(baseH * scale);
             int startX = (virtualWidth - targetW) / 2;
@@ -82,7 +103,7 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
             Gdiplus::PathGradientBrush pgb(&path);
             pgb.SetCenterColor(Gdiplus::Color(230, 0, 0, 0));
             pgb.SetCenterPoint(Gdiplus::PointF(virtualWidth / 2.0f, virtualHeight / 2.0f));
-            
+
             Gdiplus::Color colors[] = { Gdiplus::Color(0, 0, 0, 0) }; 
             int count = 1;
             pgb.SetSurroundColors(colors, &count);
@@ -105,16 +126,27 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         }
     }
 
-    if (!bGameStarted) {
-        SetBkMode(hDC, TRANSPARENT);
-        SetTextColor(hDC, RGB(255, 255, 255));
-        HFONT hFont = CreateFont(40, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
-            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH | FF_SWISS, TEXT("Arial"));
-        HFONT hOldFont = (HFONT)SelectObject(hDC, hFont);
-        RECT rect = { 0, 0, virtualWidth, virtualHeight };
-        DrawText(hDC, TEXT("Left Click to Start"), -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        SelectObject(hDC, hOldFont);
-        DeleteObject(hFont);
+    // GO UI Rendering
+    if (isStageCleared && !isDead) {
+        DWORD ct = GetTickCount();
+        if (ct - m_lastGoAnimTime > 150) {
+            m_goAnimFrame = (m_goAnimFrame + 1) % 4;
+            m_lastGoAnimTime = ct;
+        }
+
+        int stageIdx = (currentStage >= 1 && currentStage <= 4) ? currentStage : 1;
+        const auto& config = m_goConfigs[stageIdx];
+
+        int animOffset = m_goAnimFrame * 3;
+        int gx = config.x + animOffset;
+        int gy = config.y;
+
+        if (!m_imgGoText.IsNull()) {
+            m_imgGoText.Draw(hDC, gx, gy, m_imgGoText.GetWidth() * 2, m_imgGoText.GetHeight() * 2);
+        }
+        if (!m_imgGoArrow.IsNull()) {
+            m_imgGoArrow.Draw(hDC, gx, gy + config.arrowOffset, m_imgGoArrow.GetWidth() * 2, m_imgGoArrow.GetHeight() * 2);
+        }
     }
 
     if (!m_imgHudBase.IsNull() && m_imgHudBase.GetWidth() > 0 && m_imgHudBase.GetHeight() > 0)
@@ -155,20 +187,16 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         }
     }
 
-    if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0) {
-        int invX = virtualWidth - m_imgHudInven.GetWidth() * 2 - 40;
-        int invY = 0;
-        
-        // 아이템을 들고 있고 해당 아이템의 전용 인벤토리 이미지가 있다면 그것을 사용, 아니면 기본 인벤토리 이미지 사용
-        CImage* targetInvenImg = &m_imgHudInven;
-        if (pHeldItem) {
-            CImage& itemHudIcon = Item::GetHUDImage(pHeldItem->GetType());
-            if (!itemHudIcon.IsNull()) {
-                targetInvenImg = &itemHudIcon;
-            }
+    if (heldItemType != -1) {
+        CImage& heldImg = Item::GetHUDImage(static_cast<ItemType>(heldItemType));
+        if (!heldImg.IsNull() && heldImg.GetWidth() > 0 && heldImg.GetHeight() > 0) {
+            heldImg.Draw(hDC, virtualWidth - heldImg.GetWidth() - 80, 0, heldImg.GetWidth() * 2, heldImg.GetHeight() * 2);
+        } else if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0) {
+            m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
         }
-
-        targetInvenImg->Draw(hDC, invX, invY, targetInvenImg->GetWidth() * 2, targetInvenImg->GetHeight() * 2);
+    } else {
+        if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
+            m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
     }
 
     int mouseIconScale = 2, mouseIconY = 30, mouseIconX = virtualWidth - 110;

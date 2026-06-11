@@ -61,8 +61,9 @@ void Door::ReleaseAssets() {
 DoorOpenEvent Door::Update(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale) {
     if (m_state == DoorState::DS_BROKEN) return DoorOpenEvent::DOE_NONE;
 
-    bool playerNear = (playerX + playerW >= m_x - 20.0f && playerX <= m_x + m_w + 20.0f &&
-                       playerY + playerH >= m_y && playerY <= m_y + m_h);
+    // 히트박스 판정 범위 확장 (20 -> 40)
+    bool playerNear = (playerX + playerW >= m_x - 40.0f && playerX <= m_x + m_w + 40.0f &&
+                       playerY + playerH >= m_y - 10.0f && playerY <= m_y + m_h + 10.0f);
 
     if (m_state == DoorState::DS_CLOSED) {
         if (isAttacking) {
@@ -75,7 +76,8 @@ DoorOpenEvent Door::Update(float playerX, float playerY, float playerW, float pl
                 return DoorOpenEvent::DOE_OPEN_BY_ATTACK;
             }
         }
-        if (playerNear && ((isA && playerX > m_x) || (isD && playerX < m_x))) {
+        // 좌우 이동 시 방향 상관없이 문 근처라면 열리게끔 수정
+        if (playerNear && (isA || isD)) {
             m_state = DoorState::DS_OPENING;
             m_currentFrame = 0;
             m_lastFrameTime = currentTime;
@@ -123,62 +125,42 @@ void Door::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMa
     }
 
     if (img && !img->IsNull()) {
-        if (m_imgDoor[0].IsNull()) {
-            Rectangle(hDC, (int)dX, (int)dY, (int)(dX + m_w * pFS), (int)(dY + m_h * pFS));
-            return;
-        }
-
-        float baseImgH = (float)m_imgDoor[0].GetHeight();
+        float baseImgW = (float)img->GetWidth();
+        float baseImgH = (float)img->GetHeight();
+        
+        // 문 높이에 맞춰 스케일 조정 (Convention: detected m_h corresponds to door height)
         float scaleY = m_h / (baseImgH > 0 ? baseImgH : 1.0f);
-        float scaleX = scaleY;
-        float drawX = dX;
-        
-        if (m_state == DoorState::DS_CLOSED && safeFrame == 0) {
-            float baseImgW = (float)m_imgDoor[0].GetWidth();
-            float targetWidth = 160.0f;
-            scaleX = targetWidth / (baseImgW > 0 ? baseImgW : 1.0f);
-            float offsetX = 40.0f;
-            drawX = dX + ((m_w - targetWidth) / 2.0f + offsetX) * pFS;
-        }
+        float scaleX = scaleY; // 비율 유지
 
-        float drawW = img->GetWidth() * scaleX * pFS - 20.0f;
-        float drawH = img->GetHeight() * scaleY * pFS;
-        float drawY = dY + (m_h * pFS) - drawH;
+        float drawW = baseImgW * scaleX * pFS;
+        float drawH = baseImgH * scaleY * pFS;
         
-        if (drawW > 0 && drawH > 0 && img->GetWidth() > 0 && img->GetHeight() > 0) {
+        // 중앙 하단 정렬 보정 + 우측 오프셋 추가 (핑크색 구역 정렬)
+        float offsetX = 18.0f; 
+        float doorOffsetX = offsetX + 5.0f; // 문 본체만 추가로 오른쪽으로 이동
+        float drawX = dX + (m_w * pFS - drawW) / 2.0f + doorOffsetX * pFS;
+        float drawY = dY + (m_h * pFS - drawH);
+
+        if (drawW > 0 && drawH > 0) {
             img->Draw(hDC, (int)drawX, (int)drawY, (int)drawW, (int)drawH);
         }
+        
         if (m_state == DoorState::DS_CLOSED) {
-            COLORREF skyBlue = RGB(135, 206, 235);
-            HGDIOBJ hOldBrush = SelectObject(hDC, GetStockObject(NULL_BRUSH));
-
-            float actualDoorW = drawW * 0.15f; 
-            float centerX = drawX + drawW / 2.0f - 35.0f;
-            int rectL = (int)(centerX - actualDoorW / 2.0f);
-            int rectR = (int)(centerX + actualDoorW / 2.0f);
-            int rectT = (int)drawY;
-            int rectB = (int)(drawY + drawH);
-
-            for (int i = 0; i < 10; i++) {
-                int intensity = 255 - (i * 25); 
-                if (intensity < 0) intensity = 0;
-
-                COLORREF layerColor = RGB(
-                    (GetRValue(skyBlue) * intensity) / 255,
-                    (GetGValue(skyBlue) * intensity) / 255,
-                    (GetBValue(skyBlue) * intensity) / 255
-                );
-
-                HPEN hPen = CreatePen(PS_SOLID, 1, layerColor);
-                HGDIOBJ hOldPen = SelectObject(hDC, hPen);
-                MoveToEx(hDC, rectL - i, rectT, NULL);
-                LineTo(hDC, rectL - i, rectB);
-                MoveToEx(hDC, rectR + i, rectT, NULL);
-                LineTo(hDC, rectR + i, rectB);
-                SelectObject(hDC, hOldPen);
-                DeleteObject(hPen);
+            // Glow 이미지 렌더링 (Glow는 기존 위치 유지)
+            int glowFrame = (GetTickCount() / m_glowDelay) % 4;
+            CImage* gImg = &m_imgGlow[glowFrame];
+            if (gImg && !gImg->IsNull()) {
+                // 글로우를 더 얇게 (가로 크기 65%로 축소)
+                float glowWidthScale = 0.65f;
+                float gW = gImg->GetWidth() * scaleX * pFS * glowWidthScale;
+                float gH = gImg->GetHeight() * scaleY * pFS;
+                float gX = dX + (m_w * pFS - gW) / 2.0f + offsetX * pFS;
+                float gY = dY + (m_h * pFS - gH);
+                
+                int oldMode = SetStretchBltMode(hDC, HALFTONE);
+                gImg->TransparentBlt(hDC, (int)gX, (int)gY, (int)gW, (int)gH, 0, 0, gImg->GetWidth(), gImg->GetHeight(), RGB(0, 0, 0));
+                SetStretchBltMode(hDC, oldMode);
             }
-            SelectObject(hDC, hOldBrush);
         }
     }
 }

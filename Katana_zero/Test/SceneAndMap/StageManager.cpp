@@ -1,156 +1,175 @@
-﻿#include "StageManager.h"
+#include "StageManager.h"
 #include "../Effects/EffectManager.h"
-#include "../Objects/Item.h"
 #include <algorithm>
 #include <atomic>
 
 std::map<int, CImage> StageManager::m_mapImages;
 std::map<int, CImage> StageManager::m_colMapImages;
+std::map<int, CImage> StageManager::m_objMapImages;
 std::map<int, StageManager::StageData> StageManager::m_stageDataMap;
 
 CImage* StageManager::m_imgMap = nullptr;
 CImage* StageManager::m_imgColMap = nullptr;
+CImage* StageManager::m_imgObjMap = nullptr;
 
 CImage StageManager::m_imgSkylineBlack;
 CImage StageManager::m_imgSkylineClouds;
 std::vector<Door>* StageManager::m_pCurrentDoors = nullptr;
-std::vector<Enemy*> StageManager::m_currentEnemies;
+std::vector<GlassDome>* StageManager::m_pCurrentGlassDomes = nullptr;
 std::vector<Item>* StageManager::m_pCurrentItems = nullptr;
 POINT StageManager::m_playerStart = { 0, 0 };
 std::vector<RECT> StageManager::m_clearZones;
-float StageManager::m_stageLimitTime = 60.0f;
+float StageManager::m_stageLimitTime = 0.0f;
+int StageManager::m_currentStage = 1;
 
 void StageManager::Init() {
-    Item::LoadAssets();
+    EffectManager::Init();
 }
 
 void StageManager::ProcessStage(int stage) {
     StageData& data = m_stageDataMap[stage];
     CImage& colMap = m_colMapImages[stage];
+    CImage& objMap = m_objMapImages[stage];
 
     data.doors.clear();
+    data.glassDomes.clear();
     data.items.clear();
     data.clearZones.clear();
-    data.enemySpawns.clear(); // 적 스폰 정보도 초기화
+    data.enemySpawns.clear();
     data.playerStart = { 100, 100 };
-    
-    // 아이템 배치 초기화 (테스트용)
-    data.items.emplace_back(ItemType::BEER_BOTTLE, 300.0f, 400.0f);
-    data.items.emplace_back(ItemType::BUTCHER_KNIFE, 400.0f, 400.0f);
-    data.items.emplace_back(ItemType::BUST, 500.0f, 400.0f);
-    data.items.emplace_back(ItemType::POTTED_PLANT, 600.0f, 400.0f);
-    data.items.emplace_back(ItemType::KNIFE, 700.0f, 400.0f);
-
     data.stageLimitTime = (stage == 1) ? 30.0f : 60.0f;
 
-    // 포인터 강제 갱신
-    m_pCurrentItems = &data.items;
+    // 테스트를 위해 Stage 1에 아이템 임의 배치
+    if (stage == 1) {
+        data.items.push_back(Item(ItemType::BEER_BOTTLE, 300.0f, 400.0f));
+        data.items.push_back(Item(ItemType::BUTCHER_KNIFE, 400.0f, 400.0f));
+        data.items.push_back(Item(ItemType::BUST, 500.0f, 400.0f));
+        data.items.push_back(Item(ItemType::POTTED_PLANT, 600.0f, 400.0f));
+        data.items.push_back(Item(ItemType::KNIFE, 700.0f, 400.0f));
+    }
 
+    auto IsColorMatch = [](BYTE r, BYTE g, BYTE b, int tr, int tg, int tb) {
+        return abs((int)r - tr) < 60 && abs((int)g - tg) < 60 && abs((int)b - tb) < 60;
+    };
+
+    // --- 1. Process colMap for Player Start and Clear Zones ---
+// ... (lines 45-90) ...
     if (!colMap.IsNull() && colMap.IsDIBSection()) {
         int w = colMap.GetWidth();
         int h = colMap.GetHeight();
         int pitch = colMap.GetPitch();
         int bpp = colMap.GetBPP() / 8;
         BYTE* pBits = (BYTE*)colMap.GetBits();
-
         std::vector<bool> visited(w * h, false);
 
         for (int y = 0; y < h; y++) {
             BYTE* pRow = pBits + (y * pitch);
             for (int x = 0; x < w; x++) {
                 if (visited[y * w + x]) continue;
-
                 BYTE* pPixel = pRow + (x * bpp);
-                BYTE b = pPixel[0];
-                BYTE g = pPixel[1];
-                BYTE r = pPixel[2];
+                BYTE b = pPixel[0], g = pPixel[1], r = pPixel[2];
 
-                if (r == 255 && g == 0 && b == 255) {
-                    int rectW = 0, rectH = 0;
-                    while (x + rectW < w) {
-                        BYTE* pNext = pRow + ((x + rectW) * bpp);
-                        if (pNext[2] == 255 && pNext[1] == 0 && pNext[0] == 255) rectW++;
-                        else break;
-                    }
-                    while (y + rectH < h) {
-                        BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
-                        if (pNextRow[2] == 255 && pNextRow[1] == 0 && pNextRow[0] == 255) rectH++;
-                        else break;
-                    }
-
-                    if (rectW > 0 && rectH > 0) {
-                        data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
-                        for (int ry = y; ry < y + rectH; ry++) {
-                            for (int rx = x; rx < x + rectW; rx++) {
-                                visited[ry * w + rx] = true;
-                            }
-                        }
-                    }
-                }
-                else if (r == 255 && g == 255 && b == 255) {
+                if (IsColorMatch(r, g, b, 255, 255, 255)) {
                     data.playerStart = { x, y };
                     visited[y * w + x] = true;
                 }
-                else if (r == 0 && g == 255 && b == 255) {
+                else if (IsColorMatch(r, g, b, 0, 255, 255)) {
                     int rectW = 0, rectH = 0;
                     while (x + rectW < w) {
-                        BYTE* pNext = pRow + ((x + rectW) * bpp);
-                        if (pNext[2] == 0 && pNext[1] == 255 && pNext[0] == 255) rectW++;
-                        else break;
+                        BYTE* pN = pRow + ((x + rectW) * bpp);
+                        if (IsColorMatch(pN[2], pN[1], pN[0], 0, 255, 255)) rectW++; else break;
                     }
                     while (y + rectH < h) {
-                        BYTE* pNextRow = pBits + ((y + rectH) * pitch) + (x * bpp);
-                        if (pNextRow[2] == 0 && pNextRow[1] == 255 && pNextRow[0] == 255) rectH++;
-                        else break;
+                        BYTE* pNRow = pBits + ((y + rectH) * pitch) + (x * bpp);
+                        if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 0, 255, 255)) rectH++; else break;
                     }
-
                     if (rectW > 0 && rectH > 0) {
                         data.clearZones.push_back({ x, y, x + rectW, y + rectH });
-                        for (int ry = y; ry < y + rectH; ry++) {
-                            for (int rx = x; rx < x + rectW; rx++) {
-                                visited[ry * w + rx] = true;
+                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- 2. Process objMap for Entities (Enemies, Doors, GlassDomes) ---
+    if (!objMap.IsNull() && objMap.IsDIBSection()) {
+        int w = objMap.GetWidth();
+        int h = objMap.GetHeight();
+        int pitch = objMap.GetPitch();
+        int bpp = objMap.GetBPP() / 8;
+        BYTE* pBits = (BYTE*)objMap.GetBits();
+        std::vector<bool> visited(w * h, false);
+
+        for (int y = 0; y < h; y++) {
+            BYTE* pRow = pBits + (y * pitch);
+            for (int x = 0; x < w; x++) {
+                if (visited[y * w + x]) continue;
+                BYTE* pPixel = pRow + (x * bpp);
+                BYTE b = pPixel[0], g = pPixel[1], r = pPixel[2];
+
+                // Check for Enemy Category (Yellow or White-to-handle-Pomp-marker)
+                bool isEnemyCategory = IsColorMatch(r, g, b, 255, 255, 0) || IsColorMatch(r, g, b, 255, 255, 255);
+                if (isEnemyCategory) {
+                    if (y + 1 < h) {
+                        BYTE* pSubRow = pBits + ((y + 1) * pitch) + (x * bpp);
+                        BYTE sb = pSubRow[0], sg = pSubRow[1], sr = pSubRow[2];
+                        int enemyType = -1;
+                        if (IsColorMatch(sr, sg, sb, 255, 0, 0)) enemyType = 1;      // 빨강: Grunt
+                        else if (IsColorMatch(sr, sg, sb, 0, 255, 0)) enemyType = 0; // 초록: Gangster
+                        else if (IsColorMatch(sr, sg, sb, 0, 0, 255)) enemyType = 2; // 파랑: Pomp
+
+                        if (enemyType != -1) {
+                            int rectW = 0, rectH = 1;
+                            while (x + rectW < w) {
+                                BYTE* pN = pRow + ((x + rectW) * bpp);
+                                if (IsColorMatch(pN[2], pN[1], pN[0], r, g, b)) rectW++; else break;
                             }
+                            while (y + rectH < h) {
+                                BYTE* pNRow = pBits + ((y + rectH) * pitch) + (x * bpp);
+                                if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], sr, sg, sb)) rectH++; else break;
+                            }
+                            data.enemySpawns.push_back({ (float)x, (float)y, (float)rectW, enemyType });
+                            for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
                         }
                     }
                 }
-                else if ((r >= 240 && g >= 240 && b <= 50) || // ?몃옉 (Grunt)
-                         (r >= 240 && g >= 140 && g <= 170 && b <= 50) || // 二쇳솴 (Gangster)
-                         (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) || // 蹂대씪 (Pomp)
-                         (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160)) // ?뚯깋 (ShieldCop)
-                {
-                    int enemyType = 1; // 湲곕낯媛?Grunt
-                    if (r >= 240 && g >= 240 && b <= 50) enemyType = 1;      // ?몃옉: Grunt
-                    else if (r >= 240 && g >= 140 && g <= 170 && b <= 50) enemyType = 0; // 二쇳솴: Gangster
-                    else if (r >= 190 && r <= 210 && g <= 50 && b >= 190 && b <= 210) enemyType = 2; // 蹂대씪: Pomp
-                    else if (r >= 140 && r <= 160 && g >= 140 && g <= 160 && b >= 140 && b <= 160) enemyType = 3; // ?뚯깋: ShieldCop
-
-                    int rectW = 0, rectH = 0;
-                    BYTE targetR = r, targetG = g, targetB = b;
-
-                    // 媛濡?湲몄씠 痢≪젙 (?숈씪 ?됱긽 踰붿쐞 痢≪젙)
+                else if (IsColorMatch(r, g, b, 255, 0, 255)) { // Pink: Object
+                    int rectW = 0, rectH = 1;
                     while (x + rectW < w) {
                         BYTE* pN = pRow + ((x + rectW) * bpp);
-                        if (abs((int)pN[2] - (int)targetR) < 20 && abs((int)pN[1] - (int)targetG) < 20 && abs((int)pN[0] - (int)targetB) < 20) rectW++;
-                        else break;
+                        if (IsColorMatch(pN[2], pN[1], pN[0], 255, 0, 255)) rectW++; else break;
                     }
-                    // ?몃줈 湲몄씠 痢≪젙
-                    while (y + rectH < h) {
-                        BYTE* pN = pBits + ((y + rectH) * pitch) + (x * bpp);
-                        if (abs((int)pN[2] - (int)targetR) < 20 && abs((int)pN[1] - (int)targetG) < 20 && abs((int)pN[0] - (int)targetB) < 20) rectH++;
-                        else break;
-                    }
-
-                    if (rectW > 0 && rectH > 0) {
-                        // ?곸쓽 ?뚰솚 ?꾩튂瑜?諛뺤뒪??以묒븰 ?섎떒?쇰줈 ?ㅼ젙 (??吏곴???
-                        float spawnX = (float)x + (float)rectW / 2.0f - 20.0f; // 20.0f?????덈컲 ?덈퉬
-                        float spawnY = (float)y + (float)rectH - 60.0f;       // 60.0f?????믪씠
-                        data.enemySpawns.push_back({ spawnX, spawnY, (float)rectW, enemyType });
-                        
-                        for (int ry = y; ry < y + rectH; ry++) {
-                            for (int rx = x; rx < x + rectW; rx++) {
-                                visited[ry * w + rx] = true;
+                    
+                    bool foundType = false;
+                    if (y + 1 < h) {
+                        // PINK 라인 아래의 전체 너비를 검사하여 타입 확인
+                        for (int rx = x; rx < x + rectW; rx++) {
+                            BYTE* pSubPixel = pBits + ((y + 1) * pitch) + (rx * bpp);
+                            BYTE sb2 = pSubPixel[0], sg2 = pSubPixel[1], sr2 = pSubPixel[2];
+                            
+                            if (IsColorMatch(sr2, sg2, sb2, 255, 0, 0)) { // Door (Red)
+                                while (y + rectH < h) {
+                                    BYTE* pNRow = pBits + ((y + rectH) * pitch) + (rx * bpp);
+                                    if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 255, 0, 0)) rectH++; else break;
+                                }
+                                data.doors.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                                foundType = true; break;
+                            } else if (IsColorMatch(sr2, sg2, sb2, 0, 0, 255)) { // GlassDome (Blue)
+                                while (y + rectH < h) {
+                                    BYTE* pNRow = pBits + ((y + rectH) * pitch) + (rx * bpp);
+                                    if (IsColorMatch(pNRow[2], pNRow[1], pNRow[0], 0, 0, 255)) rectH++; else break;
+                                }
+                                data.glassDomes.emplace_back((float)x, (float)y, (float)rectW, (float)rectH);
+                                foundType = true; break;
                             }
                         }
+                    }
+                    if (foundType) {
+                        for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
+                    } else {
+                        // 타입을 찾지 못했더라도 해당 핑크 라인은 건너뜀
+                        for (int rx = x; rx < x + rectW; rx++) visited[y * w + rx] = true;
                     }
                 }
             }
@@ -171,35 +190,34 @@ void StageManager::Reset() {
     if (m_pCurrentDoors) {
         for (auto& d : *m_pCurrentDoors) d.Reset();
     }
-    // 현재 스테이지 데이터를 다시 불러와 아이템 리스트 초기화
-    if (m_pCurrentItems) {
-        m_pCurrentItems->clear();
-        // m_pCurrentItems가 가리키는 데이터는 StageData 내부에 있으므로
-        // ProcessStage에서 갱신한 데이터가 반영되도록 함
+    if (m_pCurrentGlassDomes) {
+        for (auto& gd : *m_pCurrentGlassDomes) gd.Reset();
     }
 }
 
 void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
-    for (int i = 1; i <= 2; ++i) {
-        TCHAR mapPath[256], colPath[256];
+    for (int i = 1; i <= 5; ++i) {
+        TCHAR mapPath[256], colPath[256], objPath[256];
         wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), i, i);
         wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), i, i);
+        wsprintf(objPath, TEXT("assets/stage%d/objmap_stage%d.png"), i, i);
 
         m_mapImages[i].Load(mapPath);
         m_colMapImages[i].Load(colPath);
+        m_objMapImages[i].Load(objPath);
         
         ProcessStage(i);
 
-        if (i == 2) {
-            StageData& data = m_stageDataMap[2];
-            data.camFixedY = 0.0f; 
-            data.mapScale = 1.0f; 
+        if (i >= 2 && i <= 5) {
+            StageData& data = m_stageDataMap[i];
+            data.camFixedY = -1.0f; // 음수값으로 설정하여 카메라 Y축 고정 해제 (플레이어 추적)
+            data.mapScale = 1.1f; 
             data.mapRenderOffsetY = 0.0f;
         }
 
         if (pProgress) {
-            *pProgress = 60 + (i * 10);
-            Sleep(100);
+            *pProgress = 60 + (i * 5); // 진행률 분배 조정
+            Sleep(50);
         }
     }
 
@@ -212,6 +230,7 @@ void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
     }
 
     Door::LoadAssets();
+    GlassDome::LoadAssets();
 
     if (pProgress) {
         *pProgress = 90;
@@ -220,12 +239,19 @@ void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
 }
 
 void StageManager::LoadAssets(int stage) {
+    m_currentStage = stage;
     if (m_mapImages.count(stage)) {
         m_imgMap = &m_mapImages[stage];
         m_imgColMap = &m_colMapImages[stage];
+        m_imgObjMap = &m_objMapImages[stage];
         
+        if (m_imgMap && !m_imgMap->IsNull()) {
+            EffectManager::InitBloodLayer(m_imgMap->GetWidth(), m_imgMap->GetHeight());
+        }
+
         StageData& data = m_stageDataMap[stage];
         m_pCurrentDoors = &data.doors;
+        m_pCurrentGlassDomes = &data.glassDomes;
         m_pCurrentItems = &data.items;
         m_playerStart = data.playerStart;
         m_clearZones = data.clearZones;
@@ -236,13 +262,16 @@ void StageManager::LoadAssets(int stage) {
 void StageManager::ReleaseAssets() {
     for (auto& pair : m_mapImages) pair.second.Destroy();
     for (auto& pair : m_colMapImages) pair.second.Destroy();
+    for (auto& pair : m_objMapImages) pair.second.Destroy();
     m_mapImages.clear();
     m_colMapImages.clear();
+    m_objMapImages.clear();
     m_stageDataMap.clear();
     
     m_imgSkylineBlack.Destroy();
     m_imgSkylineClouds.Destroy();
     Door::ReleaseAssets();
+    GlassDome::ReleaseAssets();
 }
 
 int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale) {
@@ -258,13 +287,10 @@ int StageManager::UpdateDoors(float playerX, float playerY, float playerW, float
     return -1;
 }
 
-void StageManager::UpdateItems(float ts, Player& player) {
-    if (m_pCurrentItems != nullptr) {
-        // 적 목록을 안전하게 가져옴
-        const std::vector<Enemy*>& enemies = m_currentEnemies;
-             
-        for (auto& item : *m_pCurrentItems) {
-            item.Update(ts, player, enemies);
+void StageManager::UpdateGlassDomes(bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime) {
+    if (m_pCurrentGlassDomes) {
+        for (auto& gd : *m_pCurrentGlassDomes) {
+            gd.Update(attackHitX, attackHitY, attackHitW, attackHitH, isAttacking, currentTime);
         }
     }
 }
@@ -272,27 +298,16 @@ void StageManager::UpdateItems(float ts, Player& player) {
 void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo) {
     if (!hDC) return;
 
-    // [최상단 강제 디버그] Render 호출 확인
-    TCHAR status[100];
-    wsprintf(status, TEXT("Render Called. ItemsPtr: %s"), m_pCurrentItems ? TEXT("Valid") : TEXT("NULL"));
-    SetBkMode(hDC, TRANSPARENT);
-    SetTextColor(hDC, RGB(255, 255, 0));
-    TextOut(hDC, 10, 150, status, lstrlen(status));
-
     if (isSlowMo) {
-        // ?щ줈??紐⑤뱶 ??諛곌꼍??寃??됱쑝濡?梨꾩?
         HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
         RECT rect = { 0, 0, virtualWidth, virtualHeight };
         FillRect(hDC, &rect, hBlack);
         DeleteObject(hBlack);
-        
-        // 臾?Door)???뚮뜑留?(?꾩슂?섎떎硫??ш린??臾몃룄 寃寃?泥섎━?????덉?留? ?쇰떒 ?뚮뜑留곷쭔 嫄대꼫?곌굅??湲곕낯 ?뚮뜑留??좎?)
-        // ?곷뱾泥섎읆 ?ㅼ삩 ?④낵瑜?二쇱? ?딆쑝誘濡??쇰떒 諛곌꼍怨??④퍡 寃寃?泥섎━?섍린 ?꾪빐 ?뚮뜑留??앸왂
         return; 
     }
 
     if (!isFullMapView) {
-        if (!m_imgSkylineClouds.IsNull()) {
+        if (!m_imgSkylineClouds.IsNull() && (m_currentStage == 1 || m_currentStage == 2)) {
             float cloudScaleX = 3.0f, cloudScaleY = 1.5f; 
             int cW = (int)(m_imgSkylineClouds.GetWidth() * cloudScaleX), cH = (int)(m_imgSkylineClouds.GetHeight() * cloudScaleY);
             int mapW = GetMapWidth(); float maxCamX = (float)(mapW - (virtualWidth / renderMapScale)), ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0, pX = -ratioX * (cW - virtualWidth);
@@ -300,7 +315,7 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
                 m_imgSkylineClouds.Draw(hDC, (int)pX, 0, cW, cH, 0, 0, m_imgSkylineClouds.GetWidth(), m_imgSkylineClouds.GetHeight());
             }
         }
-        if (!m_imgSkylineBlack.IsNull()) {
+        if (!m_imgSkylineBlack.IsNull() && m_currentStage == 1) {
             int mapW = GetMapWidth(); float skylineScale = 3.0f; int sW = (int)(m_imgSkylineBlack.GetWidth() * skylineScale), sH = (int)(m_imgSkylineBlack.GetHeight() * skylineScale);
             float maxCamX = (float)(mapW - (virtualWidth / renderMapScale)), ratioX = (maxCamX > 0) ? (camX / maxCamX) : 0, pX = -ratioX * (sW - virtualWidth);
             int pY = (virtualHeight / 2) - (sH / 2) - 150;
@@ -352,9 +367,14 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
         }
     }
 
-    // Render persistent blood splatters on top of the map background
     if (!isFullMapView) {
         EffectManager::RenderMapBlood(hDC, g, camX, camY, renderMapScale);
+    }
+
+    if (m_pCurrentGlassDomes) {
+        for (auto& gd : *m_pCurrentGlassDomes) {
+            gd.Render(hDC, camX, camY, mapScale, showDebugRect);
+        }
     }
 
     if (m_pCurrentDoors) {
@@ -372,6 +392,14 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
     if (m_pCurrentItems) {
         for (auto& item : *m_pCurrentItems) {
             item.Render(hDC, g, camX, camY, mapScale);
+        }
+    }
+}
+
+void StageManager::UpdateItems(float ts, Player& player, const std::vector<class Enemy*>& enemies) {
+    if (m_pCurrentItems != nullptr) {
+        for (auto& item : *m_pCurrentItems) {
+            item.Update(ts, player, enemies);
         }
     }
 }

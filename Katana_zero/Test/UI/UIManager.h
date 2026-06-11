@@ -1,13 +1,20 @@
-#pragma once
+﻿#pragma once
 #include <windows.h>
 #include <atlimage.h>
+
+struct GoUIConfig {
+    int x, y;
+    int arrowOffset;
+};
 
 class UIManager {
 public:
     static void Init();
     static void LoadAssets();
     static void ReleaseAssets();
-    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, class Item* pHeldItem = nullptr);
+    static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout = false, bool showDeathMessage = false, bool isStageCleared = false, int currentStage = 1, int heldItemType = -1);
+
+    static void SetGoConfig(int stage, int x, int y, int arrowOffset);
 
 private:
     static CImage m_imgHudBase;
@@ -23,4 +30,11 @@ private:
     static CImage m_imgRightClick;
     static CImage m_imgDeathBox;
     static CImage m_imgTimeoutBox;
+
+    static CImage m_imgGoText;
+    static CImage m_imgGoArrow;
+    static GoUIConfig m_goConfigs[5]; // 1-based indexing for 4 stages
+    static int m_goAnimFrame;
+    static DWORD m_lastGoAnimTime;
 };
+

@@ -135,11 +135,14 @@
     <ClCompile Include="Objects\Bullet.cpp" />
     <ClCompile Include="Objects\Door.cpp" />
     <ClCompile Include="Objects\Enemy.cpp" />
+    <ClCompile Include="Objects\GlassDome.cpp" />
     <ClCompile Include="Objects\Item.cpp" />
+    <ClCompile Include="Objects\Kissyface.cpp" />
     <ClCompile Include="Objects\Physics.cpp" />
     <ClCompile Include="Objects\Player.cpp" />
     <ClCompile Include="SceneAndMap\Camera.cpp" />
     <ClCompile Include="SceneAndMap\StageManager.cpp" />
+    <ClCompile Include="UI\StartScene.cpp" />
     <ClCompile Include="UI\UIManager.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -149,10 +152,14 @@
     <ClInclude Include="Objects\Bullet.h" />
     <ClInclude Include="Objects\Door.h" />
     <ClInclude Include="Objects\Enemy.h" />
+    <ClInclude Include="Objects\GlassDome.h" />
+    <ClInclude Include="Objects\Item.h" />
+    <ClInclude Include="Objects\Kissyface.h" />
     <ClInclude Include="Objects\Physics.h" />
     <ClInclude Include="Objects\Player.h" />
     <ClInclude Include="SceneAndMap\Camera.h" />
     <ClInclude Include="SceneAndMap\StageManager.h" />
+    <ClInclude Include="UI\StartScene.h" />
     <ClInclude Include="UI\UIManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

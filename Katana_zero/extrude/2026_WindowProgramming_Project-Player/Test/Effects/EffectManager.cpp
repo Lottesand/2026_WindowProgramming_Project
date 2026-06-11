@@ -1,0 +1,454 @@
+#include "EffectManager.h"
+#include <math.h>
+#include <algorithm>
+#include "../SceneAndMap/Camera.h"
+
+std::vector<NeonTrail> EffectManager::m_neonTrails;
+std::vector<HitVFX> EffectManager::m_hitVFXs;
+std::vector<JumpCloudVFX> EffectManager::m_jumpCloudVFXs;
+std::vector<DustCloudVFX> EffectManager::m_dustCloudVFXs;
+std::vector<LandCloudVFX> EffectManager::m_landCloudVFXs;
+std::vector<PendingHit> EffectManager::m_pendingHits;
+std::vector<BloodSplatterVFX> EffectManager::m_bloodSplatters;
+std::vector<GlassShardVFX> EffectManager::m_glassShardVFXs;
+std::vector<HitSpriteVFX> EffectManager::m_hitSprites;
+std::vector<MapBlood> EffectManager::m_mapBloods;
+CImage EffectManager::m_imgVfxItemTrail;
+CImage EffectManager::m_imgVfxSlash[5];
+CImage EffectManager::m_imgVfxHit[6];
+CImage EffectManager::m_imgVfxJumpCloud[4];
+CImage EffectManager::m_imgVfxDustCloud[7];
+CImage EffectManager::m_imgVfxLandCloud[7];
+CImage EffectManager::m_imgVfxBloodSplatter[7];
+CImage EffectManager::m_imgVfxBluntImpact[6];
+CImage EffectManager::m_imgVfxMapBloodDir[48];
+CImage EffectManager::m_imgVfxMapBloodStatic[7];
+
+void EffectManager::Init() {
+    m_neonTrails.clear();
+    m_hitVFXs.clear();
+    m_hitSprites.clear();
+    m_jumpCloudVFXs.clear();
+    m_dustCloudVFXs.clear();
+    m_landCloudVFXs.clear();
+    m_pendingHits.clear();
+    m_bloodSplatters.clear();
+    m_glassShardVFXs.clear();
+    m_mapBloods.clear();
+}
+
+void EffectManager::LoadAssets() {
+    wchar_t path[256];
+    for (int i = 0; i < 5; ++i) {
+        swprintf_s(path, L"assets/player/spr_slashfx/%d.png", i);
+        m_imgVfxSlash[i].Load(path);
+    }
+    for (int i = 0; i < 6; ++i) {
+        swprintf_s(path, L"assets/player/spr_hit_impact/%d.png", i);
+        m_imgVfxHit[i].Load(path);
+    }
+    for (int i = 0; i < 4; ++i) {
+        swprintf_s(path, L"assets/player/spr_jumpcloud/%d.png", i);
+        m_imgVfxJumpCloud[i].Load(path);
+    }
+    for (int i = 0; i < 7; ++i) {
+        swprintf_s(path, L"assets/player/spr_dustcloud/%d.png", i);
+        m_imgVfxDustCloud[i].Load(path);
+    }
+    for (int i = 0; i < 7; ++i) {
+        swprintf_s(path, L"assets/player/spr_landcloud/spr_landcloud_%d.png", i);
+        m_imgVfxLandCloud[i].Load(path);
+    }
+    for (int i = 0; i < 7; ++i) {
+        swprintf_s(path, L"assets/blood/spr_bloodsplatter_nondir/%d.png", i);
+        m_imgVfxBloodSplatter[i].Load(path);
+    }
+    for (int i = 0; i < 48; ++i) {
+        swprintf_s(path, L"assets/blood/bg_blood_directional/%d.png", i);
+        m_imgVfxMapBloodDir[i].Load(path);
+    }
+    for (int i = 0; i < 7; ++i) {
+        swprintf_s(path, L"assets/blood/bg_blood/%d.png", i);
+        m_imgVfxMapBloodStatic[i].Load(path);
+    }
+    for (int i = 0; i < 6; ++i) {
+        swprintf_s(path, L"assets/spr_blunt_impact/%d.png", i);
+        if (FAILED(m_imgVfxBluntImpact[i].Load(path))) {
+            OutputDebugString(TEXT("[EffectManager] Failed to load blunt_impact: "));
+            OutputDebugString(path);
+            OutputDebugString(TEXT("\n"));
+        }
+    }
+    m_imgVfxItemTrail.Load(TEXT("assets/HitEffect/0.png"));
+}
+
+void EffectManager::ReleaseAssets() {
+    for (int i = 0; i < 5; ++i) m_imgVfxSlash[i].Destroy();
+    for (int i = 0; i < 6; ++i) m_imgVfxHit[i].Destroy();
+    for (int i = 0; i < 6; ++i) m_imgVfxBluntImpact[i].Destroy();
+    m_imgVfxItemTrail.Destroy();
+    for (int i = 0; i < 4; ++i) m_imgVfxJumpCloud[i].Destroy();
+    for (int i = 0; i < 7; ++i) m_imgVfxDustCloud[i].Destroy();
+    for (int i = 0; i < 7; ++i) m_imgVfxLandCloud[i].Destroy();
+    for (int i = 0; i < 7; ++i) m_imgVfxBloodSplatter[i].Destroy();
+    for (int i = 0; i < 48; ++i) m_imgVfxMapBloodDir[i].Destroy();
+    for (int i = 0; i < 7; ++i) m_imgVfxMapBloodStatic[i].Destroy();
+}
+
+void EffectManager::Update(float timeScale, DWORD currentTime) {
+    for (auto it = m_neonTrails.begin(); it != m_neonTrails.end(); ) {
+        it->life -= (int)(1.0f / timeScale);
+        if (it->life <= 0) it = m_neonTrails.erase(it);
+        else {
+            it->length += (it->maxLength / (it->maxLife / 2.0f)) * timeScale;
+            it++;
+        }
+    }
+    for (auto it = m_hitVFXs.begin(); it != m_hitVFXs.end(); ) {
+        if (currentTime - it->lastTime >= (DWORD)(20 / timeScale)) {
+            it->currentFrame++;
+            it->lastTime = currentTime;
+        }
+        if (it->currentFrame >= it->maxFrame) it = m_hitVFXs.erase(it);
+        else it++;
+    }
+    for (auto it = m_jumpCloudVFXs.begin(); it != m_jumpCloudVFXs.end(); ) {
+        if (currentTime - it->lastTime >= (DWORD)(40 / timeScale)) {
+            it->currentFrame++;
+            it->lastTime = currentTime;
+        }
+        if (it->currentFrame >= it->maxFrame) it = m_jumpCloudVFXs.erase(it);
+        else it++;
+    }
+    for (auto it = m_dustCloudVFXs.begin(); it != m_dustCloudVFXs.end(); ) {
+        if (currentTime < it->startTick) { it++; continue; }
+        if (currentTime - it->lastTime >= (DWORD)(50 / timeScale)) {
+            it->currentFrame++;
+            it->lastTime = currentTime;
+        }
+        if (it->currentFrame >= it->maxFrame) it = m_dustCloudVFXs.erase(it);
+        else it++;
+    }
+    for (auto it = m_landCloudVFXs.begin(); it != m_landCloudVFXs.end(); ) {
+        if (currentTime - it->lastTime >= (DWORD)(40 / timeScale)) {
+            it->currentFrame++;
+            it->lastTime = currentTime;
+        }
+        if (it->currentFrame >= it->maxFrame) it = m_landCloudVFXs.erase(it);
+        else it++;
+    }
+    for (auto it = m_pendingHits.begin(); it != m_pendingHits.end(); ) {
+        it->remainingFrames--;
+        if (it->remainingFrames <= 0) {
+            if (it->target && it->target->GetIsAlive()) {
+                it->target->OnTakeDamage(it->kvx, it->kvy);
+            }
+            it = m_pendingHits.erase(it);
+        } else it++;
+    }
+
+    for (auto it = m_bloodSplatters.begin(); it != m_bloodSplatters.end(); ) {
+        if (currentTime - it->startTime > 500) {
+            it = m_bloodSplatters.erase(it);
+        } else {
+            it->x += it->vx * timeScale;
+            it->y += it->vy * timeScale;
+            it++;
+        }
+    }
+
+    for (auto it = m_hitSprites.begin(); it != m_hitSprites.end(); ) {
+        it->life -= (int)(1.0f / timeScale);
+        if (it->life <= 0) it = m_hitSprites.erase(it);
+        else it++;
+    }
+
+    for (auto it = m_glassShardVFXs.begin(); it != m_glassShardVFXs.end(); ) {
+        it->life -= (int)(1.0f / timeScale);
+        if (it->life <= 0) it = m_glassShardVFXs.erase(it);
+        else {
+            it->x += it->vx * timeScale;
+            it->y += it->vy * timeScale;
+            it->vy += 0.5f * timeScale; // Gravity
+            it->angle += it->rotation * timeScale;
+            it++;
+        }
+    }
+}
+
+
+void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMapView, float cFS, float cFX, float cFY) {
+    // Glass Shards Render
+    for (const auto& s : m_glassShardVFXs) {
+        float pFS = isFullMapView ? cFS : mapScale;
+        float dX, dY;
+        if (isFullMapView) { dX = s.x * cFS + cFX; dY = s.y * cFS + cFY; }
+        else { dX = (s.x - camX) * mapScale; dY = (s.y - camY) * mapScale; }
+
+        HPEN hP = CreatePen(PS_SOLID, (int)(2 * pFS), RGB(200, 200, 255));
+        HPEN hOP = (HPEN)SelectObject(hDC, hP);
+        
+        float rad = s.angle * 3.14159f / 180.0f;
+        float len = 4.0f * pFS;
+        MoveToEx(hDC, (int)dX, (int)dY, NULL);
+        LineTo(hDC, (int)(dX + cos(rad) * len), (int)(dY + sin(rad) * len));
+
+        SelectObject(hDC, hOP);
+        DeleteObject(hP);
+    }
+
+    for (const auto& tr : m_neonTrails) {
+        float pFS = isFullMapView ? cFS : mapScale;
+        bool isP = (GetTickCount() / 50) % 2 == 0;
+        COLORREF dC = isP ? RGB(255, 0, 255) : RGB(0, 255, 255);
+        int segs = 20; float sLen = tr.length / segs;
+        for (int i = 0; i < segs; ++i) {
+            float sD = i * sLen, eD = (i + 1) * sLen;
+            float eA = 1.0f, prog = (float)i / segs;
+            if (prog < 0.15f) eA = prog / 0.15f; else if (prog > 0.85f) eA = (1.0f - prog) / 0.15f;
+            float sX = tr.startX + tr.dirX * sD, sY = tr.startY + tr.dirY * sD;
+            float eX = tr.startX + tr.dirX * eD, eY = tr.startY + tr.dirY * eD;
+            float vSX, vSY, vEX, vEY;
+            if (isFullMapView) { vSX = sX * cFS + cFX; vSY = sY * cFS + cFY; vEX = eX * cFS + cFX; vEY = eY * cFS + cFY; }
+            else { vSX = (sX - camX) * mapScale; vSY = (sY - camY) * mapScale; vEX = (eX - camX) * mapScale; vEY = (eY - camY) * mapScale; }
+            float bW = 10.0f * pFS * (tr.life / (float)tr.maxLife) * 1.5f; if (bW < 1.0f) bW = 1.0f;
+            COLORREF fC = RGB((int)(GetRValue(dC) * eA), (int)(GetGValue(dC) * eA), (int)(GetBValue(dC) * eA));
+            HPEN hP = CreatePen(PS_SOLID, (int)bW, fC); HPEN hOP = (HPEN)SelectObject(hDC, hP);
+            MoveToEx(hDC, (int)vSX, (int)vSY, NULL); LineTo(hDC, (int)vEX, (int)vEY);
+            SelectObject(hDC, hOP); DeleteObject(hP);
+        }
+    }
+    for (const auto& v : m_hitVFXs) {
+        int safeF = (std::max)(0, v.currentFrame);
+        int f = (std::min)(safeF, v.isSlash ? 4 : 5);
+        CImage* vI = v.isSlash ? &m_imgVfxSlash[f] : (v.isBlunt ? &m_imgVfxBluntImpact[f] : &m_imgVfxHit[f]);
+        if (vI && !vI->IsNull()) {
+            float customMultiplier = v.isSlash ? 1.5f : 1.8f;
+            float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale) * customMultiplier;
+            int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY;
+            if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
+            else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            
+            int oldMode = SetGraphicsMode(hDC, GM_ADVANCED);
+            XFORM xF; xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
+            SetWorldTransform(hDC, &xF); 
+            
+            if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) {
+                vI->Draw(hDC, -vW / 2, -vH / 2, vW, vH);
+            }
+
+            XFORM xFI = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f }; SetWorldTransform(hDC, &xFI);
+            SetGraphicsMode(hDC, oldMode);
+        }
+    }
+
+    for (const auto& v : m_hitSprites) {
+        float pFS = isFullMapView ? cFS : mapScale;
+        float dX = (isFullMapView) ? v.x * cFS + cFX : (v.x - camX) * mapScale;
+        float dY = (isFullMapView) ? v.y * cFS + cFY : (v.y - camY) * mapScale;
+
+        if (!m_imgVfxItemTrail.IsNull()) {  
+            int oldMode = SetGraphicsMode(hDC, GM_ADVANCED);
+            float totalWidth = (float)(m_imgVfxItemTrail.GetWidth() * pFS * 18.0f);
+            float totalHeight = (float)(m_imgVfxItemTrail.GetHeight() * pFS * 1.5f);
+            float progress = 1.0f - ((float)v.life / (float)v.maxLife);
+            int srcW = m_imgVfxItemTrail.GetWidth();
+            int srcH = m_imgVfxItemTrail.GetHeight();
+            int drawW = (int)(totalWidth * (1.0f - progress));
+            int offset = (int)(totalWidth * progress);
+            int srcXStart = (int)(srcW * progress);
+            int srcWPart = srcW - srcXStart;
+
+            XFORM xF; xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
+            SetWorldTransform(hDC, &xF);
+
+            if (drawW > 0 && srcWPart > 0) {
+                m_imgVfxItemTrail.Draw(hDC, (int)(-totalWidth / 2.0f + offset), (int)(-totalHeight / 2.0f), drawW, (int)totalHeight, srcXStart, 0, srcWPart, srcH);
+            }
+
+            XFORM xFI = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f }; SetWorldTransform(hDC, &xFI);
+            SetGraphicsMode(hDC, oldMode);
+        }
+    }
+    
+    for (const auto& v : m_jumpCloudVFXs) {
+        int safeF = (std::max)(0, v.currentFrame);
+        CImage* vI = &m_imgVfxJumpCloud[(std::min)(safeF, 3)];
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale);
+            int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY;
+            if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
+            else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            if (v.angle != 0.0f) {
+                XFORM xF, oldXF; int oldMode = GetGraphicsMode(hDC); SetGraphicsMode(hDC, GM_ADVANCED); GetWorldTransform(hDC, &oldXF);
+                xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
+                SetWorldTransform(hDC, &xF); 
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, -vW / 2, -vH, vW, vH);
+                SetWorldTransform(hDC, &oldXF); SetGraphicsMode(hDC, oldMode);
+            } else {
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
+            }
+        }
+    }
+    for (const auto& v : m_dustCloudVFXs) {
+        if (GetTickCount() < v.startTick) continue;
+        int safeF = (std::max)(0, v.currentFrame);
+        CImage* vI = &m_imgVfxDustCloud[(std::min)(safeF, 6)];
+        if (vI && !vI->IsNull()) {
+            float progress = (float)safeF / (float)v.maxFrame;
+            float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale) * (0.8f + progress * 1.0f);
+            float driftOffset = progress * 35.0f * (isFullMapView ? cFS : mapScale);
+            int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY;
+            if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
+            else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            if (v.isFacingRight) {
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, (int)(dX - vW - driftOffset), (int)dY - vH, vW, vH);
+            }
+            else {
+                XFORM xF, oldXF; int oldMode = GetGraphicsMode(hDC); SetGraphicsMode(hDC, GM_ADVANCED); GetWorldTransform(hDC, &oldXF);
+                xF.eM11 = -1.0f; xF.eM12 = 0.0f; xF.eM21 = 0.0f; xF.eM22 = 1.0f; xF.eDx = dX + driftOffset; xF.eDy = 0.0f;
+                SetWorldTransform(hDC, &xF); 
+                if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, 0, (int)dY - vH, vW, vH);
+                SetWorldTransform(hDC, &oldXF); SetGraphicsMode(hDC, oldMode);
+            }
+        }
+    }
+    for (const auto& v : m_landCloudVFXs) {
+        int safeF = (std::max)(0, v.currentFrame);
+        CImage* vI = &m_imgVfxLandCloud[(std::min)(safeF, 6)];
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale) * 0.8f;
+            int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY;
+            if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
+            else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH, vW, vH);
+        }
+    }
+    for (const auto& v : m_bloodSplatters) {
+        CImage* vI = &m_imgVfxBloodSplatter[v.imgIndex];
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 4.0f * (isFullMapView ? cFS : mapScale);
+            int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY;
+            if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
+            else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            if (vW > 0 && vH > 0 && vI->GetWidth() > 0 && vI->GetHeight() > 0) {
+                if (v.angle != 0.0f) {
+                    XFORM xF, oldXF; int oldMode = GetGraphicsMode(hDC); SetGraphicsMode(hDC, GM_ADVANCED); GetWorldTransform(hDC, &oldXF);
+                    xF.eM11 = cos(v.angle); xF.eM12 = sin(v.angle); xF.eM21 = -sin(v.angle); xF.eM22 = cos(v.angle); xF.eDx = dX; xF.eDy = dY;
+                    SetWorldTransform(hDC, &xF); 
+                    vI->Draw(hDC, -vW / 2, -vH / 2, vW, vH);
+                    SetWorldTransform(hDC, &oldXF); SetGraphicsMode(hDC, oldMode);
+                } else {
+                    vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH / 2, vW, vH);
+                }
+            }
+        }
+    }
+}
+
+void EffectManager::AddNeonTrail(float x, float y, float ux, float uy, float angle) {
+    NeonTrail trail; trail.x = x; trail.y = y; trail.startX = x - ux * 1000.0f; trail.startY = y - uy * 1000.0f;
+    trail.endX = x + ux * 3000.0f; trail.endY = y + uy * 3000.0f; trail.dirX = ux; trail.dirY = uy; trail.angle = angle;
+    trail.length = 0.0f; trail.maxLength = 4000.0f; trail.life = 6; trail.maxLife = 6;
+    m_neonTrails.push_back(trail);
+}
+
+void EffectManager::AddHitVFX(float x, float y, float angle, DWORD currentTime) {
+    HitVFX s; s.x = x; s.y = y; s.angle = angle; s.currentFrame = 0; s.maxFrame = 5; s.lastTime = currentTime; s.isSlash = true; s.isBlunt = false; m_hitVFXs.push_back(s);
+    HitVFX i; i.x = x; i.y = y; i.angle = angle; i.currentFrame = 0; i.maxFrame = 6; i.lastTime = currentTime; i.isSlash = false; i.isBlunt = false; m_hitVFXs.push_back(i);
+    AddHitSpriteVFX(x, y, angle);
+}
+
+void EffectManager::AddBluntImpactVFX(float x, float y, float angle, DWORD currentTime) {
+    HitVFX i; i.x = x; i.y = y; i.angle = angle; i.currentFrame = 0; i.maxFrame = 6; i.lastTime = currentTime; i.isSlash = false; i.isBlunt = true; m_hitVFXs.push_back(i);
+    AddHitSpriteVFX(x, y, angle);
+}
+
+void EffectManager::AddJumpCloudVFX(float x, float y, DWORD currentTime, float angle) {
+    JumpCloudVFX c; c.x = x; c.y = y; c.angle = angle; c.currentFrame = 0; c.maxFrame = 4; c.lastTime = currentTime; m_jumpCloudVFXs.push_back(c);
+}
+
+void EffectManager::AddDustCloudVFX(float x, float y, bool isFacingRight, DWORD currentTime) {
+    static int bc = 0; DustCloudVFX c; c.x = x; c.y = y; c.isFacingRight = isFacingRight; c.currentFrame = 0; c.maxFrame = 7;
+    c.startTick = currentTime + (bc * 60); c.lastTime = c.startTick; m_dustCloudVFXs.push_back(c); bc = (bc + 1) % 3;
+}
+
+void EffectManager::AddLandCloudVFX(float x, float y, DWORD currentTime) {
+    LandCloudVFX c; c.x = x; c.y = y; c.currentFrame = 0; c.maxFrame = 7; c.lastTime = currentTime; m_landCloudVFXs.push_back(c);
+}
+
+void EffectManager::AddHitSpriteVFX(float x, float y, float angle) {
+    HitSpriteVFX s; s.x = x; s.y = y; s.angle = angle; s.life = 12; s.maxLife = 12; m_hitSprites.push_back(s);
+}
+
+void EffectManager::AddBloodSplatter(float x, float y, float vx, float vy, float angle, DWORD currentTime) {
+    BloodSplatterVFX b;
+    b.x = x; b.y = y; b.vx = vx; b.vy = vy; b.angle = angle;
+    b.imgIndex = rand() % 7;
+    b.startTime = currentTime;
+    m_bloodSplatters.push_back(b);
+}
+
+void EffectManager::AddGlassShards(float x, float y) {
+    for (int i = 0; i < 10; ++i) {
+        GlassShardVFX s;
+        s.x = x; s.y = y;
+        s.vx = (float)(rand() % 20 - 10);
+        s.vy = (float)(rand() % 20 - 10);
+        s.angle = (float)(rand() % 360);
+        s.rotation = (float)(rand() % 10 - 5);
+        s.life = 20 + rand() % 20;
+        m_glassShardVFXs.push_back(s);
+    }
+}
+
+void EffectManager::AddPendingHit(Enemy* target, float kvx, float kvy) {
+    PendingHit p; p.target = target; p.kvx = kvx; p.remainingFrames = 6; m_pendingHits.push_back(p);
+}
+
+void EffectManager::AddMapBlood(float x, float y, float angle, bool isDirectional) {
+    MapBlood mb;
+    mb.x = x;
+    mb.y = y;
+    mb.angle = angle;
+    mb.isDirectional = isDirectional;
+    mb.imgIndex = isDirectional ? (rand() % 48) : (rand() % 7);
+    m_mapBloods.push_back(mb);
+}
+
+void EffectManager::RenderMapBlood(HDC hDC, Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!g) return;
+    for (const auto& v : m_mapBloods) {
+        CImage* vI = v.isDirectional ? &m_imgVfxMapBloodDir[v.imgIndex] : &m_imgVfxMapBloodStatic[v.imgIndex];
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 2.0f * mapScale;
+            float dX = (v.x - camX) * mapScale;
+            float dY = (v.y - camY) * mapScale;
+            
+            void* bits = vI->GetBits();
+            if (bits) {
+                Gdiplus::Bitmap bmp(vI->GetWidth(), vI->GetHeight(), vI->GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+                float sw = (float)vI->GetWidth() * vfxScale;
+                float sh = (float)vI->GetHeight() * vfxScale;
+                
+                g->TranslateTransform(dX, dY);
+                if (v.isDirectional) {
+                    g->RotateTransform(v.angle * 180.0f / 3.14159f);
+                } else {
+                    // Random rotation for static blood to add variety
+                    g->RotateTransform((float)(v.imgIndex * 45)); 
+                }
+                g->DrawImage(&bmp, -sw / 2.0f, -sh / 2.0f, sw, sh);
+                g->ResetTransform();
+            }
+        }
+    }
+}
+
+bool EffectManager::HasActiveHitVFX() { return !m_hitVFXs.empty(); }
+bool EffectManager::HasActiveVFX() { return !m_neonTrails.empty() || !m_hitVFXs.empty() || !m_jumpCloudVFXs.empty() || !m_dustCloudVFXs.empty() || !m_landCloudVFXs.empty(); }

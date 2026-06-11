@@ -6,6 +6,7 @@
 #include "../SceneAndMap/StageManager.h"
 #include "../SceneAndMap/Camera.h"
 #include <cmath>
+#include <gdiplus.h>
 
 // 아이템 렌더링 배율 설정 (플레이어 대비 크기 조절)
 const float ITEM_RENDER_SCALE = 1.0f;
@@ -23,7 +24,7 @@ Item::Item(ItemType type, float x, float y) : m_type(type), m_x(x), m_y(y) {
     m_showIndicator = false;
     m_arrowFrame = 0;
     m_arrowLastTime = GetTickCount();
-    
+
     // 타입별 속성 및 인디케이터 오프셋 설정
     m_colW = 20.0f;
     m_colH = 20.0f;
@@ -110,6 +111,11 @@ void Item::ReleaseAssets() {
         if (!img.IsNull()) img.Destroy();
     }
     m_arrowImages.clear();
+
+    for (auto& pair : m_hudImages) {
+        if (!pair.second.IsNull()) pair.second.Destroy();
+    }
+    m_hudImages.clear();
 }
 
 void Item::OnPickUp() {
@@ -140,7 +146,8 @@ void Item::Update(float ts, Player& player, const std::vector<class Enemy*>& ene
                 m_arrowLastTime = ct;
             }
         }
-    } else {
+    }
+    else {
         m_showIndicator = false;
     }
 
@@ -158,30 +165,34 @@ void Item::Update(float ts, Player& player, const std::vector<class Enemy*>& ene
             for (auto& enemy : enemies) {
                 if (enemy && enemy->GetIsAlive()) {
                     float ex = enemy->GetX(), ey = enemy->GetY(), ew = enemy->GetColW(), eh = enemy->GetColH();
-                    
+
                     // Simple AABB collision
                     bool hit = (nx < ex + ew && nx + m_colW > ex && ny < ey + eh && ny + m_colH > ey);
 
                     if (hit) {
                         // Kill enemy
                         enemy->OnTakeDamage(m_vx * 0.5f, -5.0f);
-                        
+
                         // Add blood and hit line effect
                         float angle = atan2(m_vy, m_vx);
                         EffectManager::AddBloodSplatter(itemCX, itemCY, m_vx * 0.2f, m_vy * 0.2f, angle, GetTickCount());
-                        
-                        // Add hit sprite effect
-                        EffectManager::AddHitVFX(itemCX, itemCY, angle, GetTickCount()); // 수정됨
-                        EffectManager::AddBluntImpactVFX(itemCX, itemCY, angle, GetTickCount()); // 수정됨
+
+                        // Add hit sprite and neon trail effect
+                        float dist = sqrt(m_vx * m_vx + m_vy * m_vy);
+                        float ux = m_vx / dist;
+                        float uy = m_vy / dist;
+                        EffectManager::AddNeonTrail(itemCX, itemCY, ux, uy, angle);
+                        EffectManager::AddHitVFX(itemCX, itemCY, angle, GetTickCount());
+                        // EffectManager::AddBluntImpactVFX(itemCX, itemCY, angle, GetTickCount()); // TODO: Add if needed
 
                         // Add camera shake and feedback (similar to standard attack)
-                        float ux = cos(angle), uy = sin(angle);
-                        Camera::AddPush(ux * 20.0f, uy * 20.0f);
+                        float camUx = cos(angle), camUy = sin(angle);
+                        Camera::AddPush(camUx * 20.0f, camUy * 20.0f);
                         Camera::AddShake(0.8f);
-                        
+
                         m_isActive = false;
                         // Break effect
-                        EffectManager::AddGlassShards(itemCX, itemCY);
+                        // EffectManager::AddGlassShards(itemCX, itemCY); // TODO: Add if needed
                         return;
                     }
                 }
@@ -190,15 +201,16 @@ void Item::Update(float ts, Player& player, const std::vector<class Enemy*>& ene
 
 
         // Check map collision (using center and corners for better detection)
-        if (CheckMapCollision(nx, ny, m_colW, m_colH) || 
-            CheckMapCollision(nx + m_colW, ny, 1, 1) || 
-            CheckMapCollision(nx, ny + m_colH, 1, 1) || 
+        if (CheckMapCollision(nx, ny, m_colW, m_colH) ||
+            CheckMapCollision(nx + m_colW, ny, 1, 1) ||
+            CheckMapCollision(nx, ny + m_colH, 1, 1) ||
             CheckMapCollision(nx + m_colW, ny + m_colH, 1, 1)) {
-            
+
             m_isActive = false;
             // Break effect at collision point
-            EffectManager::AddGlassShards(nx + m_colW / 2.0f, ny + m_colH / 2.0f);
-        } else {
+            // EffectManager::AddGlassShards(nx + m_colW / 2.0f, ny + m_colH / 2.0f); // TODO: Add if needed
+        }
+        else {
             m_x = nx;
             m_y = ny;
         }
@@ -222,13 +234,14 @@ void Item::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float m
             // 위아래로 둥실거리는 효과 추가 (사인파 이용)
             float bobbingOffset = sin(GetTickCount() * 0.005f) * 5.0f;
             int ay = dy - ah - (int)(10.0f * mapScale) + (int)(bobbingOffset * mapScale) + (int)(m_indicatorOffsetY * mapScale); // 아이템 위 10px 위치 + 둥실거림 + 오프셋
-            
+
             // GDI+를 사용하여 알파 채널을 올바르게 처리
             void* bits = arrowImg.GetBits();
             if (bits) {
                 Gdiplus::Bitmap bmp(arrowImg.GetWidth(), arrowImg.GetHeight(), arrowImg.GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
                 g->DrawImage(&bmp, (float)ax, (float)ay, (float)aw, (float)ah);
-            } else {
+            }
+            else {
                 // 백업: TransparentBlt (검정색 배경 제거)
                 arrowImg.TransparentBlt(hdc, ax, ay, aw, ah, 0, 0, arrowImg.GetWidth(), arrowImg.GetHeight(), RGB(0, 0, 0));
             }
@@ -240,21 +253,19 @@ void Item::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float m
     if (img && !img->IsNull()) {
         int fw = (int)(img->GetWidth() * ITEM_RENDER_SCALE * mapScale);
         int fh = (int)(img->GetHeight() * ITEM_RENDER_SCALE * mapScale);
-        
+
         if (m_state == ItemState::THROWN || (m_state == ItemState::ON_GROUND && m_type == ItemType::KNIFE)) {
             // GDI+를 사용하여 투명도 유지 및 회전 렌더링
-            Gdiplus::Graphics graphics(hdc);
-            graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-            
             float rad = (m_state == ItemState::THROWN) ? m_angle : (3.141592f / 2.0f);
-            
+
             Gdiplus::Bitmap bmp(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)img->GetBits());
-            
-            graphics.TranslateTransform((float)dx + fw / 2.0f, (float)dy + fh / 2.0f);
-            graphics.RotateTransform(rad * 180.0f / 3.141592f);
-            graphics.DrawImage(&bmp, -fw / 2.0f, -fh / 2.0f, (float)fw, (float)fh);
-            graphics.ResetTransform();
-        } else {
+
+            g->TranslateTransform((float)dx + fw / 2.0f, (float)dy + fh / 2.0f);
+            g->RotateTransform(rad * 180.0f / 3.141592f);
+            g->DrawImage(&bmp, -fw / 2.0f, -fh / 2.0f, (float)fw, (float)fh);
+            g->ResetTransform();
+        }
+        else {
             img->Draw(hdc, dx, dy, fw, fh);
         }
     }

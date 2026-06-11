@@ -47,7 +47,7 @@ public:
     static void LoadAssets();
     static void ReleaseAssets();
     static CImage& GetItemImage(ItemType type, int index) { 
-        if (m_itemImages.find(type) != m_itemImages.end() && index < m_itemImages[type].size()) {
+        if (m_itemImages.find(type) != m_itemImages.end() && index < (int)m_itemImages[type].size()) {
             return m_itemImages[type][index];
         }
         static CImage nullImg; 

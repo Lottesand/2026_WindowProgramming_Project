@@ -5,7 +5,7 @@
 
 class Player;
 
-enum class EnemyType { GANGSTER, GRUNT, POMP, SHIELDCOP };
+enum class EnemyType { GANGSTER, GRUNT, POMP, SHIELDCOP, KISSYFACE };
 enum class EnemyState { ES_IDLE, ES_WALK, ES_FALL, ES_ALERT, ES_ATTACK, ES_DEAD };
 enum class GangsterAction { GA_NONE, GA_AIM, GA_FIRE, GA_TURN, GA_RUN, GA_HURT_FLY, GA_HURT_GROUND };
 enum class GruntAction { GR_NONE, GR_ATTACK, GR_SLASH, GR_TURN, GR_RUN, GR_HURT_FLY, GR_HURT_GROUND };
@@ -17,6 +17,7 @@ protected:
     float m_x, m_y, m_startX, m_startY, m_vx, m_vy, m_colW, m_colH;
     bool m_isAlive, m_isFacingLeft, m_isImmortal, m_isWaiting;
     float m_bloodDistance;
+    DWORD m_lastBleedTime;
     EnemyType m_Type; EnemyState m_State;
     int m_CurrentFrame; DWORD m_LastTime, m_patternTimer;
     float m_friction, m_knockbackVx, m_walkDistance, m_patrolRange;
@@ -28,8 +29,8 @@ protected:
     static CImage m_ImgExclaim[2];
 
     // Detection constants
-    float m_detectRange = 400.0f;
-    float m_detectAngle = 45.0f; // Cone angle (half of total field)
+    float m_detectRange = 600.0f;
+    float m_detectAngle = 60.0f; // Cone angle (half of total field)
 
 public:
     Enemy(float startX, float startY, EnemyType type, float patrolRange = 150.0f);
@@ -47,6 +48,8 @@ public:
     void UpdateDetection(float px, float py, float pw, float ph, float ts);
     void RenderDebug(HDC hdc, float camX, float camY, float mapScale);
 
+    bool CheckDoorCollision(float nx, float ny, float nw, float nh);
+
     static void ReleaseAll();
     EnemyType GetType() const { return m_Type; }
     bool GetIsAlive() const { return m_isAlive; }
@@ -60,6 +63,10 @@ public:
 };
 
 class Gangster : public Enemy {
+private:
+    GangsterAction m_ActionState;
+    float m_aimAngle;
+    static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[4], m_ImgAim_L[4], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10], m_ImgGun_R[2], m_ImgGun_L[2], m_ImgArm[2];
 public:
 
     Gangster(float x, float y); virtual ~Gangster();
@@ -69,11 +76,6 @@ public:
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
     virtual void OnTakeDamage(float kvx, float kvy) override;
     static void Release();
-private:
-    GangsterAction m_ActionState;
-    float m_aimAngle;
-    static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[4], m_ImgAim_L[4], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10], m_ImgGun_R[2], m_ImgGun_L[2], m_ImgArm[2];
-
 };
 
 class Grunt : public Enemy {
