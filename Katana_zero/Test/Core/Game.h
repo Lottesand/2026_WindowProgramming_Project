@@ -55,7 +55,6 @@ private:
     bool m_isTimePaused;
     bool m_isTimeoutDeath;
     bool m_showDebugRect;
-    bool m_showGrid;
     bool m_isFullMapView;
 
     float m_renderMapScale;

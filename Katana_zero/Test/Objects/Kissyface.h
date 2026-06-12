@@ -24,7 +24,10 @@ enum class KissyfaceAction {
     KF_STRUGGLE,   // Struggling with player (player hidden)
     KF_RECOVER,    // Standing back up
     KF_HURT_FLY,
-    KF_HURT_GROUND
+    KF_HURT_GROUND,
+    KF_DIE,        // Dying animation after final struggle
+    KF_DEAD,       // Dead on the ground (idle)
+    KF_NOHEAD      // Final blow (decapitation)
 };
 
 enum class AxeState { INACTIVE, FLYING, STUCK, RETURNING, ORBITING };
@@ -85,12 +88,15 @@ private:
     static std::vector<CImage> m_imgPreLunge;
     static std::vector<CImage> m_imgLunge;
     static std::vector<CImage> m_imgLungeAttack;
+    static std::vector<CImage> m_imgDie;
+    static std::vector<CImage> m_imgDead;
+    static std::vector<CImage> m_imgNoHead;
     static CImage m_imgAxe;
 
     std::vector<KissyfaceAfterImage> m_afterImages;
     DWORD m_lastAfterImageTime;
-    const int m_maxAfterImages = 15;
-    const int m_afterImageInterval = 60; // ms
+    const int m_maxAfterImages = 5;
+    const int m_afterImageInterval = 30; // ms (기존 60 -> 30으로 간격 좁힘)
 
     KissyfaceAction m_ActionState;
     float m_animTimer;

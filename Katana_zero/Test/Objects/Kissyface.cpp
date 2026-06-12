@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <vector>
 #include <cmath>
+#include <map>
 
 CImage Kissyface::m_imgIdle;
 std::vector<CImage> Kissyface::m_imgBlock;
@@ -22,6 +23,9 @@ std::vector<CImage> Kissyface::m_imgRecover;
 std::vector<CImage> Kissyface::m_imgPreLunge;
 std::vector<CImage> Kissyface::m_imgLunge;
 std::vector<CImage> Kissyface::m_imgLungeAttack;
+std::vector<CImage> Kissyface::m_imgDie;
+std::vector<CImage> Kissyface::m_imgDead;
+std::vector<CImage> Kissyface::m_imgNoHead;
 CImage Kissyface::m_imgAxe;
 
 Kissyface::Kissyface(float startX, float startY) 
@@ -70,16 +74,28 @@ void Kissyface::Init() {
     loadFrames(m_imgPreLunge, L"assets/boss/spr_kissyface_prelunge", L"spr_kissyface_prelunge", 4);
     loadFrames(m_imgLunge, L"assets/boss/spr_kissyface_lunge", L"spr_kissyface_lunge", 5);
     loadFrames(m_imgLungeAttack, L"assets/boss/spr_kissyface_lungeattack", L"spr_kissyface_lungeattack", 9);
+    loadFrames(m_imgDie, L"assets/boss/spr_kissyface_die", L"spr_kissyface_die", 4);
+    loadFrames(m_imgDead, L"assets/boss/spr_kissyface_dead", L"spr_kissyface_dead", 1);
+    loadFrames(m_imgNoHead, L"assets/boss/spr_kissyface_nohead", L"spr_kissyface_nohead", 1);
     if (m_imgAxe.IsNull()) m_imgAxe.Load(TEXT("assets/boss/spr_kissyface_axe.png"));
 }
 
 void Kissyface::Update(float ts, const Player& player) {
-    if (!m_isAlive && m_ActionState != KissyfaceAction::KF_HURT_FLY && m_ActionState != KissyfaceAction::KF_HURT_GROUND && m_ActionState != KissyfaceAction::KF_DOWNED && m_ActionState != KissyfaceAction::KF_STRUGGLE && m_ActionState != KissyfaceAction::KF_RECOVER) return;
+    static DWORD lastUpdateTime = GetTickCount();
+    DWORD ct = GetTickCount();
+    float dT = (ct - lastUpdateTime) / 1000.0f;
+    lastUpdateTime = ct;
+    if (dT > 0.1f) dT = 0.016f;
+
+    // 이미 완전히 죽은 상태(머리 없음)면 업데이트 종료
+    if (m_ActionState == KissyfaceAction::KF_NOHEAD) return;
+
+    if (!m_isAlive && m_ActionState != KissyfaceAction::KF_HURT_FLY && m_ActionState != KissyfaceAction::KF_HURT_GROUND && m_ActionState != KissyfaceAction::KF_DOWNED && m_ActionState != KissyfaceAction::KF_STRUGGLE && m_ActionState != KissyfaceAction::KF_RECOVER && m_ActionState != KissyfaceAction::KF_DIE && m_ActionState != KissyfaceAction::KF_DEAD) return;
+    
     if (std::isnan(m_vx) || std::isinf(m_vx)) m_vx = 0.0f; if (std::isnan(m_vy) || std::isinf(m_vy)) m_vy = 0.0f;
     if (m_vx > 100.0f) m_vx = 100.0f; if (m_vx < -100.0f) m_vx = -100.0f;
     if (m_vy > 100.0f) m_vy = 100.0f; if (m_vy < -100.0f) m_vy = -100.0f;
 
-    DWORD ct = GetTickCount();
     float pDist = (float)fabs(player.GetX() - m_x);
 
     bool shouldSpawnTrail = false; Gdiplus::Color trailColor;
@@ -87,11 +103,11 @@ void Kissyface::Update(float ts, const Player& player) {
     else if (m_ActionState == KissyfaceAction::KF_PRELUNGE || m_ActionState == KissyfaceAction::KF_LUNGE || m_ActionState == KissyfaceAction::KF_LUNGEATTACK) { shouldSpawnTrail = true; trailColor = Gdiplus::Color(255, 50, 50); }
 
     if (shouldSpawnTrail && ct - m_lastAfterImageTime > (DWORD)m_afterImageInterval) {
-        m_afterImages.push_back({ m_x, m_y, m_animFrame, m_ActionState, m_isFacingLeft, 0.5f, trailColor });
+        m_afterImages.push_back({ m_x, m_y, m_animFrame, m_ActionState, m_isFacingLeft, 0.75f, trailColor });
         if (m_afterImages.size() > (size_t)m_maxAfterImages) m_afterImages.erase(m_afterImages.begin());
         m_lastAfterImageTime = ct;
     }
-    for (auto it = m_afterImages.begin(); it != m_afterImages.end(); ) { it->alpha -= ts * 1.2f; if (it->alpha <= 0) it = m_afterImages.erase(it); else ++it; }
+    for (auto it = m_afterImages.begin(); it != m_afterImages.end(); ) { it->alpha -= dT * 1.2f * ts; if (it->alpha <= 0) it = m_afterImages.erase(it); else ++it; }
 
     if (m_isAlive && m_ActionState == KissyfaceAction::KF_IDLE) {
         m_patternDelayTimer += ts;
@@ -113,6 +129,61 @@ void Kissyface::Update(float ts, const Player& player) {
     float frameDelay = m_delayBase / m_globalSpeedRate;
 
     switch (m_ActionState) {
+    case KissyfaceAction::KF_STRUGGLE:
+    {
+        if (m_animTimer > 0.4f) { m_animTimer = 0; m_animFrame = (m_animFrame + 1) % 2; }
+        float targetThreshold = m_strugglePhase * 0.25f;
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
+            m_struggleProgress += ts * (0.25f / 16.0f);
+            if (m_struggleProgress > targetThreshold) m_struggleProgress = targetThreshold;
+            float phaseStart = (m_strugglePhase - 1) * 0.25f;
+            m_struggleCircleProgress = (m_struggleProgress - phaseStart) / 0.25f;
+            if (m_struggleCircleProgress > 1.0f) m_struggleCircleProgress = 1.0f;
+        } else {
+            m_ActionState = KissyfaceAction::KF_RECOVER; m_animFrame = 0; m_animTimer = 0;
+            const_cast<Player&>(player).SetVisible(true); const_cast<Player&>(player).Stun(0.4f, m_isFacingLeft ? 15.0f : -15.0f, -6.0f); break;
+        }
+        if (m_struggleProgress >= targetThreshold) {
+            if (m_strugglePhase >= 4) {
+                // 4번째 몸싸움 완료 -> 죽음 시퀀스 진입
+                m_ActionState = KissyfaceAction::KF_DIE;
+                m_animFrame = 0; m_animTimer = 0;
+                // 플레이어는 여전히 숨김 상태 유지 (DIE 애니메이션 끝날 때까지)
+            } else {
+                m_ActionState = KissyfaceAction::KF_RECOVER;
+                m_animFrame = 0; m_animTimer = 0;
+                const_cast<Player&>(player).SetVisible(true);
+                const_cast<Player&>(player).Stun(0.6f, m_isFacingLeft ? 20.0f : -20.0f, -8.0f);
+            }
+        }
+    }
+        break;
+
+    case KissyfaceAction::KF_DIE:
+        if (m_animTimer > 3.0f) { // DIE 모션은 이제 3초당 1프레임으로 극단적으로 느리게 재생
+            m_animTimer = 0;
+            m_animFrame++;
+            if (m_animFrame >= (int)m_imgDie.size()) {
+                m_ActionState = KissyfaceAction::KF_DEAD;
+                m_animFrame = 0;
+                // DIE 모션이 완전히 끝나면 플레이어를 다시 보이고 컨트롤 복구
+                const_cast<Player&>(player).SetVisible(true);
+            }
+        }
+        break;
+
+    case KissyfaceAction::KF_DEAD:
+        // 가만히 누워 있는 상태. OnTakeDamage에서 KF_NOHEAD로 전환됨.
+        m_animFrame = 0;
+        break;
+
+    case KissyfaceAction::KF_RECOVER:
+        if (m_animTimer > frameDelay) {
+            m_animTimer = 0; m_animFrame++;
+            if (m_animFrame >= 7) { m_animFrame = 0; m_ActionState = KissyfaceAction::KF_IDLE; m_patternDelayTimer = 0.0f; m_hp = m_maxHp; m_isAlive = true; }
+        }
+        break;
+
     case KissyfaceAction::KF_BLOCK:
         if (m_animTimer > frameDelay) { m_animTimer = 0; m_animFrame++; if (m_animFrame >= 5) { m_animFrame = 0; m_ActionState = KissyfaceAction::KF_IDLE; m_patternDelayTimer = 0.0f; } }
         break;
@@ -167,7 +238,7 @@ void Kissyface::Update(float ts, const Player& player) {
             if (m_animFrame == 4) {
                 float px = player.GetX(), py = player.GetY(), pw = player.GetColW(), ph = player.GetColH(); float ex = m_x + (m_isFacingLeft ? -30.0f : 30.0f), ey = m_y + 30.0f;
                 float dist = sqrt(pow(px + pw / 2 - ex, 2) + pow(py + ph / 2 - ey, 2));
-                if (dist < 100.0f && !player.IsDead() && !player.IsGodMode() && player.GetState() != PlayerState::PS_ROLL) { const_cast<Player&>(player).OnTakeDamage(1.0f, m_isFacingLeft ? -15.0f : 15.0f, -8.0f, m_x + m_colW / 2.0f, m_y + m_colH / 2.0f); }
+                if (dist < 100.0f && !player.IsGodMode() && !player.IsDead() && player.GetState() != PlayerState::PS_ROLL) { const_cast<Player&>(player).OnTakeDamage(1.0f, m_isFacingLeft ? -15.0f : 15.0f, -8.0f, m_x + m_colW / 2.0f, m_y + m_colH / 2.0f); }
             }
             if (m_animFrame >= 9) { m_ActionState = KissyfaceAction::KF_IDLE; m_animFrame = 0; m_patternDelayTimer = -0.8f; m_lungeTargetX = 0.0f; }
         }
@@ -190,31 +261,6 @@ void Kissyface::Update(float ts, const Player& player) {
             }
         }
         break;
-    case KissyfaceAction::KF_STRUGGLE:
-    {
-        m_struggleTimer += ts;
-        if (m_animTimer > 0.4f) { m_animTimer = 0; m_animFrame = (m_animFrame + 1) % 2; }
-        float targetThreshold = m_strugglePhase * 0.25f;
-        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
-            // 한 단계(0.25) 채우는 데 16초 소요 (총 64초)
-            m_struggleProgress += ts * (0.25f / 16.0f);
-            if (m_struggleProgress > targetThreshold) m_struggleProgress = targetThreshold;
-            float phaseStart = (m_strugglePhase - 1) * 0.25f;
-            m_struggleCircleProgress = (m_struggleProgress - phaseStart) / 0.25f;
-            if (m_struggleCircleProgress > 1.0f) m_struggleCircleProgress = 1.0f;
-        } else {
-            m_ActionState = KissyfaceAction::KF_RECOVER; m_animFrame = 0; m_animTimer = 0;
-            const_cast<Player&>(player).SetVisible(true); const_cast<Player&>(player).Stun(0.4f, m_isFacingLeft ? 15.0f : -15.0f, -6.0f); break;
-        }
-        if (m_struggleProgress >= targetThreshold) {
-            m_ActionState = KissyfaceAction::KF_RECOVER; m_animFrame = 0; m_animTimer = 0;
-            const_cast<Player&>(player).SetVisible(true); const_cast<Player&>(player).Stun(0.6f, m_isFacingLeft ? 20.0f : -20.0f, -8.0f);
-        }
-    }
-        break;
-    case KissyfaceAction::KF_RECOVER:
-        if (m_animTimer > frameDelay) { m_animTimer = 0; m_animFrame++; if (m_animFrame >= 7) { m_animFrame = 0; m_ActionState = KissyfaceAction::KF_IDLE; m_patternDelayTimer = 0.0f; m_hp = m_maxHp; m_isAlive = true; } }
-        break;
     case KissyfaceAction::KF_TUG:
         if (m_animTimer > frameDelay) { m_animTimer = 0; m_animFrame++; if (m_animFrame >= 2) m_animFrame = 0; }
         break;
@@ -227,7 +273,7 @@ void Kissyface::Update(float ts, const Player& player) {
     UpdateAxe(ts, player);
     bool useGravity = true;
     if (m_ActionState == KissyfaceAction::KF_JUMP && m_axe.state == AxeState::ORBITING) useGravity = false;
-    if (m_ActionState == KissyfaceAction::KF_DOWNED || m_ActionState == KissyfaceAction::KF_STRUGGLE || m_ActionState == KissyfaceAction::KF_RECOVER) { useGravity = false; m_vx = 0; m_vy = 0; }
+    if (m_ActionState == KissyfaceAction::KF_DOWNED || m_ActionState == KissyfaceAction::KF_STRUGGLE || m_ActionState == KissyfaceAction::KF_RECOVER || m_ActionState == KissyfaceAction::KF_DIE || m_ActionState == KissyfaceAction::KF_DEAD) { useGravity = false; m_vx = 0; m_vy = 0; }
     if (useGravity) { m_vy += 1.5f * ts; if (m_vy > 30.0f) m_vy = 30.0f; }
     float ny = m_y + m_vy * ts, nx = m_x + m_vx * ts;
     if (m_vx != 0.0f) { if (CheckMapCollision(nx + (m_vx > 0 ? 10.0f : -10.0f), m_y, m_colW, m_colH)) { nx = m_x; } }
@@ -296,7 +342,15 @@ RECT Kissyface::GetVulnerableRect() const {
 }
 
 bool Kissyface::OnTakeDamage(float kvx, float kvy) {
-    if (!m_isAlive) return false;
+    if (!m_isAlive && m_ActionState != KissyfaceAction::KF_DEAD) return false;
+    
+    if (m_ActionState == KissyfaceAction::KF_DEAD) {
+        // 마지막 일격: 머리 없는 상태로 전환
+        m_ActionState = KissyfaceAction::KF_NOHEAD;
+        m_animFrame = 0;
+        return false;
+    }
+
     m_ActionState = KissyfaceAction::KF_HURT_FLY; m_hp -= 25.0f; m_vx = kvx; m_vy = kvy; m_animFrame = 0; m_animTimer = 0; m_patternDelayTimer = 0.0f;
     m_strugglePhase++; if (m_strugglePhase > 4) m_strugglePhase = 4;
     if (m_axe.state != AxeState::INACTIVE) { m_axe.state = AxeState::INACTIVE; }
@@ -312,6 +366,7 @@ void Kissyface::Parry() {
 void Kissyface::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) {
     if (!m_isAlive && m_ActionState == KissyfaceAction::KF_NONE) return;
     float pFS = mapScale, vx = (m_x - camX) * pFS, vy = (m_y - camY) * pFS;
+    std::map<CImage*, Gdiplus::Bitmap*> bmpCache;
 
     for (auto& ai : m_afterImages) {
         CImage* aiImg = &m_imgIdle;
@@ -333,20 +388,28 @@ void Kissyface::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, fl
         case KissyfaceAction::KF_LUNGEATTACK: aiImg = &m_imgLungeAttack[ai.frame]; break;
         default: break;
         }
-        if (aiImg && !aiImg->IsNull()) {
-            int imgW = aiImg->GetWidth(), imgH = aiImg->GetHeight(); float ds = 2.0f * pFS;
-            int fw = (int)(imgW * ds), fh = (int)(imgH * ds);
-            int dx = (int)((ai.x - camX) * pFS + (m_colW * pFS) / 2.0f - fw / 2.0f), dy = (int)((ai.y - camY) * pFS + (m_colH * pFS) - fh);
-            Gdiplus::Bitmap bmp(aiImg->GetWidth(), aiImg->GetHeight(), aiImg->GetPitch(), PixelFormat32bppARGB, (BYTE*)aiImg->GetBits());
-            Gdiplus::ImageAttributes attr;
-            Gdiplus::ColorMatrix matrix = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,ai.alpha,0, (float)ai.color.GetR()/255.0f,(float)ai.color.GetG()/255.0f,(float)ai.color.GetB()/255.0f,0,1 };
-            attr.SetColorMatrix(&matrix, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
-            if (ai.isFacingLeft) {
-                Gdiplus::Matrix xo; g->GetTransform(&xo); g->TranslateTransform((float)(dx + fw), (float)dy); g->ScaleTransform(-1.0f, 1.0f);
-                g->DrawImage(&bmp, Gdiplus::Rect(0, 0, fw, fh), 0, 0, imgW, imgH, Gdiplus::UnitPixel, &attr); g->SetTransform(&xo);
-            } else g->DrawImage(&bmp, Gdiplus::Rect(dx, dy, fw, fh), 0, 0, imgW, imgH, Gdiplus::UnitPixel, &attr);
+        if (aiImg && !aiImg->IsNull() && aiImg->IsDIBSection()) {
+            if (bmpCache.find(aiImg) == bmpCache.end()) {
+                void* bits = aiImg->GetBits();
+                if (bits) bmpCache[aiImg] = new Gdiplus::Bitmap(aiImg->GetWidth(), aiImg->GetHeight(), aiImg->GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+            }
+            Gdiplus::Bitmap* pBmp = bmpCache[aiImg];
+            if (pBmp) {
+                Gdiplus::ImageAttributes at;
+                Gdiplus::ColorMatrix mat = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,ai.alpha,0, (float)ai.color.GetR()/255.0f,(float)ai.color.GetG()/255.0f,(float)ai.color.GetB()/255.0f,0,1 };
+                at.SetColorMatrix(&mat, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
+                at.SetColorKey(Gdiplus::Color(0,0,0), Gdiplus::Color(10,10,10));
+                int imgW = aiImg->GetWidth(), imgH = aiImg->GetHeight(); float ds = 2.0f * pFS;
+                int fw = (int)(imgW * ds), fh = (int)(imgH * ds);
+                int dx = (int)((ai.x - camX) * pFS + (m_colW * pFS) / 2.0f - fw / 2.0f), dy = (int)((ai.y - camY) * pFS + (m_colH * pFS) - fh);
+                if (ai.isFacingLeft) {
+                    Gdiplus::Matrix xo; g->GetTransform(&xo); g->TranslateTransform((float)(dx + fw), (float)dy); g->ScaleTransform(-1.0f, 1.0f);
+                    g->DrawImage(pBmp, Gdiplus::Rect(0, 0, fw, fh), 0, 0, imgW, imgH, Gdiplus::UnitPixel, &at); g->SetTransform(&xo);
+                } else g->DrawImage(pBmp, Gdiplus::Rect(dx, dy, fw, fh), 0, 0, imgW, imgH, Gdiplus::UnitPixel, &at);
+            }
         }
     }
+    for (auto& pair : bmpCache) delete pair.second;
 
     CImage* currentImg = &m_imgIdle;
     switch (m_ActionState) {
@@ -365,6 +428,9 @@ void Kissyface::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, fl
     case KissyfaceAction::KF_PRELUNGE: currentImg = &m_imgPreLunge[m_animFrame]; break;
     case KissyfaceAction::KF_LUNGE: currentImg = &m_imgLunge[m_animFrame]; break;
     case KissyfaceAction::KF_LUNGEATTACK: currentImg = &m_imgLungeAttack[m_animFrame]; break;
+    case KissyfaceAction::KF_DIE: currentImg = &m_imgDie[m_animFrame]; break;
+    case KissyfaceAction::KF_DEAD: currentImg = &m_imgDead[0]; break;
+    case KissyfaceAction::KF_NOHEAD: currentImg = &m_imgNoHead[0]; break;
     default: break;
     }
 
@@ -372,6 +438,11 @@ void Kissyface::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, fl
         int imgW = currentImg->GetWidth(), imgH = currentImg->GetHeight(); float ds = 2.0f * pFS;
         int fw = (int)(imgW * ds), fh = (int)(imgH * ds);
         int dx = (int)(vx + (m_colW * pFS) / 2.0f - fw / 2.0f), dy = (int)(vy + (m_colH * pFS) - fh);
+        
+        if (m_ActionState == KissyfaceAction::KF_TUG) {
+            dx += (int)(m_isFacingLeft ? -35.0f * pFS : 35.0f * pFS);
+        }
+
         if (m_isFacingLeft) {
             int om = SetGraphicsMode(hdc, GM_ADVANCED); XFORM xo, xl = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * dx + fw), 0.0f };
             GetWorldTransform(hdc, &xo); SetWorldTransform(hdc, &xl); currentImg->Draw(hdc, dx, dy, fw, fh); SetWorldTransform(hdc, &xo); SetGraphicsMode(hdc, om);
@@ -416,15 +487,6 @@ void Kissyface::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, fl
         RECT dVul = { (int)((vulRect.left - camX) * mapScale), (int)((vulRect.top - camY) * mapScale), (int)((vulRect.right - camX) * mapScale), (int)((vulRect.bottom - camY) * mapScale) };
         HBRUSH hRedB = CreateSolidBrush(RGB(255, 0, 0)); FrameRect(hdc, &dInv, hRedB); DeleteObject(hRedB);
         HBRUSH hGreenB = CreateSolidBrush(RGB(0, 255, 0)); FrameRect(hdc, &dVul, hGreenB); DeleteObject(hGreenB);
-        float lEX = m_x + (m_isFacingLeft ? -m_detectDistance : m_detectDistance);
-        int dsx = (int)((m_x - camX) * mapScale), dex = (int)((lEX - camX) * mapScale), dsy = (int)((m_y + m_colH / 2.0f - camY) * mapScale);
-        HPEN hP = CreatePen(PS_DOT, 1, RGB(0, 100, 255)); HPEN hO = (HPEN)SelectObject(hdc, hP);
-        MoveToEx(hdc, dsx, dsy, NULL); LineTo(hdc, dex, dsy); SelectObject(hdc, hO); DeleteObject(hP);
-        if (m_lungeTargetX > 0) { int tx = (int)((m_lungeTargetX - camX) * mapScale); HPEN hTP = CreatePen(PS_SOLID, 2, RGB(255, 100, 0)); HPEN hTO = (HPEN)SelectObject(hdc, hTP); MoveToEx(hdc, tx, 0, NULL); LineTo(hdc, tx, 720); SelectObject(hdc, hTO); DeleteObject(hTP); }
-        if (m_axe.state == AxeState::FLYING || m_axe.state == AxeState::RETURNING || m_axe.state == AxeState::ORBITING) {
-            float aw = 60.0f, ah = 60.0f; RECT dAx = { (int)((m_axe.x - aw/2 - camX) * mapScale), (int)((m_axe.y - ah/2 - camY) * mapScale), (int)((m_axe.x + aw/2 - camX) * mapScale), (int)((m_axe.y + ah/2 - camY) * mapScale) };
-            HBRUSH hOrangeB = CreateSolidBrush(RGB(255, 165, 0)); FrameRect(hdc, &dAx, hOrangeB); DeleteObject(hOrangeB);
-        }
     }
 }
 
@@ -435,5 +497,6 @@ void Kissyface::ReleaseAll() {
     destroyVec(m_imgPreJump); destroyVec(m_imgJump); destroyVec(m_imgLand);
     destroyVec(m_imgHurt); destroyVec(m_imgStruggle); destroyVec(m_imgRecover);
     destroyVec(m_imgPreLunge); destroyVec(m_imgLunge); destroyVec(m_imgLungeAttack);
+    destroyVec(m_imgDie); destroyVec(m_imgDead); destroyVec(m_imgNoHead);
     m_imgAxe.Destroy();
 }

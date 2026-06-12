@@ -24,6 +24,9 @@
     <ClCompile Include="Core\main.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Core\SoundManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
     <ClCompile Include="Effects\EffectManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
