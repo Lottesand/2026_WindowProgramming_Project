@@ -387,6 +387,14 @@ void Game::Update() {
     if (Input::GetKeyDown('F')) m_isFullMapView = !m_isFullMapView;
     if (Input::GetKeyDown('E')) { m_showDebugRect = !m_showDebugRect; m_showGrid = !m_showGrid; }
     if (Input::GetKeyDown('I')) m_player.SetGodMode(!m_player.IsGodMode());
+    
+    // 디버그 키: Q를 누르면 랜덤 아이템 획득
+    if (Input::GetKeyDown('Q')) {
+        int r = rand() % 5; // 0부터 4까지 (ItemType 범위)
+        ItemType randomType = static_cast<ItemType>(r);
+        Item* newItem = new Item(randomType, m_player.GetX(), m_player.GetY());
+        m_player.PickUpItem(newItem);
+    }
 
     if (Input::GetKeyDown('1')) LoadStage(1);
     if (Input::GetKeyDown('2')) LoadStage(2);

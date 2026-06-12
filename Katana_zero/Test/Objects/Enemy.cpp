@@ -375,8 +375,8 @@ void Gangster::Update(float ts, const Player& player) {
                 
                 // 총알 발사 위치: 갱스터 중심(m_x + m_colW/2)에서 gunOffX 만큼 떨어진 곳
                 float fireX = m_x + m_colW / 2.0f + gunOffX;
-                float fireY = m_y + m_colH + gunOffY; 
-                Bullet::AddBullet(fireX, fireY, bvx, bvy);
+                float fireY = m_y + m_colH + gunOffY;
+                Bullet::AddBullet(fireX, fireY, bvx, bvy, m_x + m_colW / 2.0f, m_y + m_colH / 2.0f);
                 
                 // Gunspark VFX 추가
                 EffectManager::AddGunSparkVFX(fireX, fireY, m_aimAngle, ct);

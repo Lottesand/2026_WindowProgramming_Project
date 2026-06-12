@@ -9,8 +9,8 @@
 CImage Bullet::m_imgBullet;
 std::vector<Bullet*> Bullet::m_bullets;
 
-Bullet::Bullet(float x, float y, float vx, float vy) 
-    : m_x(x), m_y(y), m_vx(vx), m_vy(vy), m_width(12.0f), m_height(8.0f), m_isActive(true), m_isDeflected(false) {
+Bullet::Bullet(float x, float y, float vx, float vy, float sourceX, float sourceY) 
+    : m_x(x), m_y(y), m_vx(vx), m_vy(vy), m_sourceX(sourceX), m_sourceY(sourceY), m_width(12.0f), m_height(8.0f), m_isActive(true), m_isDeflected(false) {
 }
 
 Bullet::~Bullet() {
@@ -47,8 +47,8 @@ void Bullet::RenderAll(HDC hdc, float camX, float camY, float mapScale) {
     }
 }
 
-void Bullet::AddBullet(float x, float y, float vx, float vy) {
-    m_bullets.push_back(new Bullet(x, y, vx, vy));
+void Bullet::AddBullet(float x, float y, float vx, float vy, float sourceX, float sourceY) {
+    m_bullets.push_back(new Bullet(x, y, vx, vy, sourceX, sourceY));
 }
 
 void Bullet::ClearAll() {
@@ -80,7 +80,8 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
             if (!player.IsGodMode() && player.GetState() != PlayerState::PS_DEAD) {
                 float kvx = (m_vx > 0) ? 8.0f : -8.0f;
                 float kvy = -6.0f;
-                player.OnTakeDamage(1.0f, kvx, kvy, m_x + m_width / 2.0f, m_y + m_height / 2.0f);
+                // Use stored source position for damage origin
+                player.OnTakeDamage(1.0f, kvx, kvy, m_sourceX, m_sourceY);
             }
             m_isActive = false;
             return;

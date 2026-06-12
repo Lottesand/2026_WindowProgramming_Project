@@ -5,14 +5,14 @@
 
 class Bullet {
 public:
-    Bullet(float x, float y, float vx, float vy);
+    Bullet(float x, float y, float vx, float vy, float sourceX = -1.0f, float sourceY = -1.0f);
     ~Bullet();
 
     static void Init();
     static void Release();
     static void UpdateAll(float ts, class Player& player, const std::vector<class Enemy*>& enemies);
     static void RenderAll(HDC hdc, float camX, float camY, float mapScale);
-    static void AddBullet(float x, float y, float vx, float vy);
+    static void AddBullet(float x, float y, float vx, float vy, float sourceX = -1.0f, float sourceY = -1.0f);
     static void ClearAll();
     static const std::vector<Bullet*>& GetBullets() { return m_bullets; }
 
@@ -35,6 +35,7 @@ public:
 private:
     float m_x, m_y;
     float m_vx, m_vy;
+    float m_sourceX, m_sourceY; // Added source coordinates
     float m_width, m_height;
     bool m_isActive;
     bool m_isDeflected;
