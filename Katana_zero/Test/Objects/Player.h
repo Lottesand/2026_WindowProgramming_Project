@@ -182,6 +182,9 @@ public:
 
     // Struggle/Cutscene control
     bool m_isVisible = true;
+    bool m_hasHitThisSwing = false; // Prevents multiple hits in one attack
     void SetVisible(bool visible) { m_isVisible = visible; }
     void ForceStop() { m_vx = 0; m_vy = 0; }
+    bool HasHitThisSwing() const { return m_hasHitThisSwing; }
+    void SetHasHitThisSwing(bool hit) { m_hasHitThisSwing = hit; }
 };

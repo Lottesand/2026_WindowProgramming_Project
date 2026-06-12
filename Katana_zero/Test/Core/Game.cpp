@@ -525,8 +525,33 @@ void Game::Update() {
             for (int i = 0; i < (int)m_enemies.size(); i++) {
                 Enemy* e = m_enemies[i];
                 if (e && e->GetIsAlive()) {
-                    RECT eR = e->GetRect(); RECT ol;
-                    if (IntersectRect(&ol, &aR, &eR)) {
+                    bool hitDetected = false;
+                    bool parryDetected = false;
+                    
+                    if (e->GetType() == EnemyType::KISSYFACE) {
+                        if (m_player.HasHitThisSwing()) continue; // 보스만 중복 방지
+                        
+                        Kissyface* k = static_cast<Kissyface*>(e);
+                        RECT vulR = k->GetVulnerableRect();
+                        RECT invR = k->GetInvincibleRect();
+                        RECT ol;
+                        
+                        if (IntersectRect(&ol, &aR, &vulR)) {
+                            hitDetected = true;
+                            m_player.SetHasHitThisSwing(true);
+                        } else if (IntersectRect(&ol, &aR, &invR)) {
+                            parryDetected = true;
+                            m_player.SetHasHitThisSwing(true);
+                        }
+                    } else {
+                        // 일반 적: 기존의 단순 사각형 충돌 로직 복구
+                        RECT eR = e->GetRect(); RECT ol;
+                        if (IntersectRect(&ol, &aR, &eR)) {
+                            hitDetected = true;
+                        }
+                    }
+
+                    if (hitDetected || parryDetected) {
                         m_isTimePaused = true;
                         m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i);
 
@@ -534,31 +559,23 @@ void Game::Update() {
                         float dx = ex - cX, dy = ey - cY, dist = (std::max)(1.0f, (float)sqrt(dx * dx + dy * dy));
                         float ux = dx / dist, uy = dy / dist;
                         
-                        // 타격 이펙트는 적 중심에서 타격점 반대 방향으로 발생하도록 유지
                         EffectManager::AddNeonTrail(ex, ey, ux, uy, atan2(uy, ux));
                         EffectManager::AddHitVFX(ex, ey, atan2(uy, ux), ct);
                         Camera::AddPush(ux * 30.0f, uy * 30.0f); Camera::AddShake(1.0f);
                         
-                        // 넉백 로직: 플레이어가 클릭하여 검을 휘두른 방향(AttackDir)을 직접 사용
-                        float kbPower = 25.0f; // 40.0f에서 25.0f로 넉백 힘 감소
+                        float kbPower = 25.0f;
                         float attackDx = m_player.GetAttackDirX();
                         float attackDy = m_player.GetAttackDirY();
-                        
                         float kvx = attackDx * kbPower;
                         float kvy = attackDy * kbPower;
-                        
-                        // 수평 베기이거나 아래로 내리꽂는 공격일 경우, 땅에 쓸리지 않게 위로 살짝 띄워줌
-                        if (kvy > -5.0f) kvy -= 8.0f; // 위로 띄워주는 보정값도 살짝 줄임
-                            
-                        // 지연 처리(AddPendingHit)를 제거하고 즉시 데미지/넉백 적용
-                        // 플레이어가 대시 중이라 위치가 계속 변하므로, 지연 처리를 하면 엉뚱한 위치에서 날아감
-                        bool parried = e->OnTakeDamage(kvx, kvy);
-                        if (parried) {
-                            // Kissyface parried! Stun player and knockback
-                            // Strongly increase knockback distance to ensure clearing the attack range
+                        if (kvy > -5.0f) kvy -= 8.0f;
+
+                        if (parryDetected) {
                             m_player.Stun(0.5f, -kvx * 1.8f, -10.0f);
-                            // Add some VFX
                             EffectManager::AddGunSparkVFX((float)aR.left + (aR.right - aR.left) / 2.0f, (float)aR.top + (aR.bottom - aR.top) / 2.0f, atan2(-kvy, -kvx), GetTickCount());
+                            static_cast<Kissyface*>(e)->Parry();
+                        } else {
+                            e->OnTakeDamage(kvx, kvy);
                         }
                     }
                 }

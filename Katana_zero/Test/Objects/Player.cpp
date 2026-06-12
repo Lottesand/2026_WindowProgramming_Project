@@ -8,6 +8,7 @@
 #include <map>
 #include <deque>
 #include <cstring>
+#include <cmath>
 
 int g_playerAttackCooldown = 130; 
 int g_playerAttackDuration = 2;
@@ -52,6 +53,9 @@ Player::Player() {
     m_isSlowMo = false; m_canSlowMo = true; m_slowMoStartTime = 0;
     m_batteryLevel = 11.0f; m_lastTimeScale = 1.0f;
     m_isGodMode = false;
+    m_isVisible = true;
+    m_hasHitThisSwing = false;
+    m_isRewinding = false;
     m_bloodDistance = 0.0f;
     m_lastBleedTime = 0;
     m_snapshots.reserve(3000);
@@ -86,6 +90,10 @@ void Player::Init() {
 }
 
 void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
+    if (!m_isVisible) {
+        m_vx = 0.0f; m_vy = 0.0f;
+        return; // Capture state, stop all processing
+    }
     bool isDead = IsDead();
     
     // Death overrides everything: If dead, ensure we don't process normal movement or attacks
@@ -259,6 +267,12 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         m_vx += (0.0f - m_vx) * curFri; 
         if (fabs(m_vx) < 0.1f) m_vx = 0.0f; 
     }
+    // Sanity check for velocities to prevent infinite loops or NaNs
+    if (std::isnan(m_vx) || std::isinf(m_vx)) m_vx = 0.0f;
+    if (std::isnan(m_vy) || std::isinf(m_vy)) m_vy = 0.0f;
+    if (m_vx > 100.0f) m_vx = 100.0f; if (m_vx < -100.0f) m_vx = -100.0f;
+    if (m_vy > 100.0f) m_vy = 100.0f; if (m_vy < -100.0f) m_vy = -100.0f;
+
     if (m_vx != 0.0f && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE) {
         float oldPX = m_x;
         float nx = m_x + m_vx;
@@ -273,7 +287,9 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
             if (!stepped) { 
                 float si = (m_vx > 0) ? 1.0f : -1.0f; 
                 int f = 0; 
-                while (!CheckMapCollision(m_x + si, m_y, m_colW, m_colH - 5) && f++ < (int)fabs(m_vx) + 2) { 
+                int maxF = (int)fabs(m_vx) + 2;
+                if (maxF > 200) maxF = 200; // Safety limit
+                while (!CheckMapCollision(m_x + si, m_y, m_colW, m_colH - 5) && f++ < maxF) { 
                     m_x += si; 
                 } 
                 if (m_state != PlayerState::PS_WALL_FLIP) m_vx = 0.0f; 
@@ -295,7 +311,8 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         float ny = m_y + m_vy;
         if (m_vy > 0) { 
             bool hf = false; 
-            for (float sy = m_y; sy <= ny; sy += 1.0f) {
+            int safetyCounter = 0;
+            for (float sy = m_y; sy <= ny && safetyCounter++ < 500; sy += 1.0f) {
                 int tl = GetCollisionType((int)(m_x + 2.0f), (int)(sy + m_colH));
                 int tc = GetCollisionType((int)(m_x + m_colW / 2.0f), (int)(sy + m_colH));
                 int tr = GetCollisionType((int)(m_x + m_colW - 2.0f), (int)(sy + m_colH)); 
@@ -318,9 +335,10 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
                 if (!hit2) m_isJumping = true; else { m_isJumping = false; m_canAirYDash = true; } 
             }
         }
- else if (m_vy < 0) { 
+        else if (m_vy < 0) { 
             bool hc = false; 
-            for (float sy = m_y; sy >= ny; sy -= 1.0f) {
+            int safetyCounter = 0;
+            for (float sy = m_y; sy >= ny && safetyCounter++ < 500; sy -= 1.0f) {
                 if (GetCollisionType((int)(m_x + 2.0f), (int)sy) % 2 != 0 || GetCollisionType((int)(m_x + m_colW / 2.0f), (int)sy) % 2 != 0 || GetCollisionType((int)(m_x + m_colW - 2.0f), (int)sy) % 2 != 0) {
                     m_y = sy; hc = true; break;
                 }
@@ -699,8 +717,14 @@ void Player::Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, fl
 
 void Player::SetState(PlayerState state) { 
     if (m_state != state) { 
+        if (m_state == PlayerState::PS_ATTACK) {
+            m_hasHitThisSwing = false; // 어떤 이유로든 공격 상태를 벗어나면 판정 초기화
+        }
         m_state = state; 
         m_currentFrame = 0; 
+        if (state == PlayerState::PS_ATTACK) {
+            m_hasHitThisSwing = false;
+        }
         if (state == PlayerState::PS_DEAD) {
             m_state = PlayerState::PS_DEAD_FLY_BEGIN;
             ClearAfterImages();
@@ -794,6 +818,7 @@ void Player::StartRewind(int speed) {
     m_rewindSpeed = speed; 
     m_isSlowMo = false; 
     m_batteryLevel = m_batteryMax; 
+    m_hasHitThisSwing = false; // 리와인드 시작 시 판정 초기화
     ClearAfterImages();
 }
 

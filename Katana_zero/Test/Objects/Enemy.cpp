@@ -227,6 +227,12 @@ void Enemy::Update(float ts, const Player& player) {
         // 공중에서는 마찰을 아주 약하게(공기 저항), 바닥에 닿았을 때 강하게 적용하도록 아래로 위임
     }
 
+    // Sanity check for velocities to prevent infinite loops or NaNs
+    if (std::isnan(m_vx) || std::isinf(m_vx)) m_vx = 0.0f;
+    if (std::isnan(m_vy) || std::isinf(m_vy)) m_vy = 0.0f;
+    if (m_vx > 100.0f) m_vx = 100.0f; if (m_vx < -100.0f) m_vx = -100.0f;
+    if (m_vy > 100.0f) m_vy = 100.0f; if (m_vy < -100.0f) m_vy = -100.0f;
+
     // 2. Y축(중력) 이동 및 충돌 처리
     float gravity = m_isAlive ? 1.5f : 1.0f;
     m_vy += gravity * ts; if (m_vy > 30.0f) m_vy = 30.0f;
@@ -238,7 +244,8 @@ void Enemy::Update(float ts, const Player& player) {
         
         // 이동 궤적을 따라 충돌 검사
         if (m_vy > 0.0f) {
-            for (float sy = m_y; sy <= ny; sy += 1.0f) {
+            int safetyCounter = 0;
+            for (float sy = m_y; sy <= ny && safetyCounter++ < 500; sy += 1.0f) {
                 int tl = GetCollisionType((int)(m_x + 2.0f), (int)(sy + m_colH));
                 int tc = GetCollisionType((int)(m_x + m_colW / 2.0f), (int)(sy + m_colH));
                 int tr = GetCollisionType((int)(m_x + m_colW - 2.0f), (int)(sy + m_colH));
@@ -258,7 +265,8 @@ void Enemy::Update(float ts, const Player& player) {
             }
         } else if (m_vy < 0.0f) {
             // 천장 충돌 검사 (죽어서 날아갈 때 천장을 뚫지 않도록)
-            for (float sy = m_y; sy >= ny; sy -= 1.0f) {
+            int safetyCounter = 0;
+            for (float sy = m_y; sy >= ny && safetyCounter++ < 500; sy -= 1.0f) {
                 int tl = GetCollisionType((int)(m_x + 2.0f), (int)(sy));
                 int tc = GetCollisionType((int)(m_x + m_colW / 2.0f), (int)(sy));
                 int tr = GetCollisionType((int)(m_x + m_colW - 2.0f), (int)(sy));
