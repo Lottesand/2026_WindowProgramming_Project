@@ -80,7 +80,7 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
             if (!player.IsGodMode() && player.GetState() != PlayerState::PS_DEAD) {
                 float kvx = (m_vx > 0) ? 8.0f : -8.0f;
                 float kvy = -6.0f;
-                player.OnTakeDamage(1.0f, kvx, kvy);
+                player.OnTakeDamage(1.0f, kvx, kvy, m_x + m_width / 2.0f, m_y + m_height / 2.0f);
             }
             m_isActive = false;
             return;

@@ -49,6 +49,7 @@ private:
     // Loading status
     std::atomic<bool> m_isLoaded{ false };
     std::atomic<int> m_loadingProgress{ 0 };
+    float m_displayedProgress{ 0.0f };
     CImage m_imgLoading;
 
     bool m_isTimePaused;

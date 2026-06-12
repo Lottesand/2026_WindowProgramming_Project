@@ -78,6 +78,19 @@ void UIManager::SetGoConfig(int stage, int x, int y, int arrowOffset) {
     }
 }
 
+void UIManager::RenderLeftClickPrompt(HDC hDC, float worldX, float worldY, float camX, float camY, float mapScale) {
+    if (!hDC || m_imgLeftClick.IsNull()) return;
+
+    int sx = (int)((worldX - camX) * mapScale);
+    int sy = (int)((worldY - camY) * mapScale);
+    
+    float scale = 1.5f * mapScale;
+    int sw = (int)(m_imgLeftClick.GetWidth() * scale);
+    int sh = (int)(m_imgLeftClick.GetHeight() * scale);
+
+    m_imgLeftClick.Draw(hDC, sx - sw / 2, sy - sh, sw, sh);
+}
+
 void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, bool isStageCleared, int currentStage, int heldItemType) {
     if (!hDC) return;
 
@@ -149,59 +162,64 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
         }
     }
 
-    if (!m_imgHudBase.IsNull() && m_imgHudBase.GetWidth() > 0 && m_imgHudBase.GetHeight() > 0)
-        m_imgHudBase.Draw(hDC, 0, 0, m_imgHudBase.GetWidth() * 2, m_imgHudBase.GetHeight() * 2);
+    if (bGameStarted) {
+        if (!m_imgHudBase.IsNull() && m_imgHudBase.GetWidth() > 0 && m_imgHudBase.GetHeight() > 0)
+            m_imgHudBase.Draw(hDC, 0, 0, m_imgHudBase.GetWidth() * 2, m_imgHudBase.GetHeight() * 2);
 
-    if (!m_imgHudBattery.IsNull() && m_imgHudBattery.GetWidth() > 0 && m_imgHudBattery.GetHeight() > 0)
-        m_imgHudBattery.Draw(hDC, 10, 4, m_imgHudBattery.GetWidth() * 2, m_imgHudBattery.GetHeight() * 2);
+        if (!m_imgHudBattery.IsNull() && m_imgHudBattery.GetWidth() > 0 && m_imgHudBattery.GetHeight() > 0)
+            m_imgHudBattery.Draw(hDC, 10, 4, m_imgHudBattery.GetWidth() * 2, m_imgHudBattery.GetHeight() * 2);
 
-    int shiftIconX = 165; 
-    int shiftIconY = 7;   
-    float shiftScale = 2.0f; 
-    CImage* imgShift = isShiftPressed ? &m_imgHudShift[1] : &m_imgHudShift[0];
-    if (imgShift && !imgShift->IsNull() && imgShift->GetWidth() > 0 && imgShift->GetHeight() > 0) {
-        imgShift->Draw(hDC, shiftIconX, shiftIconY, 
-            (int)(imgShift->GetWidth() * shiftScale), (int)(imgShift->GetHeight() * shiftScale));
-    }
-
-    int startX = 32; int startY = 12; int gap = 10; float partScale = 2.0f; 
-    for (int i = 0; i < 11; i++) {
-        CImage* targetImg = (i >= (int)batteryLevel) ? &m_imgHudBatteryUsed : &m_imgHudBatteryPart;
-        if (targetImg && !targetImg->IsNull() && targetImg->GetWidth() > 0 && targetImg->GetHeight() > 0) {
-            targetImg->Draw(hDC, (int)(startX + i * gap), startY, (int)(targetImg->GetWidth() * partScale), (int)(targetImg->GetHeight() * partScale));
+        int shiftIconX = 165;
+        int shiftIconY = 7;
+        float shiftScale = 2.0f;
+        CImage* imgShift = isShiftPressed ? &m_imgHudShift[1] : &m_imgHudShift[0];
+        if (imgShift && !imgShift->IsNull() && imgShift->GetWidth() > 0 && imgShift->GetHeight() > 0) {
+            imgShift->Draw(hDC, shiftIconX, shiftIconY,
+                (int)(imgShift->GetWidth() * shiftScale), (int)(imgShift->GetHeight() * shiftScale));
         }
-    }
 
-    if (!m_imgHudTimer.IsNull() && m_imgHudTimer.GetWidth() > 0 && m_imgHudTimer.GetHeight() > 0) {
-        float timerScale = 2.0f;
-        int timerW = (int)(m_imgHudTimer.GetWidth() * timerScale), timerH = (int)(m_imgHudTimer.GetHeight() * timerScale);
-        int timerX = (virtualWidth / 2 - timerW / 2), timerY = 0; 
-        if (timerW > 0 && timerH > 0) m_imgHudTimer.Draw(hDC, timerX, timerY, timerW, timerH);
-        float timeRatio = stageTimer / (stageLimitTime > 0 ? stageLimitTime : 1.0f);
-        if (timeRatio < 0) timeRatio = 0; if (timeRatio > 1.0f) timeRatio = 1.0f;
-        int gaugeMarginX = 10, gaugeMarginY = 8;
-        int gaugeW = timerW - (gaugeMarginX * 2) - 15, gaugeH = timerH - (gaugeMarginY * 2), gaugeX = timerX + gaugeMarginX + 23, gaugeY = timerY + gaugeMarginY - 4;
-        if (!m_imgHudTimerGauge.IsNull()) {
-            int currentGaugeW = (int)(gaugeW * timeRatio), srcW = (int)(m_imgHudTimerGauge.GetWidth() * timeRatio), srcH = m_imgHudTimerGauge.GetHeight();
-            if (currentGaugeW > 0 && gaugeH > 0 && srcW > 0 && srcH > 0) m_imgHudTimerGauge.Draw(hDC, gaugeX, gaugeY, currentGaugeW, gaugeH, 0, 0, srcW, srcH);
+        int startX = 32; int startY = 12; int gap = 10; float partScale = 2.0f;
+        for (int i = 0; i < 11; i++) {
+            CImage* targetImg = (i >= (int)batteryLevel) ? &m_imgHudBatteryUsed : &m_imgHudBatteryPart;
+            if (targetImg && !targetImg->IsNull() && targetImg->GetWidth() > 0 && targetImg->GetHeight() > 0) {
+                targetImg->Draw(hDC, (int)(startX + i * gap), startY, (int)(targetImg->GetWidth() * partScale), (int)(targetImg->GetHeight() * partScale));
+            }
         }
-    }
 
-    if (heldItemType != -1) {
-        CImage& heldImg = Item::GetHUDImage(static_cast<ItemType>(heldItemType));
-        if (!heldImg.IsNull() && heldImg.GetWidth() > 0 && heldImg.GetHeight() > 0) {
-            heldImg.Draw(hDC, virtualWidth - heldImg.GetWidth() - 80, 0, heldImg.GetWidth() * 2, heldImg.GetHeight() * 2);
-        } else if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0) {
-            m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+        if (!m_imgHudTimer.IsNull() && m_imgHudTimer.GetWidth() > 0 && m_imgHudTimer.GetHeight() > 0) {
+            float timerScale = 2.0f;
+            int timerW = (int)(m_imgHudTimer.GetWidth() * timerScale), timerH = (int)(m_imgHudTimer.GetHeight() * timerScale);
+            int timerX = (virtualWidth / 2 - timerW / 2), timerY = 0;
+            if (timerW > 0 && timerH > 0) m_imgHudTimer.Draw(hDC, timerX, timerY, timerW, timerH);
+            float timeRatio = stageTimer / (stageLimitTime > 0 ? stageLimitTime : 1.0f);
+            if (timeRatio < 0) timeRatio = 0; if (timeRatio > 1.0f) timeRatio = 1.0f;
+            int gaugeMarginX = 10, gaugeMarginY = 8;
+            int gaugeW = timerW - (gaugeMarginX * 2) - 15, gaugeH = timerH - (gaugeMarginY * 2), gaugeX = timerX + gaugeMarginX + 23, gaugeY = timerY + gaugeMarginY - 4;
+            if (!m_imgHudTimerGauge.IsNull()) {
+                int currentGaugeW = (int)(gaugeW * timeRatio), srcW = (int)(m_imgHudTimerGauge.GetWidth() * timeRatio), srcH = m_imgHudTimerGauge.GetHeight();
+                if (currentGaugeW > 0 && gaugeH > 0 && srcW > 0 && srcH > 0) m_imgHudTimerGauge.Draw(hDC, gaugeX, gaugeY, currentGaugeW, gaugeH, 0, 0, srcW, srcH);
+            }
         }
-    } else {
-        if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
-            m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+
+        if (heldItemType != -1) {
+            CImage& heldImg = Item::GetHUDImage(static_cast<ItemType>(heldItemType));
+            if (!heldImg.IsNull() && heldImg.GetWidth() > 0 && heldImg.GetHeight() > 0) {
+                heldImg.Draw(hDC, virtualWidth - heldImg.GetWidth() - 80, 0, heldImg.GetWidth() * 2, heldImg.GetHeight() * 2);
+            }
+            else if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0) {
+                m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+            }
+        }
+        else {
+            if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
+                m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+        }
+
+        int mouseIconScale = 2, mouseIconY = 30, mouseIconX = virtualWidth - 110;
+        if (!m_imgLeftClick.IsNull()) m_imgLeftClick.Draw(hDC, mouseIconX, mouseIconY, m_imgLeftClick.GetWidth() * mouseIconScale, m_imgLeftClick.GetHeight() * mouseIconScale);
+        if (!m_imgRightClick.IsNull()) m_imgRightClick.Draw(hDC, mouseIconX + 70, mouseIconY, m_imgRightClick.GetWidth() * mouseIconScale, m_imgRightClick.GetHeight() * mouseIconScale);
     }
 
-    int mouseIconScale = 2, mouseIconY = 30, mouseIconX = virtualWidth - 110;
-    if (!m_imgLeftClick.IsNull()) m_imgLeftClick.Draw(hDC, mouseIconX, mouseIconY, m_imgLeftClick.GetWidth() * mouseIconScale, m_imgLeftClick.GetHeight() * mouseIconScale);
-    if (!m_imgRightClick.IsNull()) m_imgRightClick.Draw(hDC, mouseIconX + 70, mouseIconY, m_imgRightClick.GetWidth() * mouseIconScale, m_imgRightClick.GetHeight() * mouseIconScale);
     if (!m_imgCursor.IsNull() && m_imgCursor.GetWidth() > 0 && m_imgCursor.GetHeight() > 0) 
         m_imgCursor.Draw(hDC, mouseX - m_imgCursor.GetWidth(), mouseY - m_imgCursor.GetHeight(), m_imgCursor.GetWidth() * 2, m_imgCursor.GetHeight() * 2);
 }

@@ -1,11 +1,11 @@
-﻿#pragma once
+#pragma once
 #include <windows.h>
 #include <atlimage.h>
 #include <math.h>
 
 class Player;
 
-enum class EnemyType { GANGSTER, GRUNT, POMP, SHIELDCOP };
+enum class EnemyType { GANGSTER, GRUNT, POMP, SHIELDCOP, KISSYFACE };
 enum class EnemyState { ES_IDLE, ES_WALK, ES_FALL, ES_ALERT, ES_ATTACK, ES_DEAD };
 enum class GangsterAction { GA_NONE, GA_AIM, GA_FIRE, GA_TURN, GA_RUN, GA_HURT_FLY, GA_HURT_GROUND };
 enum class GruntAction { GR_NONE, GR_ATTACK, GR_SLASH, GR_TURN, GR_RUN, GR_HURT_FLY, GR_HURT_GROUND };
@@ -41,7 +41,7 @@ public:
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo = false) = 0;
     virtual void RenderDetectionRange(HDC hdc, float camX, float camY, float mapScale);
     virtual void RenderExclaim(HDC hdc, float camX, float camY, float mapScale);
-    virtual void OnTakeDamage(float kvx, float kvy);
+    virtual bool OnTakeDamage(float kvx, float kvy);
     virtual void ApplyKnockback(float vx);
     
     bool IsPlayerInCone(float px, float py, float pw, float ph);
@@ -68,13 +68,12 @@ private:
     float m_aimAngle;
     static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[4], m_ImgAim_L[4], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10], m_ImgGun_R[2], m_ImgGun_L[2], m_ImgArm[2];
 public:
-
-    Gangster(float x, float y); virtual ~Gangster();
+     Gangster(float x, float y); virtual ~Gangster();
     virtual void Init() override;
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual void OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy) override;
     static void Release();
 };
 
@@ -88,7 +87,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual void OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy) override;
     static void Release();
 };
 
@@ -102,7 +101,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual void OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy) override;
     static void Release();
 };
 
@@ -116,6 +115,6 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual void OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy) override;
     static void Release();
 };

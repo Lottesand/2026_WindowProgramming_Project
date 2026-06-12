@@ -118,6 +118,7 @@ void StageManager::ProcessStage(int stage) {
                         if (IsColorMatch(sr, sg, sb, 255, 0, 0)) enemyType = 1;      // 빨강: Grunt
                         else if (IsColorMatch(sr, sg, sb, 0, 255, 0)) enemyType = 0; // 초록: Gangster
                         else if (IsColorMatch(sr, sg, sb, 0, 0, 255)) enemyType = 2; // 파랑: Pomp
+                        else if (IsColorMatch(sr, sg, sb, 128, 0, 128)) enemyType = 3; // 보라: Kissyface
 
                         if (enemyType != -1) {
                             int rectW = 0, rectH = 1;

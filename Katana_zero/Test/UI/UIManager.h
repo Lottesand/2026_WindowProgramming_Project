@@ -15,6 +15,7 @@ public:
     static void Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout = false, bool showDeathMessage = false, bool isStageCleared = false, int currentStage = 1, int heldItemType = -1);
 
     static void SetGoConfig(int stage, int x, int y, int arrowOffset);
+    static void RenderLeftClickPrompt(HDC hDC, float worldX, float worldY, float camX, float camY, float mapScale);
 
 private:
     static CImage m_imgHudBase;

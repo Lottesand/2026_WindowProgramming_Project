@@ -150,7 +150,7 @@ void StartScene::Render(HDC hDC, int virtualWidth, int virtualHeight, float play
     Gdiplus::Graphics g(hDC);
 
     // 1. spr_player_playsong
-    if (m_state >= State::PLAYER_ANIM) {
+    if (m_state >= State::PLAYER_ANIM && m_state < State::WAIT_CLICK) {
         if (!m_imgPlayerPlay[m_playerFrame].IsNull()) {
             float camX = Camera::GetCamX();
             float camY = Camera::GetCamY();

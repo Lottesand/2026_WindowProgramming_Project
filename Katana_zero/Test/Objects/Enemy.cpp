@@ -123,7 +123,7 @@ void Enemy::Reset() {
     m_bloodDistance = 0.0f; m_alertStartTime = 0; m_exclaimFrame = 0;
 }
 
-void Enemy::OnTakeDamage(float kvx, float kvy) {
+bool Enemy::OnTakeDamage(float kvx, float kvy) {
     if (!m_isImmortal) {
         m_isAlive = false;
         m_State = EnemyState::ES_DEAD;
@@ -159,6 +159,7 @@ void Enemy::OnTakeDamage(float kvx, float kvy) {
 
         m_bloodDistance = 0.0f;
     }
+    return false;
 }
 void Enemy::ApplyKnockback(float vx) { m_knockbackVx = vx; m_vx = vx; }
 
@@ -321,7 +322,7 @@ CImage Gangster::m_ImgIdle_R[8], Gangster::m_ImgIdle_L[8], Gangster::m_ImgWalk_R
 Gangster::Gangster(float x, float y) : Enemy(x, y, EnemyType::GANGSTER) { m_ActionState = GangsterAction::GA_NONE; }
 Gangster::~Gangster() {}
 void Gangster::Reset() { Enemy::Reset(); m_ActionState = GangsterAction::GA_NONE; m_aimAngle = 0.0f; }
-void Gangster::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = GangsterAction::GA_HURT_FLY; }
+bool Gangster::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return false; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = GangsterAction::GA_HURT_FLY; return false; }
 void Gangster::Init() { if (!m_ImgIdle_R[0].IsNull()) return; TCHAR p[256]; for (int i = 0; i < 8; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsteridle/%d.png"), i); m_ImgIdle_R[i].Load(p); m_ImgIdle_L[i].Load(p); } for (int i = 0; i < 8; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterwalk/%d.png"), i); m_ImgWalk_R[i].Load(p); m_ImgWalk_L[i].Load(p); } for (int i = 0; i < 4; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangster_aim/%d.png"), i); m_ImgAim_R[i].Load(p); m_ImgAim_L[i].Load(p); } for (int i = 0; i < 6; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterturn/%d.png"), i); m_ImgTurn_R[i].Load(p); m_ImgTurn_L[i].Load(p); } for (int i = 0; i < 12; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterfall/%d.png"), i); m_ImgFall_R[i].Load(p); m_ImgFall_L[i].Load(p); } for (int i = 0; i < 2; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterhurtfly/%d.png"), i); m_ImgHurtFly_R[i].Load(p); m_ImgHurtFly_L[i].Load(p); } for (int i = 0; i < 14; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterhurtground/%d.png"), i); m_ImgHurtGround_R[i].Load(p); m_ImgHurtGround_L[i].Load(p); } for (int i = 0; i < 10; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangsterrun/%d.png"), i); m_ImgRun_R[i].Load(p); m_ImgRun_L[i].Load(p); } for (int i = 0; i < 2; i++) { wsprintf(p, TEXT("assets/enemy/spr_gangstergun/%d.png"), i); m_ImgGun_R[i].Load(p); m_ImgGun_L[i].Load(p); } for (int i = 0; i < 2; i++) { wsprintf(p, TEXT("assets/enemy/spr_arm/%d.png"), i); m_ImgArm[i].Load(p); } }
 void Gangster::Release() { for (int i = 0; i < 8; i++) { m_ImgIdle_R[i].Destroy(); m_ImgIdle_L[i].Destroy(); } for (int i = 0; i < 8; i++) { m_ImgWalk_R[i].Destroy(); m_ImgWalk_L[i].Destroy(); } for (int i = 0; i < 4; i++) { m_ImgAim_R[i].Destroy(); m_ImgAim_L[i].Destroy(); } for (int i = 0; i < 6; i++) { m_ImgTurn_R[i].Destroy(); m_ImgTurn_L[i].Destroy(); } for (int i = 0; i < 12; i++) { m_ImgFall_R[i].Destroy(); m_ImgFall_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgHurtFly_R[i].Destroy(); m_ImgHurtFly_L[i].Destroy(); } for (int i = 0; i < 14; i++) { m_ImgHurtGround_R[i].Destroy(); m_ImgHurtGround_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgRun_R[i].Destroy(); m_ImgRun_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgGun_R[i].Destroy(); m_ImgGun_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgArm[i].Destroy(); } }
 void Gangster::Update(float ts, const Player& player) {
@@ -506,7 +507,7 @@ CImage Grunt::m_ImgIdle_R[8], Grunt::m_ImgIdle_L[8], Grunt::m_ImgWalk_R[10], Gru
 Grunt::Grunt(float x, float y) : Enemy(x, y, EnemyType::GRUNT) { m_ActionState = GruntAction::GR_NONE; }
 Grunt::~Grunt() {}
 void Grunt::Reset() { Enemy::Reset(); m_ActionState = GruntAction::GR_NONE; }
-void Grunt::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = GruntAction::GR_HURT_FLY; }
+bool Grunt::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return false; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = GruntAction::GR_HURT_FLY; return false; }
 void Grunt::Init() { if (!m_ImgIdle_R[0].IsNull()) return; TCHAR path[256]; for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_idle/%d.png"), i); m_ImgIdle_R[i].Load(path); m_ImgIdle_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_walk/%d.png"), i); m_ImgWalk_R[i].Load(path); m_ImgWalk_L[i].Load(path); } for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_attack/%d.png"), i); m_ImgAttack_R[i].Load(path); m_ImgAttack_L[i].Load(path); } for (int i = 0; i < 5; i++) { wsprintf(path, TEXT("assets/enemy/spr_gruntslash/%d.png"), i); m_ImgSlash_R[i].Load(path); m_ImgSlash_L[i].Load(path); } for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_turn/%d.png"), i); m_ImgTurn_R[i].Load(path); m_ImgTurn_L[i].Load(path); } for (int i = 0; i < 13; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_fall/%d.png"), i); m_ImgFall_R[i].Load(path); m_ImgFall_L[i].Load(path); } for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_hurtfly/%d.png"), i); m_ImgHurtFly_R[i].Load(path); m_ImgHurtFly_L[i].Load(path); } for (int i = 0; i < 16; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_hurtground/%d.png"), i); m_ImgHurtGround_R[i].Load(path); m_ImgHurtGround_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_grunt_run/%d.png"), i); m_ImgRun_R[i].Load(path); m_ImgRun_L[i].Load(path); } }
 void Grunt::Release() { for (int i = 0; i < 8; i++) { m_ImgIdle_R[i].Destroy(); m_ImgIdle_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgWalk_R[i].Destroy(); m_ImgWalk_L[i].Destroy(); } for (int i = 0; i < 8; i++) { m_ImgAttack_R[i].Destroy(); m_ImgAttack_L[i].Destroy(); } for (int i = 0; i < 5; i++) { m_ImgSlash_R[i].Destroy(); m_ImgSlash_L[i].Destroy(); } for (int i = 0; i < 8; i++) { m_ImgTurn_R[i].Destroy(); m_ImgTurn_L[i].Destroy(); } for (int i = 0; i < 13; i++) { m_ImgFall_R[i].Destroy(); m_ImgFall_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgHurtFly_R[i].Destroy(); m_ImgHurtFly_L[i].Destroy(); } for (int i = 0; i < 16; i++) { m_ImgHurtGround_R[i].Destroy(); m_ImgHurtGround_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgRun_R[i].Destroy(); m_ImgRun_L[i].Destroy(); } }
 void Grunt::Update(float ts, const Player& player) {
@@ -541,7 +542,7 @@ void Grunt::Update(float ts, const Player& player) {
                     if (dist < 100.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) {
                         float kvx = m_isFacingLeft ? -8.0f : 8.0f;
                         float kvy = -6.0f;
-                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy);
+                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy, ex, ey);
                     }
                 }
                 if (m_CurrentFrame >= 8) { m_ActionState = GruntAction::GR_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
@@ -620,7 +621,7 @@ CImage Pomp::m_ImgIdle_R[8], Pomp::m_ImgIdle_L[8], Pomp::m_ImgWalk_R[10], Pomp::
 Pomp::Pomp(float x, float y) : Enemy(x, y, EnemyType::POMP) { m_ActionState = PompAction::PA_NONE; }
 Pomp::~Pomp() {}
 void Pomp::Reset() { Enemy::Reset(); m_ActionState = PompAction::PA_NONE; }
-void Pomp::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = PompAction::PA_HURT_FLY; }
+bool Pomp::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return false; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = PompAction::PA_HURT_FLY; return false; }
 void Pomp::Init() { if (!m_ImgIdle_R[0].IsNull()) return; TCHAR path[256]; for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_idle/%d.png"), i); m_ImgIdle_R[i].Load(path); m_ImgIdle_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_walk/%d.png"), i); m_ImgWalk_R[i].Load(path); m_ImgWalk_L[i].Load(path); } for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_attack/%d.png"), i); m_ImgAttack_R[i].Load(path); m_ImgAttack_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_box_idle/%d.png"), i); m_ImgBoxIdle_R[i].Load(path); m_ImgBoxIdle_L[i].Load(path); } for (int i = 0; i < 14; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_box_hit/%d.png"), i); m_ImgBoxHit_R[i].Load(path); m_ImgBoxHit_L[i].Load(path); } for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_turn/%d.png"), i); m_ImgTurn_R[i].Load(path); m_ImgTurn_L[i].Load(path); } for (int i = 0; i < 13; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_fall/%d.png"), i); m_ImgFall_R[i].Load(path); m_ImgFall_L[i].Load(path); } for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_hurtfly/%d.png"), i); m_ImgHurtFly_R[i].Load(path); m_ImgHurtFly_L[i].Load(path); } for (int i = 0; i < 15; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_hurtground/%d.png"), i); m_ImgHurtGround_R[i].Load(path); m_ImgHurtGround_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_run/%d.png"), i); m_ImgRun_R[i].Load(path); m_ImgRun_L[i].Load(path); } }
 void Pomp::Release() { for (int i = 0; i < 8; i++) { m_ImgIdle_R[i].Destroy(); m_ImgIdle_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgWalk_R[i].Destroy(); m_ImgWalk_L[i].Destroy(); } for (int i = 0; i < 6; i++) { m_ImgAttack_R[i].Destroy(); m_ImgAttack_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgBoxIdle_R[i].Destroy(); m_ImgBoxIdle_L[i].Destroy(); } for (int i = 0; i < 14; i++) { m_ImgBoxHit_R[i].Destroy(); m_ImgBoxHit_L[i].Destroy(); } for (int i = 0; i < 6; i++) { m_ImgTurn_R[i].Destroy(); m_ImgTurn_L[i].Destroy(); } for (int i = 0; i < 13; i++) { m_ImgFall_R[i].Destroy(); m_ImgFall_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgHurtFly_R[i].Destroy(); m_ImgHurtFly_L[i].Destroy(); } for (int i = 0; i < 15; i++) { m_ImgHurtGround_R[i].Destroy(); m_ImgHurtGround_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgRun_R[i].Destroy(); m_ImgRun_L[i].Destroy(); } }
 void Pomp::Update(float ts, const Player& player) {
@@ -655,7 +656,7 @@ void Pomp::Update(float ts, const Player& player) {
                     if (dist < 80.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) {
                         float kvx = m_isFacingLeft ? -8.0f : 8.0f;
                         float kvy = -6.0f;
-                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy);
+                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy, ex, ey);
                     }
                 }
                 if (m_CurrentFrame >= 6) { m_ActionState = PompAction::PA_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
@@ -735,7 +736,7 @@ CImage ShieldCop::m_ImgIdle_R[6], ShieldCop::m_ImgIdle_L[6], ShieldCop::m_ImgWal
 ShieldCop::ShieldCop(float x, float y) : Enemy(x, y, EnemyType::SHIELDCOP) { m_ActionState = ShieldCopAction::SA_NONE; }
 ShieldCop::~ShieldCop() {}
 void ShieldCop::Reset() { Enemy::Reset(); m_ActionState = ShieldCopAction::SA_NONE; }
-void ShieldCop::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = ShieldCopAction::SA_HURT_FLY; }
+bool ShieldCop::OnTakeDamage(float kvx, float kvy) { if (m_isImmortal) return false; Enemy::OnTakeDamage(kvx, kvy); m_ActionState = ShieldCopAction::SA_HURT_FLY; return false; }
 void ShieldCop::Init() { if (!m_ImgIdle_R[0].IsNull()) return; TCHAR path[256]; for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_idle/%d.png"), i); m_ImgIdle_R[i].Load(path); m_ImgIdle_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_walk/%d.png"), i); m_ImgWalk_R[i].Load(path); m_ImgWalk_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_run/%d.png"), i); m_ImgRun_R[i].Load(path); m_ImgRun_L[i].Load(path); } for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_turn/%d.png"), i); m_ImgTurn_R[i].Load(path); m_ImgTurn_L[i].Load(path); } for (int i = 0; i < 19; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_aim/%d.png"), i); m_ImgAim_R[i].Load(path); m_ImgAim_L[i].Load(path); } for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_bash/%d.png"), i); m_ImgBash_R[i].Load(path); m_ImgBash_L[i].Load(path); } for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_knockback/%d.png"), i); m_ImgKnockback_R[i].Load(path); m_ImgKnockback_L[i].Load(path); } for (int i = 0; i < 15; i++) { wsprintf(path, TEXT("assets/enemy/spr_shieldcop_tragedy_die_1/%d.png"), i); m_ImgTragedyDie_R[i].Load(path); m_ImgTragedyDie_L[i].Load(path); } }
 void ShieldCop::Release() { for (int i = 0; i < 6; i++) { m_ImgIdle_R[i].Destroy(); m_ImgIdle_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgWalk_R[i].Destroy(); m_ImgWalk_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgRun_R[i].Destroy(); m_ImgRun_L[i].Destroy(); } for (int i = 0; i < 8; i++) { m_ImgTurn_R[i].Destroy(); m_ImgTurn_L[i].Destroy(); } for (int i = 0; i < 19; i++) { m_ImgAim_R[i].Destroy(); m_ImgAim_L[i].Destroy(); } for (int i = 0; i < 6; i++) { m_ImgBash_R[i].Destroy(); m_ImgBash_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgKnockback_R[i].Destroy(); m_ImgKnockback_L[i].Destroy(); } for (int i = 0; i < 15; i++) { m_ImgTragedyDie_R[i].Destroy(); m_ImgTragedyDie_L[i].Destroy(); } }
 void ShieldCop::Update(float ts, const Player& player) {
@@ -770,7 +771,7 @@ void ShieldCop::Update(float ts, const Player& player) {
                     if (dist < 70.0f && (m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle))) {
                         float kvx = m_isFacingLeft ? -8.0f : 8.0f;
                         float kvy = -6.0f;
-                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy);
+                        const_cast<Player&>(player).OnTakeDamage(1.0f, kvx, kvy, ex, ey);
                     }
                 }
                 if (m_CurrentFrame >= 6) { m_ActionState = ShieldCopAction::SA_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }

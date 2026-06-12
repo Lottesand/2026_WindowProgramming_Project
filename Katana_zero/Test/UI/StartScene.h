@@ -26,6 +26,7 @@ public:
     static void Render(HDC hDC, int virtualWidth, int virtualHeight, float playerX, float playerY, float playerColW, float playerColH, float mapScale);
 
     static bool IsActive() { return m_active; }
+    static bool ShouldShowInGamePlayer() { return !m_active || m_state >= State::WAIT_CLICK; }
     static void SetActive(bool active) { m_active = active; if (active) Reset(); }
 
 private:

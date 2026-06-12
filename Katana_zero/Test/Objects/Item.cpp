@@ -28,11 +28,14 @@ Item::Item(ItemType type, float x, float y) : m_type(type), m_x(x), m_y(y) {
     // 타입별 속성 및 인디케이터 오프셋 설정
     m_colW = 20.0f;
     m_colH = 20.0f;
-    m_indicatorOffsetX = 10.0f; // 기본값
+    m_indicatorOffsetX = 10.0f; 
     m_indicatorOffsetY = 0.0f;
 
-    if (type == ItemType::KNIFE) {
-        m_indicatorOffsetX = 0.0f; // 예시: KNIFE는 조정 필요
+    if (m_type == ItemType::BEER_BOTTLE) {
+        m_indicatorOffsetX = 5.0f;
+    }
+    else if (m_type == ItemType::KNIFE) {
+        m_indicatorOffsetX = 20.0f;
     }
 }
 

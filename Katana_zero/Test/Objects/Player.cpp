@@ -115,7 +115,13 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     m_snapshots.push_back(snap);
 
     bool isW = false, isA = false, isS = false, isD = false, isJ = false;
-    if (!isDead) { isW = GetAsyncKeyState('W') & 0x8000; isA = GetAsyncKeyState('A') & 0x8000; isS = GetAsyncKeyState('S') & 0x8000; isD = GetAsyncKeyState('D') & 0x8000; isJ = (GetAsyncKeyState('W') & 0x8000) || (GetAsyncKeyState(VK_SPACE) & 0x8000); }
+    if (!isDead && !m_isStunned) { 
+        isW = GetAsyncKeyState('W') & 0x8000; 
+        isA = GetAsyncKeyState('A') & 0x8000; 
+        isS = GetAsyncKeyState('S') & 0x8000; 
+        isD = GetAsyncKeyState('D') & 0x8000; 
+        isJ = (GetAsyncKeyState('W') & 0x8000) || (GetAsyncKeyState(VK_SPACE) & 0x8000); 
+    }
     int twd = 0; if (CheckSpecificCollision(m_x - 3.0f, m_y, m_colW, m_colH, 3)) twd = -1; else if (CheckSpecificCollision(m_x + 3.0f, m_y, m_colW, m_colH, 3)) twd = 1;
     bool isShift = false; if (!isDead) isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     static DWORD lt_player = ct; float dT = (ct - lt_player) / 1000.0f; lt_player = ct;
@@ -123,6 +129,14 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     else { m_isSlowMo = false; m_canSlowMo = true; }
     if (!m_isSlowMo && m_batteryLevel < 11.0f) { m_batteryLevel += (11.0f / 11.0f) * dT; if (m_batteryLevel > 11.0f) m_batteryLevel = 11.0f; }
     float ts = m_isSlowMo ? 0.3f : 1.0f;
+
+    if (m_isStunned) {
+        m_stunTimer -= dT * ts;
+        if (m_stunTimer <= 0.0f) {
+            m_isStunned = false;
+            m_stunTimer = 0.0f;
+        }
+    }
 
     if (m_itemPopupTimer > 0) {
         m_itemPopupTimer -= dT * ts;
@@ -192,8 +206,8 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     }
     bool curL = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0; static bool prL = false;
     float wx = (mouseX - ox) / rs, wy = (mouseY - oy) / rs; if (!fv) { wx += camX; wy += camY; }
-    // Prevent starting an attack if dead
-    if (!isDead && curL && !prL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_PREVDOWN && m_state != PlayerState::PS_DOWN && m_state != PlayerState::PS_DOOR_KICK && m_state != PlayerState::PS_DOOR_KICK_FULL) {
+    // Prevent starting an attack if dead or stunned
+    if (!isDead && !m_isStunned && curL && !prL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_PREVDOWN && m_state != PlayerState::PS_DOWN && m_state != PlayerState::PS_DOOR_KICK && m_state != PlayerState::PS_DOOR_KICK_FULL) {
         if (ct - m_lastAttackTime >= (DWORD)g_playerAttackCooldown) {
             m_state = PlayerState::PS_ATTACK; m_currentFrame = 0; m_lastAttackTime = ct; m_isAttackClicked = true; if (!air) m_hasLeapedInAir = false;
             float dx = wx - (m_x + m_colW / 2.0f), dy = wy - (m_y + m_colH / 2.0f), dist = sqrt(dx * dx + dy * dy);
@@ -241,7 +255,7 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     else if (m_state != PlayerState::PS_WALK_TO_IDLE && m_state != PlayerState::PS_PREVDOWN && m_state != PlayerState::PS_DOWN && m_state != PlayerState::PS_POSTDOWN) { if (isA) { tvx = -cWSp; m_isFacingRight = false; } if (isD) { tvx = cWSp; m_isFacingRight = true; } }
     if (tvx != 0.0f && m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE && m_state != PlayerState::PS_WALL_FLIP && !isDead) m_vx += (tvx - m_vx) * cAcc;
     else if (m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE && m_state != PlayerState::PS_WALL_FLIP) { 
-        float curFri = isDead ? 0.02f * ts : cFri;
+        float curFri = (isDead || m_isStunned) ? 0.02f * ts : cFri;
         m_vx += (0.0f - m_vx) * curFri; 
         if (fabs(m_vx) < 0.1f) m_vx = 0.0f; 
     }
@@ -417,7 +431,7 @@ void Player::UpdateAnimation() {
 }
 
 void Player::Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect, float stageTimer) {
-    if (!hMemDC || !g) return;
+    if (!hMemDC || !g || !m_isVisible) return;
     int mapW = StageManager::GetMapWidth();
     int mapH = StageManager::GetMapHeight();
     float pFS = mapScale;
@@ -645,6 +659,42 @@ void Player::Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, fl
             DeleteObject(rb);
         }
     }
+
+    if (m_isStunned) {
+        float vx, vy;
+        if (g_isFullMapView) {
+            float fsW = 1280.0f / (float)(mapW > 0 ? mapW : 1);
+            float fsH = 720.0f / (float)(mapH > 0 ? mapH : 1);
+            float fs = (fsW < fsH) ? fsW : fsH;
+            vx = m_x * fs + (1280.0f - mapW * fs) / 2.0f;
+            vy = m_y * fs + (720.0f - mapH * fs) / 2.0f;
+            pFS = fs;
+        } else {
+            vx = (m_x - camX) * mapScale;
+            vy = (m_y - camY) * mapScale;
+            pFS = mapScale;
+        }
+
+        int gaugeW = (int)(40 * pFS);
+        int gaugeH = (int)(6 * pFS);
+        int gx = (int)(vx + (40 * pFS) / 2.0f - gaugeW / 2.0f);
+        int gy = (int)(vy - 20 * pFS);
+
+        // Black background
+        HBRUSH hb = CreateSolidBrush(RGB(0, 0, 0));
+        RECT br = { gx, gy, gx + gaugeW, gy + gaugeH };
+        FillRect(hMemDC, &br, hb);
+        DeleteObject(hb);
+
+        // White foreground (shrinking)
+        float ratio = m_stunTimer / m_maxStunTime;
+        if (ratio < 0) ratio = 0; if (ratio > 1.0f) ratio = 1.0f;
+        int curW = (int)(gaugeW * ratio);
+        HBRUSH hw = CreateSolidBrush(RGB(255, 255, 255));
+        RECT wr = { gx, gy, gx + curW, gy + gaugeH };
+        FillRect(hMemDC, &wr, hw);
+        DeleteObject(hw);
+    }
 }
 
 void Player::SetState(PlayerState state) { 
@@ -672,7 +722,7 @@ bool Player::IsDeathAnimationFinished() const {
     return m_state == PlayerState::PS_DEAD_GROUND && m_currentFrame >= 5; 
 }
 
-void Player::OnTakeDamage(float damage, float kvx, float kvy) {
+void Player::OnTakeDamage(float damage, float kvx, float kvy, float sourceX, float sourceY) {
     if (!m_isGodMode && !IsDead() && m_state != PlayerState::PS_ROLL) {
         SetState(PlayerState::PS_DEAD);
         if (kvx != 0.0f || kvy != 0.0f) {
@@ -685,6 +735,29 @@ void Player::OnTakeDamage(float damage, float kvx, float kvy) {
         if (length > 0) {
             float nvx = m_vx / length, nvy = m_vy / length;
             float perpX = -nvy, perpY = nvx; // 수직 벡터
+            
+            // 네온 트레일의 방향은 데미지를 준 상대와 플레이어 사이로 설정
+            float trailVx, trailVy;
+            if (sourceX != -1.0f && sourceY != -1.0f) {
+                float dx = (m_x + m_colW / 2.0f) - sourceX;
+                float dy = (m_y + m_colH / 2.0f) - sourceY;
+                float dist = (float)sqrt(dx * dx + dy * dy);
+                if (dist > 0.0f) {
+                    trailVx = dx / dist;
+                    trailVy = dy / dist;
+                } else {
+                    trailVx = nvx;
+                    trailVy = nvy;
+                }
+            } else {
+                trailVx = nvx;
+                trailVy = nvy;
+            }
+            float angle = atan2(trailVy, trailVx);
+
+            // 적중 시 네온 트레일 (적과 동일한 이펙트 적용)
+            EffectManager::AddNeonTrail(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, trailVx, trailVy, angle);
+            
             DWORD ct = GetTickCount();
             for (int i = 0; i < 12; i++) {
                 float speed = 3.0f + (rand() % 40) / 10.0f;
@@ -775,4 +848,19 @@ int Player::GetHeldItemType() const {
         return static_cast<int>(m_pHeldItem->GetType());
     }
     return -1;
+}
+
+void Player::Stun(float duration, float kvx, float kvy) {
+    m_isStunned = true;
+    m_stunTimer = duration;
+    m_maxStunTime = duration;
+    m_vx = kvx;
+    m_vy = kvy;
+    m_isJumping = true; // Force air state for knockback
+
+    // Cancel attack motion
+    if (m_state == PlayerState::PS_ATTACK) {
+        m_state = PlayerState::PS_IDLE;
+        m_currentFrame = 0;
+    }
 }

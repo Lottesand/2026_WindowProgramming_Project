@@ -162,7 +162,7 @@ public:
     bool IsGodMode() const { return m_isGodMode; }
     float m_bloodDistance;
     DWORD m_lastBleedTime;
-    void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f);
+    void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f, float sourceX = -1.0f, float sourceY = -1.0f);
 
     // Item management
     class Item* m_pHeldItem = nullptr;
@@ -173,4 +173,15 @@ public:
     
     bool HasHeldItem() const { return m_pHeldItem != nullptr; }
     int GetHeldItemType() const;
+
+    // Stun logic
+    bool m_isStunned = false;
+    float m_stunTimer = 0.0f;
+    float m_maxStunTime = 0.0f;
+    void Stun(float duration, float kvx, float kvy);
+
+    // Struggle/Cutscene control
+    bool m_isVisible = true;
+    void SetVisible(bool visible) { m_isVisible = visible; }
+    void ForceStop() { m_vx = 0; m_vy = 0; }
 };

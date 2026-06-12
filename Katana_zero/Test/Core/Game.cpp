@@ -8,6 +8,7 @@
 #include "../UI/UIManager.h"
 #include "../UI/StartScene.h"
 #include "../Objects/Item.h"
+#include "../Objects/Kissyface.h"
 #include <time.h>
 #include <stdlib.h>
 #include <gdiplus.h>
@@ -151,19 +152,28 @@ void Game::SpawnEnemies() {
         Enemy* ne = nullptr;
         int type = info.type;
 
-        // 0: Gangster, 1: Grunt, 2: Pomp, 3: ShieldCop
+        // 0: Gangster, 1: Grunt, 2: Pomp, 3: ShieldCop, 4: Kissyface
         switch (type) {
         case 0: ne = new Gangster(info.x, info.y); break;
         case 1: ne = new Grunt(info.x, info.y); break;
         case 2: ne = new Pomp(info.x, info.y); break;
         case 3: ne = new ShieldCop(info.x, info.y); break;
+        case 4: ne = new Kissyface(info.x, info.y); break;
         default: ne = new Gangster(info.x, info.y); break;
         }
         
         if (ne) {
+            ne->Init(); // 초기화 추가
             ne->SetPatrolRange(info.patrolRange);
             m_enemies.push_back(ne);
         }
+    }
+
+    // Force test spawn for Stage 5
+    if (m_currentStage == 5) {
+        Enemy* testKissy = new Kissyface(400.0f, 300.0f);
+        testKissy->Init();
+        m_enemies.push_back(testKissy);
     }
 }
 
@@ -175,7 +185,14 @@ void Game::Update() {
         m_frameCount = 0;
         m_lastFpsTime = ct;
     }
-    if (!m_isLoaded) return;
+    if (!m_isLoaded || m_displayedProgress < 100.0f) {
+        int target = m_loadingProgress.load();
+        if (m_displayedProgress < target) {
+            m_displayedProgress += 0.4f; // 쌓이는 속도 조절
+            if (m_displayedProgress > target) m_displayedProgress = (float)target;
+        }
+        if (!m_isLoaded || m_displayedProgress < 100.0f) return;
+    }
     if (ct - m_prevTime < 16) return;
     float dT = (ct - m_prevTime) / 1000.0f;
     Input::Update(); UpdateScreenScale();
@@ -524,10 +541,17 @@ void Game::Update() {
                         
                         // 수평 베기이거나 아래로 내리꽂는 공격일 경우, 땅에 쓸리지 않게 위로 살짝 띄워줌
                         if (kvy > -5.0f) kvy -= 8.0f; // 위로 띄워주는 보정값도 살짝 줄임
-                        
+                            
                         // 지연 처리(AddPendingHit)를 제거하고 즉시 데미지/넉백 적용
                         // 플레이어가 대시 중이라 위치가 계속 변하므로, 지연 처리를 하면 엉뚱한 위치에서 날아감
-                        e->OnTakeDamage(kvx, kvy);
+                        bool parried = e->OnTakeDamage(kvx, kvy);
+                        if (parried) {
+                            // Kissyface parried! Stun player and knockback
+                            // Strongly increase knockback distance to ensure clearing the attack range
+                            m_player.Stun(0.5f, -kvx * 1.8f, -10.0f);
+                            // Add some VFX
+                            EffectManager::AddGunSparkVFX((float)aR.left + (aR.right - aR.left) / 2.0f, (float)aR.top + (aR.bottom - aR.top) / 2.0f, atan2(-kvy, -kvx), GetTickCount());
+                        }
                     }
                 }
             }
@@ -604,8 +628,7 @@ void Game::Render(HDC hDC) {
         FillRect(hMemDC, &barBg, hBgBrush);
         DeleteObject(hBgBrush);
 
-        int currentProgress = m_loadingProgress.load();
-        int progressWidth = (int)((float)barW * (currentProgress / 100.0f));
+        int progressWidth = (int)((float)barW * (m_displayedProgress / 100.0f));
         RECT barProgress = { barBg.left, barBg.top, barBg.left + progressWidth, barBg.bottom };
         HBRUSH hPrgBrush = CreateSolidBrush(RGB(0, 255, 255));
         FillRect(hMemDC, &barProgress, hPrgBrush);
@@ -618,7 +641,7 @@ void Game::Render(HDC hDC) {
         HFONT hOldFont = (HFONT)SelectObject(hMemDC, hFont);
 
         TCHAR szProgress[32];
-        wsprintf(szProgress, TEXT("%d%%"), currentProgress);
+        wsprintf(szProgress, TEXT("%d%%"), (int)m_displayedProgress);
         RECT textRect = { barBg.left, barBg.top - 25, barBg.right, barBg.top };
         DrawText(hMemDC, szProgress, -1, &textRect, DT_RIGHT | DT_SINGLELINE);
 
@@ -679,7 +702,7 @@ void Game::Render(HDC hDC) {
     float scX = fW / fCW, scY = fH / fCH, cFS = (scX < scY) ? scX : scY;
     float cFX = (fW - fCW * cFS) / 2.0f, cFY = (fH - fCH * cFS) / 2.0f;
     EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
-    if (!StartScene::IsActive()) {
+    if (StartScene::ShouldShowInGamePlayer()) {
         m_player.Render(hMemDC, &g, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect, m_stageTimer);
     }
     
