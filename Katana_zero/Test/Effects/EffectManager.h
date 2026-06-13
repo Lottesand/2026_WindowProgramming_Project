@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <windows.h>
 #include <atlimage.h>
 #include <vector>
@@ -83,6 +83,14 @@ struct ExplosionVFX {
     float radius;
 };
 
+struct FireVFX {
+    float x, y;
+    int currentFrame;
+    int maxFrame;
+    DWORD lastTime;
+    int type; // 1 or 2
+};
+
 class EffectManager {
 public:
     static void Init();
@@ -107,6 +115,7 @@ public:
     static void AddBloodSplatter(float x, float y, float vx, float vy, float angle, DWORD currentTime);
     static void AddMapBlood(float x, float y, float angle, int imgIndex);
     static void AddExplosion(float x, float y, DWORD currentTime, float radius = 100.0f);
+    static void AddFire(float x, float y, DWORD currentTime);
     
     static void SetReplayMode(bool isReplay) { m_isReplayMode = isReplay; }
     static bool HasActiveVFX();
@@ -121,6 +130,7 @@ private:
     static std::vector<PendingHit> m_pendingHits;
     static std::vector<BloodSplatterVFX> m_bloodSplatters;
     static std::vector<ExplosionVFX> m_explosions;
+    static std::vector<FireVFX> m_fires;
     
     // Blood layer variables
     static HDC m_hBloodLayerDC;
@@ -143,9 +153,9 @@ private:
     static CImage m_imgVfxMapBloodDir[48];
     static CImage m_imgVfxMapBloodStatic[7];
     static CImage m_imgVfxExplosion[10];
+    static CImage m_imgVfxFire1[7];
+    static CImage m_imgVfxFire2[10];
 
     static constexpr int m_neonTrailLife = 6;
     static constexpr float m_slashWidth = 10.0f;
 };
-
-

@@ -60,7 +60,8 @@ public:
 
     void OnPickUp();
     void OnThrow(float vx, float vy);
-    void OnHit(const std::vector<class Enemy*>& enemies);
+    void OnHit(const std::vector<Enemy*>& enemies, class Player* player = nullptr);
+
     void SetPos(float x, float y) { m_x = x; m_y = y; }
 
     ItemType GetType() const { return m_type; }

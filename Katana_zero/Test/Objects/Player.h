@@ -34,6 +34,7 @@ private:
     bool m_isJumping, m_isFacingRight;
     int m_currentFrame;
     DWORD m_lastTime;
+    DWORD m_prevTime; // 추가
 
     float m_colW, m_colH, m_moveSpeedWalk, m_moveSpeedRoll, m_accelRate, m_frictionRate;
     const float m_jumpPower = -11.0f;
@@ -169,6 +170,13 @@ public:
     class Item* m_pHeldItem = nullptr;
     float m_itemPopupTimer = 0.0f;
     ItemType m_popupItemType;
+    
+    // Flamethrower state
+    bool m_isFiringFlamethrower = false;
+    float m_flamethrowerHoldTime = 0.0f;
+    float m_flamethrowerFuel = 4.0f; // Max 4 seconds
+    CImage imgFlamethrowerUI[8];
+    
     void PickUpItem(class Item* item);
     void ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
     void DiscardHeldItem();
