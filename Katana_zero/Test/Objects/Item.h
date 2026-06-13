@@ -31,14 +31,15 @@ protected:
     bool m_isActive;
     float m_rotation;
 
-    static CImage m_imgBeerBottle;
-    static CImage m_imgButcherKnife;
-    static CImage m_imgBust;
-    static CImage m_imgPottedPlant;
-    static CImage m_imgKnife;
-    static CImage m_imgExplosiveVial;
-    static CImage m_imgFlamethrower;
+    static CImage m_imgBeerBottle[2];
+    static CImage m_imgButcherKnife[2];
+    static CImage m_imgBust[2];
+    static CImage m_imgPottedPlant[2];
+    static CImage m_imgKnife[2];
+    static CImage m_imgExplosiveVial[2];
+    static CImage m_imgFlamethrower[2];
     static CImage m_imgArrow[8];
+    static std::map<ItemType, CImage> m_hudImages; // 추가
 
     bool m_showIndicator;
     int m_arrowFrame;

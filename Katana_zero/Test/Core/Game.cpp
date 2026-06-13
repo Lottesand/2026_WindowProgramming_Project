@@ -140,7 +140,12 @@ void Game::SpawnEnemies() {
         }
         if (ne) { ne->Init(); ne->SetPatrolRange(info.patrolRange); m_enemies.push_back(ne); }
     }
-    if (m_currentStage == 5) { Enemy* testKissy = new Kissyface(400.0f, 300.0f); testKissy->Init(); m_enemies.push_back(testKissy); }
+
+    if (m_currentStage == 5) {
+        Kissyface* boss = new Kissyface(400.0f, 300.0f);
+        boss->Init();
+        m_enemies.push_back(boss);
+    }
 }
 
 void Game::Update() {
@@ -161,22 +166,36 @@ void Game::Update() {
     if (m_transitionState != TransitionState::NONE) { float transitionSpeed = 3.5f; if (m_transitionState == TransitionState::ENTERING) { m_transitionProgress += dT * transitionSpeed; if (m_transitionProgress >= 1.0f) { m_transitionProgress = 1.0f; m_transitionState = TransitionState::WAITING; m_transitionWaitTime = ct; if (m_transitionToNextStage) { 
             SoundManager::Stop("SFX_REPLAY_PLAY_LOOP");
             SoundManager::Stop("SFX_REPLAY_PAUSE_LOOP");
-            SoundManager::SetGlobalVolume(1.0f); // 볼륨 복구
+            SoundManager::SetGlobalVolume(1.0f);
             m_gameMode = GameMode::PLAYING; m_player.ClearSnapshots(); if (m_currentStage < 5) LoadStage(m_currentStage + 1); else LoadStage(1); m_transitionToNextStage = false; } } } else if (m_transitionState == TransitionState::WAITING) { if (ct - m_transitionWaitTime > 150) { m_transitionState = TransitionState::LEAVING; m_transitionProgress = 0.0f; } } else if (m_transitionState == TransitionState::LEAVING) { m_transitionProgress += dT * transitionSpeed; if (m_transitionProgress >= 1.0f) { m_transitionState = TransitionState::NONE; m_transitionProgress = 0.0f; } } m_prevTime = ct; return; }
     if (!m_bGameStarted) {
-        if (StartScene::IsActive()) { bool wasActive = StartScene::IsActive(); StartScene::Update(dT, m_bGameStarted); if (wasActive && !StartScene::IsActive()) { /* BGM handled by StartScene sync */ } }
-        else { if (Input::GetKeyDown(VK_LBUTTON)) { m_bGameStarted = true; m_prevTime = GetTickCount(); /* BGM handled by StartScene sync */ } }
+        if (StartScene::IsActive()) { bool wasActive = StartScene::IsActive(); StartScene::Update(dT, m_bGameStarted); }
+        else { if (Input::GetKeyDown(VK_LBUTTON)) { m_bGameStarted = true; m_prevTime = GetTickCount(); } }
         Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
         m_prevTime = ct; return;
     }
+    
     bool anyAlive = false; int activeEnemies = 0; for (auto& e : m_enemies) { if (e) { activeEnemies++; if (e->GetIsAlive()) { anyAlive = true; break; } } } 
-    if (anyAlive) m_isStageCleared = false; 
-    else { if (activeEnemies > 0 && !m_isStageCleared) { m_isStageCleared = true; SoundManager::Play("SFX_GO"); } }
+    
+    if (m_currentStage == 5) {
+        bool kissyNoHead = false;
+        for (auto& e : m_enemies) {
+            if (e && e->GetType() == EnemyType::KISSYFACE) {
+                Kissyface* k = static_cast<Kissyface*>(e);
+                if (k->GetActionState() == KissyfaceAction::KF_NOHEAD) { kissyNoHead = true; break; }
+            }
+        }
+        if (kissyNoHead && !m_isStageCleared) { m_isStageCleared = true; SoundManager::Play("SFX_GO"); }
+    } else {
+        if (anyAlive) m_isStageCleared = false; 
+        else { if (activeEnemies > 0 && !m_isStageCleared) { m_isStageCleared = true; SoundManager::Play("SFX_GO"); } }
+    }
+    
     if (m_isStageCleared && m_gameMode == GameMode::PLAYING) { if (StageManager::IsInClearZone(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH())) { m_gameMode = GameMode::YES_SCENE; m_yesSceneStartTime = GetTickCount(); m_player.SetState(PlayerState::PS_IDLE); EffectManager::Init(); m_player.ClearAfterImages(); m_prevTime = GetTickCount(); return; } }
     if (m_gameMode == GameMode::YES_SCENE) { 
         if (ct - m_yesSceneStartTime > 2000) { 
             m_gameMode = GameMode::REPLAYING; m_replayFrame = 0; EffectManager::SetReplayMode(true); Bullet::SetReplayMode(true); StageManager::Reset(); for (auto& e : m_enemies) if (e) e->Reset(); const auto& fullHistory = m_player.GetSnapshots(); if (!fullHistory.empty()) { m_player.SetPos(fullHistory[0].x, fullHistory[0].y); m_player.SetState(fullHistory[0].state); Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, true); } 
-            SoundManager::SetGlobalVolume(0.5f); // 리플레이 볼륨 50%
+            SoundManager::SetGlobalVolume(0.5f);
             SoundManager::Play("SFX_REPLAY_EJECT"); SoundManager::Play("SFX_REPLAY_PLAY_LOOP", true);
         } m_prevTime = ct; return; 
     }
@@ -196,7 +215,7 @@ void Game::Update() {
     if (Input::GetKeyDown('F')) m_isFullMapView = !m_isFullMapView; if (Input::GetKeyDown('E')) { m_showDebugRect = !m_showDebugRect; } if (Input::GetKeyDown('I')) m_player.SetGodMode(!m_player.IsGodMode()); if (Input::GetKeyDown('Q')) { int r = rand() % 5; ItemType randomType = static_cast<ItemType>(r); Item* newItem = new Item(randomType, m_player.GetX(), m_player.GetY()); m_player.PickUpItem(newItem); } if (Input::GetKeyDown('1')) LoadStage(1); if (Input::GetKeyDown('2')) LoadStage(2); if (Input::GetKeyDown('3')) LoadStage(3); if (Input::GetKeyDown('4')) LoadStage(4); if (Input::GetKeyDown('5')) LoadStage(5);
     if (Input::GetKeyDown(VK_OEM_PLUS) || Input::GetKeyDown(0xBB)) { SoundManager::SetGlobalVolume(SoundManager::GetGlobalVolume() + 0.1f); } if (Input::GetKeyDown(VK_OEM_MINUS) || Input::GetKeyDown(0xBD)) { SoundManager::SetGlobalVolume(SoundManager::GetGlobalVolume() - 0.1f); }
     static bool prevR_local = false; bool cuR = GetAsyncKeyState('R') & 0x8000; if (cuR && !prevR_local) { m_isTimeoutDeath = false; 
-        m_player.DiscardHeldItem(); // R키 리와인드 시에도 아이템 버림
+        m_player.DiscardHeldItem();
         m_initialRewindHistorySize = m_player.GetHistorySize(); float elapsed = StageManager::GetStageLimitTime() - m_stageTimer; float rewindDur = (std::max)(1.0f, (std::min)(5.0f, elapsed / 6.0f)); m_rewindSpeed = (rewindDur > 0) ? (int)(m_initialRewindHistorySize / (rewindDur * 60.0f)) : 4; if (m_rewindSpeed < 1) m_rewindSpeed = 1; m_player.StartRewind(m_rewindSpeed); StageManager::SoftReset(); m_stageTimer = StageManager::GetStageLimitTime(); EffectManager::Init(); for (auto& e : m_enemies) if (e) e->Reset(); 
         SoundManager::Pause("BGM_MAIN"); SoundManager::Play("SFX_REWIND_LOOP", true);
     } prevR_local = cuR;

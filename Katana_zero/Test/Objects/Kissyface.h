@@ -132,6 +132,8 @@ public:
     virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     void Parry();
     
+    KissyfaceAction GetActionState() const { return m_ActionState; }
+    
     static void ReleaseAll();
 
 private:
