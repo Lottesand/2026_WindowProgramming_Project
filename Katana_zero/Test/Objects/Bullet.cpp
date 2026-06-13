@@ -3,11 +3,13 @@
 #include "Player.h"
 #include "Enemy.h"
 #include "../Effects/EffectManager.h"
+#include "../Core/SoundManager.h"
 #include <cmath>
 #include <algorithm>
 
 CImage Bullet::m_imgBullet;
 std::vector<Bullet*> Bullet::m_bullets;
+bool Bullet::m_isReplayMode = false;
 
 Bullet::Bullet(float x, float y, float vx, float vy, float sourceX, float sourceY) 
     : m_x(x), m_y(y), m_vx(vx), m_vy(vy), m_sourceX(sourceX), m_sourceY(sourceY), m_width(12.0f), m_height(8.0f), m_isActive(true), m_isDeflected(false) {
@@ -42,6 +44,7 @@ void Bullet::UpdateAll(float ts, Player& player, const std::vector<Enemy*>& enem
 }
 
 void Bullet::RenderAll(HDC hdc, float camX, float camY, float mapScale) {
+    if (m_isReplayMode) return;
     for (auto b : m_bullets) {
         b->Render(hdc, camX, camY, mapScale);
     }
@@ -84,6 +87,7 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
                 player.OnTakeDamage(1.0f, kvx, kvy, m_sourceX, m_sourceY);
             }
             m_isActive = false;
+            SoundManager::Play("SFX_BULLETDIE"); // 플레이어에게 맞거나 닿을 때 소리
             return;
         }
     } else {
@@ -96,7 +100,7 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
                 if (IntersectRect(&ol, &bR, &eR)) {
                     // Damage enemy
                     float kbx = (m_vx > 0) ? 15.0f : -15.0f;
-                    e->OnTakeDamage(kbx, -5.0f);
+                    e->OnTakeDamage(kbx, -5.0f, DeathCause::BULLET);
 
                     // Visual feedback: Neon trail and Hit VFX
                     float ex = e->GetX() + e->GetColW() / 2.0f;
@@ -110,6 +114,7 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
                     EffectManager::AddHitVFX(ex, ey, angle, GetTickCount());
 
                     m_isActive = false;
+                    SoundManager::Play("SFX_BULLETDIE"); // 적에게 맞을 때 소리
                     return;
                 }
             }
@@ -119,6 +124,7 @@ void Bullet::Update(float ts, Player& player, const std::vector<Enemy*>& enemies
     // Map collision check
     if (CheckCollision((int)(m_x + m_width / 2), (int)(m_y + m_height / 2)) || CheckDoorCollision(m_x, m_y, m_width, m_height)) {
         m_isActive = false;
+        SoundManager::Play("SFX_BULLETDIE"); // 벽이나 문에 닿을 때 소리
     }
 
     // Screen boundary check

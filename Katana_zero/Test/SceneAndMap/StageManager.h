@@ -35,7 +35,8 @@ public:
     };
 
     static void Init();
-    static void Reset(); 
+    static void Reset();
+    static void SoftReset();
     static void LoadAllStages(std::atomic<int>* pProgress = nullptr);
     static void LoadAssets(int stage = 1);
     static void ReleaseAssets();

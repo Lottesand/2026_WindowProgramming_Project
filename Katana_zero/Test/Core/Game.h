@@ -31,6 +31,7 @@ public:
     bool IsLoaded() const { return m_isLoaded; }
     int GetLoadingProgress() const { return m_loadingProgress; }
 
+    GameMode GetGameMode() const { return m_gameMode; }
 private:
     void UpdateScreenScale();
 
@@ -84,6 +85,8 @@ private:
     int m_fps = 0;
     int m_frameCount = 0;
     DWORD m_lastFpsTime = 0;
+
+    bool m_prevSlowMo = false;
 
     static constexpr int VIRTUAL_WIDTH = 1280;
     static constexpr int VIRTUAL_HEIGHT = 720;

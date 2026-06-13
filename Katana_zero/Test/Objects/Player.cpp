@@ -9,6 +9,7 @@
 #include <deque>
 #include <cstring>
 #include <cmath>
+#include <cstdio>
 
 int g_playerAttackCooldown = 130; 
 int g_playerAttackDuration = 2;
@@ -210,7 +211,7 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         if (m_state == PlayerState::PS_WALL_GRAB || m_state == PlayerState::PS_WALL_SLIDE) {
             m_state = PlayerState::PS_WALL_FLIP; m_currentFrame = 0; m_vy = cWJP_Y; m_vx = (m_wallDir == 1) ? -cWJP_X : cWJP_X; m_isFacingRight = (m_wallDir == -1); m_isJumping = true; m_canJump = false; m_x += (m_wallDir == 1) ? -2.0f : 2.0f; twd = 0; m_jumpHoldTimer = ct;
             if (!m_isSlowMo) EffectManager::AddJumpCloudVFX(m_x + ((m_wallDir == 1) ? m_colW + 2.0f : -2.0f), m_y + m_colH / 2.0f, ct, (m_wallDir == 1) ? -1.5708f : 1.5708f);
-            SoundManager::Play("SFX_WALLKICK");
+            SoundManager::Play("SFX_ROLL"); // wallflip에서도 roll 사운드 재생
         } else if (!air && m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_WALL_FLIP && m_state != PlayerState::PS_DOOR_KICK && m_state != PlayerState::PS_DOOR_KICK_FULL) {
             m_vy = cJP; m_isJumping = true; m_canJump = false; m_jumpHoldTimer = ct; if (!m_isSlowMo) EffectManager::AddJumpCloudVFX(m_x + m_colW / 2.0f, m_y + m_colH, ct);
             SoundManager::Play("SFX_JUMP");
@@ -222,7 +223,12 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     if (!isDead && !m_isStunned && curL && !prL && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_PREVDOWN && m_state != PlayerState::PS_DOWN && m_state != PlayerState::PS_DOOR_KICK && m_state != PlayerState::PS_DOOR_KICK_FULL) {
         if (ct - m_lastAttackTime >= (DWORD)g_playerAttackCooldown) {
             m_state = PlayerState::PS_ATTACK; m_currentFrame = 0; m_lastAttackTime = ct; m_isAttackClicked = true; if (!air) m_hasLeapedInAir = false;
-            SoundManager::Play("SFX_SLASH");
+            m_hasHitThisSwing = false; // Reset hit flag for the new swing
+            
+            // Sequential slash sounds: 1 -> 2 -> 3 -> 1 ...
+            m_slashIndex = (m_slashIndex % 3) + 1;
+            char slashKey[16]; sprintf_s(slashKey, "SFX_SLASH%d", m_slashIndex);
+            SoundManager::Play(slashKey);
             float dx = wx - (m_x + m_colW / 2.0f), dy = wy - (m_y + m_colH / 2.0f), dist = sqrt(dx * dx + dy * dy);
             m_attackAngle = atan2(dy, dx); m_isFacingRight = (dx >= 0);
             if (dist > 0) { m_attackDirX = dx / dist; m_attackDirY = dy / dist; } else { m_attackDirX = 1.0f; m_attackDirY = 0.0f; }
@@ -234,9 +240,22 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
     prL = curL;
     if (air && twd != 0 && m_state != PlayerState::PS_ATTACK && m_state != PlayerState::PS_ROLL && m_state != PlayerState::PS_DOOR_KICK && m_state != PlayerState::PS_DOOR_KICK_FULL) {
         if (m_state != PlayerState::PS_WALL_GRAB && m_state != PlayerState::PS_WALL_SLIDE) {
-            if (((twd == -1 && isA) || (twd == 1 && isD)) || (m_state == PlayerState::PS_WALL_FLIP && twd != m_wallDir)) { m_state = PlayerState::PS_WALL_GRAB; m_currentFrame = 0; m_wallGrabTime = ct; m_wallDir = twd; m_isFacingRight = (m_wallDir == 1); m_canAirYDash = true; }
+            if (((twd == -1 && isA) || (twd == 1 && isD)) || (m_state == PlayerState::PS_WALL_FLIP && twd != m_wallDir)) { 
+                m_state = PlayerState::PS_WALL_GRAB; m_currentFrame = 0; m_wallGrabTime = ct; m_wallDir = twd; m_isFacingRight = (m_wallDir == 1); m_canAirYDash = true; 
+                SoundManager::Play("SFX_WALLKICK");
+            }
         } else { if ((m_wallDir == 1 && isA) || (m_wallDir == -1 && isD) || twd != m_wallDir) m_state = PlayerState::PS_FALL; }
     } else if (m_state == PlayerState::PS_WALL_GRAB || m_state == PlayerState::PS_WALL_SLIDE) { if (!air) m_state = PlayerState::PS_IDLE; else m_state = PlayerState::PS_FALL; }
+    
+    // Wall slide sound logic
+    static bool s_wasWallSliding = false;
+    bool isWallSliding = (m_state == PlayerState::PS_WALL_SLIDE && m_vy > 0.0f);
+    if (isWallSliding && !s_wasWallSliding) {
+        SoundManager::Play("SFX_WALLSLIDE_LOOP", true);
+    } else if (!isWallSliding && s_wasWallSliding) {
+        SoundManager::Stop("SFX_WALLSLIDE_LOOP");
+    }
+    s_wasWallSliding = isWallSliding;
     float tvx = 0.0f;
     if (m_state == PlayerState::PS_ATTACK) {
         float dx = m_attackTargetX - m_x, dy = m_attackTargetY - m_y; 
@@ -381,7 +400,26 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
             else nst = (m_state == PlayerState::PS_WALK_TO_IDLE) ? (m_currentFrame >= 4 ? PlayerState::PS_IDLE : PlayerState::PS_WALK_TO_IDLE) : ((m_state == PlayerState::PS_WALK || m_state == PlayerState::PS_RUN || m_state == PlayerState::PS_IDLE_TO_WALK || m_state == PlayerState::PS_FALL) ? PlayerState::PS_WALK_TO_IDLE : PlayerState::PS_IDLE);
         }
     } else if (!air && (nst == PlayerState::PS_WALL_FLIP || nst == PlayerState::PS_WALL_SLIDE || nst == PlayerState::PS_WALL_GRAB)) nst = (isA || isD) ? PlayerState::PS_IDLE_TO_WALK : PlayerState::PS_WALK_TO_IDLE;
-    if (m_state != nst) { m_currentFrame = 0; m_state = nst; }
+    if (m_state != nst) { 
+        if ((nst == PlayerState::PS_WALK || nst == PlayerState::PS_RUN || nst == PlayerState::PS_IDLE_TO_WALK) && 
+            (m_state == PlayerState::PS_IDLE || m_state == PlayerState::PS_WALK_TO_IDLE)) {
+            SoundManager::Play("SFX_PRERUN");
+        }
+        if ((m_state == PlayerState::PS_FALL || m_state == PlayerState::PS_JUMP_UP) && (nst == PlayerState::PS_IDLE || nst == PlayerState::PS_WALK || nst == PlayerState::PS_RUN || nst == PlayerState::PS_WALK_TO_IDLE)) {
+            SoundManager::Play("SFX_LAND");
+        }
+        m_currentFrame = 0; m_state = nst; 
+    }
+
+    if (m_state == PlayerState::PS_WALK || m_state == PlayerState::PS_RUN || m_state == PlayerState::PS_PREVDOWN || m_state == PlayerState::PS_IDLE_TO_WALK || m_state == PlayerState::PS_WALK_TO_IDLE) {
+        if (m_currentFrame == 2 || m_currentFrame == 6) {
+            static int lastFootstepFrame = -1;
+            if (m_currentFrame != lastFootstepFrame) {
+                SoundManager::Play("SFX_WALK");
+                lastFootstepFrame = m_currentFrame;
+            }
+        }
+    }
     if (!air && (m_state == PlayerState::PS_WALK || m_state == PlayerState::PS_RUN) && !m_isSlowMo) { static bool lfr = m_isFacingRight; if (!m_wasMoving || (m_isFacingRight != lfr)) { for (int i = 0; i < 3; i++) EffectManager::AddDustCloudVFX(m_x + (m_isFacingRight ? 0 : m_colW) + (m_isFacingRight ? m_dustOffsetX[i] : -m_dustOffsetX[i]), m_y + m_colH + m_dustOffsetY[i], m_isFacingRight, ct); } lfr = m_isFacingRight; }
     m_wasMoving = !air && (m_state == PlayerState::PS_WALK || m_state == PlayerState::PS_RUN);
     if (m_state == PlayerState::PS_ROLL && !air && !m_isSlowMo) { if (m_currentFrame != m_lastRollFrame) { int cnts[] = { 1, 1, 2, 2, 3, 4 }; int safeFrameForCnt = (m_currentFrame < 5) ? m_currentFrame : 5; int c = cnts[safeFrameForCnt]; for (int i = 0; i < c; i++) EffectManager::AddDustCloudVFX(m_x + (m_isFacingRight ? 0 : m_colW) + (float)(rand() % 21 - 10), m_y + m_colH + (float)(rand() % 11 - 5) + 2.0f, m_isFacingRight, ct); m_lastRollFrame = m_currentFrame; } } else m_lastRollFrame = -1;
@@ -745,6 +783,7 @@ void Player::SetState(PlayerState state) {
         if (state == PlayerState::PS_DEAD) {
             m_state = PlayerState::PS_DEAD_FLY_BEGIN;
             ClearAfterImages();
+            SoundManager::Play("SFX_PLAYER_DIE"); // 소리 재생만 하고 여기서 멈추지 않음
         }
     } 
 }
@@ -766,6 +805,7 @@ bool Player::IsDeathAnimationFinished() const {
 void Player::OnTakeDamage(float damage, float kvx, float kvy, float sourceX, float sourceY) {
     if (!m_isGodMode && !IsDead() && m_state != PlayerState::PS_ROLL) {
         SetState(PlayerState::PS_DEAD);
+        SoundManager::Play("SFX_HIT"); // 플레이어 피격 시 소리
         if (kvx != 0.0f || kvy != 0.0f) {
             m_vx = kvx;
             m_vy = kvy;
@@ -853,6 +893,13 @@ void Player::PickUpItem(Item* item) {
     m_popupItemType = item->GetType();
 }
 
+void Player::DiscardHeldItem() {
+    if (m_pHeldItem) {
+        delete m_pHeldItem;
+        m_pHeldItem = nullptr;
+    }
+}
+
 void Player::ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
     if (!m_pHeldItem) return;
 
@@ -875,15 +922,20 @@ void Player::ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs,
     float spawnX = m_x + m_colW / 2.0f;
     float spawnY = m_y + m_colH / 2.0f;
 
+    SoundManager::Play("SFX_THROW");
+
     auto items = StageManager::GetCurrentItems();
     if (items) {
         items->push_back(*m_pHeldItem);
-        items->back().OnThrow(spawnX, spawnY, vx, vy);
+        // Set position and then throw
+        items->back().SetPos(spawnX, spawnY);
+        items->back().SetActive(true);
+        items->back().OnThrow(vx, vy);
     }
 
     delete m_pHeldItem;
     m_pHeldItem = nullptr;
-}
+    }
 
 int Player::GetHeldItemType() const {
     if (m_pHeldItem) {
@@ -902,7 +954,6 @@ void Player::Stun(float duration, float kvx, float kvy) {
 
     // Cancel attack motion
     if (m_state == PlayerState::PS_ATTACK) {
-        m_state = PlayerState::PS_IDLE;
-        m_currentFrame = 0;
+        SetState(PlayerState::PS_IDLE);
     }
 }

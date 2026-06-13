@@ -19,6 +19,7 @@ public:
 
     static void Init();
     static void LoadAssets();
+    static void LoadAllSounds();
     static void ReleaseAssets();
     
     static void Reset();

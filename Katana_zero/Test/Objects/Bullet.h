@@ -14,6 +14,7 @@ public:
     static void RenderAll(HDC hdc, float camX, float camY, float mapScale);
     static void AddBullet(float x, float y, float vx, float vy, float sourceX = -1.0f, float sourceY = -1.0f);
     static void ClearAll();
+    static void SetReplayMode(bool isReplay) { m_isReplayMode = isReplay; }
     static const std::vector<Bullet*>& GetBullets() { return m_bullets; }
 
     void Update(float ts, class Player& player, const std::vector<class Enemy*>& enemies);
@@ -40,6 +41,7 @@ private:
     bool m_isActive;
     bool m_isDeflected;
 
+    static bool m_isReplayMode;
     static CImage m_imgBullet;
     static std::vector<Bullet*> m_bullets;
 };

@@ -1,5 +1,6 @@
 #include "StartScene.h"
 #include "../Core/Input.h"
+#include "../Core/SoundManager.h"
 #include "../SceneAndMap/StageManager.h"
 #include "../SceneAndMap/Camera.h"
 #include <string>
@@ -25,7 +26,14 @@ bool StartScene::m_showFinalPrompts = false;
 void StartScene::Init() {
 }
 
+void StartScene::LoadAllSounds() {
+    SoundManager::Load("SFX_CASSETTE", L"assets/sound/player/playercasette.wav");
+    SoundManager::Load("SFX_CASSETTE_PLAY", L"assets/sound/player/playercasetteplay.wav");
+    SoundManager::Load("SFX_HEADPHONES", L"assets/sound/player/playerheadphones.wav");
+}
+
 void StartScene::LoadAssets() {
+    LoadAllSounds();
     TCHAR path[256];
     for (int i = 0; i < 31; i++) {
         wsprintf(path, TEXT("assets/player/spr_player_playsong/spr_player_playsong_%d.png"), i);
@@ -71,12 +79,26 @@ void StartScene::Update(float dT, bool& bGameStarted) {
         }
         break;
     case State::PLAYER_ANIM:
-        if (m_timer >= 0.05f) { // 20 FPS
+        if (m_timer >= 0.07f) { // Adjusted for sound synchronization (~14 FPS)
             m_playerFrame++;
             m_timer = 0.0f;
+
+            // Frame-specific sound triggers
+            if (m_playerFrame == 1) {
+                SoundManager::Play("SFX_CASSETTE");
+            }
+            else if (m_playerFrame == 14) {
+                SoundManager::Play("SFX_CASSETTE_PLAY");
+            }
+            else if (m_playerFrame == 24) {
+                SoundManager::Play("SFX_HEADPHONES");
+            }
+
             if (m_playerFrame >= 31) {
                 m_playerFrame = 30;
                 m_state = State::BOX_EXPAND;
+                // Start BGM immediately after headphones are on and animation ends
+                SoundManager::Play("BGM_MAIN", true);
             }
         }
         break;
@@ -121,6 +143,7 @@ void StartScene::Update(float dT, bool& bGameStarted) {
         if (Input::GetKeyDown(VK_LBUTTON)) {
             m_state = State::ENDING;
             m_timer = 0.0f;
+            SoundManager::Play("SFX_LEVEL_START");
             Camera::StartRewindEffect(1.0f); // 카메라 리와인드 연출 시작
         }
         break;

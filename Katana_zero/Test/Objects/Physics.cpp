@@ -8,7 +8,7 @@ int GetCollisionType(int targetX, int targetY) {
             if (!gd.IsBroken()) {
                 if (targetX >= gd.GetX() && targetX <= gd.GetX() + gd.GetW() &&
                     targetY >= gd.GetY() && targetY <= gd.GetY() + gd.GetH()) {
-                    return 2; // Treat as platform (type 2)
+                    return 1; // Treat as solid wall/floor (type 1) to prevent passing through with S
                 }
             }
         }

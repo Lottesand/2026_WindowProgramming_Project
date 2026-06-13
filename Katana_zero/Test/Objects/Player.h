@@ -59,6 +59,7 @@ private:
     float m_attackTargetX, m_attackTargetY, m_attackDirX, m_attackDirY, m_dashDirX, m_dashDirY, m_attackAngle, m_attackHitW, m_attackHitH, m_attackHitOffset;
 
     bool m_hasLeapedInAir, m_isAttackClicked;
+    int m_slashIndex = 0; // Sequential slash sound index (0-2)
 
     struct AfterImageData {
         float x, y;
@@ -170,6 +171,7 @@ public:
     ItemType m_popupItemType;
     void PickUpItem(class Item* item);
     void ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
+    void DiscardHeldItem();
     
     bool HasHeldItem() const { return m_pHeldItem != nullptr; }
     int GetHeldItemType() const;

@@ -11,7 +11,9 @@ enum class ItemType {
     BUTCHER_KNIFE,
     BUST,
     POTTED_PLANT,
-    KNIFE
+    KNIFE,
+    EXPLOSIVE_VIAL,
+    FLAMETHROWER
 };
 
 enum class ItemState {
@@ -25,18 +27,20 @@ protected:
     ItemType m_type;
     ItemState m_state;
     float m_x, m_y, m_vx, m_vy;
-    float m_colW, m_colH;
+    float m_width, m_height;
     bool m_isActive;
-    float m_angle;
-    float m_rotationSpeed;
+    float m_rotation;
 
-    static std::map<ItemType, std::vector<CImage>> m_itemImages;
-    static std::vector<CImage> m_arrowImages;
-    static std::map<ItemType, CImage> m_hudImages; // 추가: HUD 아이콘 저장
+    static CImage m_imgBeerBottle;
+    static CImage m_imgButcherKnife;
+    static CImage m_imgBust;
+    static CImage m_imgPottedPlant;
+    static CImage m_imgKnife;
+    static CImage m_imgExplosiveVial;
+    static CImage m_imgFlamethrower;
+    static CImage m_imgArrow[8];
 
     bool m_showIndicator;
-    float m_indicatorOffsetX; // 추가
-    float m_indicatorOffsetY; // 추가
     int m_arrowFrame;
     DWORD m_arrowLastTime;
 
@@ -46,26 +50,17 @@ public:
 
     static void LoadAssets();
     static void ReleaseAssets();
-    static CImage& GetItemImage(ItemType type, int index) { 
-        if (m_itemImages.find(type) != m_itemImages.end() && index < (int)m_itemImages[type].size()) {
-            return m_itemImages[type][index];
-        }
-        static CImage nullImg; 
-        return nullImg;
-    }
-    static CImage& GetHUDImage(ItemType type) {
-        if (m_hudImages.find(type) != m_hudImages.end()) {
-            return m_hudImages[type];
-        }
-        static CImage nullImg;
-        return nullImg;
-    }
+
+    static CImage& GetItemImage(ItemType type, int index = 0);
+    static CImage& GetHUDImage(ItemType type);
 
     void Update(float ts, class Player& player, const std::vector<class Enemy*>& enemies);
     void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale);
 
     void OnPickUp();
-    void OnThrow(float x, float y, float vx, float vy);
+    void OnThrow(float vx, float vy);
+    void OnHit(const std::vector<class Enemy*>& enemies);
+    void SetPos(float x, float y) { m_x = x; m_y = y; }
 
     ItemType GetType() const { return m_type; }
     ItemState GetState() const { return m_state; }

@@ -1,4 +1,4 @@
-﻿#include "UIManager.h"
+#include "UIManager.h"
 #include "../Objects/Enemy.h"
 #include "../Objects/Item.h"
 #include <gdiplus.h>
@@ -12,48 +12,35 @@ CImage UIManager::m_imgHudTimer;
 CImage UIManager::m_imgHudTimerGauge;
 CImage UIManager::m_imgHudInven;
 CImage UIManager::m_imgCursor;
+CImage UIManager::m_imgDeathBox;
+CImage UIManager::m_imgTimeoutBox;
+CImage UIManager::m_imgGoArrow;
+CImage UIManager::m_imgGoText;
 CImage UIManager::m_imgHudShift[2];
 CImage UIManager::m_imgLeftClick;
 CImage UIManager::m_imgRightClick;
-CImage UIManager::m_imgDeathBox;
-CImage UIManager::m_imgTimeoutBox;
-CImage UIManager::m_imgGoText;
-CImage UIManager::m_imgGoArrow;
-GoUIConfig UIManager::m_goConfigs[5];
-int UIManager::m_goAnimFrame = 0;
-DWORD UIManager::m_lastGoAnimTime = 0;
-
-void UIManager::Init() {
-    // Default GO UI configurations for 4 stages
-    SetGoConfig(1, 1100, 150, 40);
-    SetGoConfig(2, 1100, 200, 40);
-    SetGoConfig(3, 1100, 250, 40);
-    SetGoConfig(4, 1100, 300, 40);
-    m_goAnimFrame = 0;
-    m_lastGoAnimTime = GetTickCount();
-}
 
 void UIManager::LoadAssets() {
+    if (!m_imgHudBase.IsNull()) return;
     m_imgHudBase.Load(TEXT("assets/hud/base.png"));
     m_imgHudBattery.Load(TEXT("assets/hud/battery.png"));
     m_imgHudBatteryPart.Load(TEXT("assets/hud/battery_part.png"));
-    m_imgHudBatteryUsed.Load(TEXT("assets/hud/used_battery.png"));
+    m_imgHudBatteryUsed.Load(TEXT("assets/hud/battery_used.png"));
     m_imgHudTimer.Load(TEXT("assets/hud/timer.png"));
     m_imgHudTimerGauge.Load(TEXT("assets/hud/timer_gauge.png"));
-    m_imgHudInven.Load(TEXT("assets/hud/inven.png"));
+    m_imgHudInven.Load(TEXT("assets/hud/inven_0.png"));
     m_imgCursor.Load(TEXT("assets/cursor.png"));
-    m_imgHudShift[0].Load(TEXT("assets/hud/keyboard_shift_0.png"));
-    m_imgHudShift[1].Load(TEXT("assets/hud/keyboard_shift_1.png"));
-    m_imgLeftClick.Load(TEXT("assets/hud/left_click.png"));
-    m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
     m_imgDeathBox.Load(TEXT("assets/deathbox.png"));
     m_imgTimeoutBox.Load(TEXT("assets/timeoutbox.png"));
-    m_imgGoText.Load(TEXT("assets/spr_go_text.png"));
     m_imgGoArrow.Load(TEXT("assets/spr_go_arrow.png"));
+    m_imgGoText.Load(TEXT("assets/spr_go_text.png"));
+    m_imgHudShift[0].Load(TEXT("assets/hud/shift_0.png"));
+    m_imgHudShift[1].Load(TEXT("assets/hud/shift_1.png"));
+    m_imgLeftClick.Load(TEXT("assets/hud/left_click.png"));
+    m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
 }
 
 void UIManager::ReleaseAssets() {
-    Enemy::ReleaseAll();
     m_imgHudBase.Destroy();
     m_imgHudBattery.Destroy();
     m_imgHudBatteryPart.Destroy();
@@ -62,164 +49,90 @@ void UIManager::ReleaseAssets() {
     m_imgHudTimerGauge.Destroy();
     m_imgHudInven.Destroy();
     m_imgCursor.Destroy();
+    m_imgDeathBox.Destroy();
+    m_imgTimeoutBox.Destroy();
+    m_imgGoArrow.Destroy();
+    m_imgGoText.Destroy();
     m_imgHudShift[0].Destroy();
     m_imgHudShift[1].Destroy();
     m_imgLeftClick.Destroy();
     m_imgRightClick.Destroy();
-    m_imgDeathBox.Destroy();
-    m_imgTimeoutBox.Destroy();
-    m_imgGoText.Destroy();
-    m_imgGoArrow.Destroy();
 }
 
-void UIManager::SetGoConfig(int stage, int x, int y, int arrowOffset) {
-    if (stage >= 1 && stage <= 4) {
-        m_goConfigs[stage] = { x, y, arrowOffset };
-    }
-}
+void UIManager::Init() {}
 
-void UIManager::RenderLeftClickPrompt(HDC hDC, float worldX, float worldY, float camX, float camY, float mapScale) {
-    if (!hDC || m_imgLeftClick.IsNull()) return;
+void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float battery, float stageTimer, float maxTimer, bool gameStarted, bool isShift, bool isDead, bool isTimeout, bool isAnimFinished, bool isStageCleared, int currentStage, int heldItemType) {
+    if (!gameStarted) return;
+    Gdiplus::Graphics g(hDC);
 
-    int sx = (int)((worldX - camX) * mapScale);
-    int sy = (int)((worldY - camY) * mapScale);
-    
-    float scale = 1.5f * mapScale;
-    int sw = (int)(m_imgLeftClick.GetWidth() * scale);
-    int sh = (int)(m_imgLeftClick.GetHeight() * scale);
+    // 1. HUD Base
+    if (!m_imgHudBase.IsNull()) m_imgHudBase.Draw(hDC, 20, 20);
 
-    m_imgLeftClick.Draw(hDC, sx - sw / 2, sy - sh, sw, sh);
-}
-
-void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX, int mouseY, float batteryLevel, float stageTimer, float stageLimitTime, bool bGameStarted, bool isShiftPressed, bool isDead, bool isTimeout, bool showDeathMessage, bool isStageCleared, int currentStage, int heldItemType) {
-    if (!hDC) return;
-
-    if (isDead && showDeathMessage) {
-        CImage* boxImg = isTimeout ? &m_imgTimeoutBox : &m_imgDeathBox;
-        if (boxImg && !boxImg->IsNull()) {
-            int baseW = boxImg->GetWidth();
-            int baseH = boxImg->GetHeight();
-            float scale = 0.65f; 
-            float widthScale = isTimeout ? scale * 1.15f : scale; 
-            int targetW = (int)(baseW * widthScale);
-            int targetH = (int)(baseH * scale);
-            int startX = (virtualWidth - targetW) / 2;
-            int startY = (virtualHeight - targetH) / 2;
-
-            Gdiplus::Graphics graphics(hDC);
-            graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-
-            Gdiplus::GraphicsPath path;
-            Gdiplus::Rect gradientRect(startX - 40, startY - 20, targetW + 80, targetH + 40);
-            path.AddRectangle(gradientRect);
-
-            Gdiplus::PathGradientBrush pgb(&path);
-            pgb.SetCenterColor(Gdiplus::Color(230, 0, 0, 0));
-            pgb.SetCenterPoint(Gdiplus::PointF(virtualWidth / 2.0f, virtualHeight / 2.0f));
-
-            Gdiplus::Color colors[] = { Gdiplus::Color(0, 0, 0, 0) }; 
-            int count = 1;
-            pgb.SetSurroundColors(colors, &count);
-            pgb.SetFocusScales(0.3f, 0.3f); 
-
-            graphics.FillRectangle(&pgb, gradientRect);
-
-            if (boxImg->IsDIBSection()) {
-                void* bits = boxImg->GetBits();
-                if (bits) {
-                    Gdiplus::Bitmap bitmap(boxImg->GetWidth(), boxImg->GetHeight(), boxImg->GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
-                    Gdiplus::ImageAttributes attr;
-                    attr.SetColorKey(Gdiplus::Color(0, 0, 0), Gdiplus::Color(20, 20, 20), Gdiplus::ColorAdjustTypeBitmap);
-                    graphics.DrawImage(&bitmap, Gdiplus::Rect(startX, startY, targetW, targetH), 
-                        0, 0, boxImg->GetWidth(), boxImg->GetHeight(), Gdiplus::UnitPixel, &attr);
-                }
-            } else {
-                boxImg->Draw(hDC, startX, startY, targetW, targetH);
-            }
+    // 2. Battery
+    if (!m_imgHudBattery.IsNull()) {
+        m_imgHudBattery.Draw(hDC, 44, 40);
+        int partW = m_imgHudBatteryPart.GetWidth();
+        int totalParts = 11;
+        int activeParts = (int)(battery * totalParts);
+        for (int i = 0; i < totalParts; i++) {
+            int px = 55 + i * (partW + 1);
+            if (i < activeParts) m_imgHudBatteryPart.Draw(hDC, px, 43);
+            else m_imgHudBatteryUsed.Draw(hDC, px, 43);
         }
     }
 
-    // GO UI Rendering
-    if (isStageCleared && !isDead) {
-        DWORD ct = GetTickCount();
-        if (ct - m_lastGoAnimTime > 150) {
-            m_goAnimFrame = (m_goAnimFrame + 1) % 4;
-            m_lastGoAnimTime = ct;
-        }
-
-        int stageIdx = (currentStage >= 1 && currentStage <= 4) ? currentStage : 1;
-        const auto& config = m_goConfigs[stageIdx];
-
-        int animOffset = m_goAnimFrame * 3;
-        int gx = config.x + animOffset;
-        int gy = config.y;
-
-        if (!m_imgGoText.IsNull()) {
-            m_imgGoText.Draw(hDC, gx, gy, m_imgGoText.GetWidth() * 2, m_imgGoText.GetHeight() * 2);
-        }
-        if (!m_imgGoArrow.IsNull()) {
-            m_imgGoArrow.Draw(hDC, gx, gy + config.arrowOffset, m_imgGoArrow.GetWidth() * 2, m_imgGoArrow.GetHeight() * 2);
+    // 3. Timer
+    if (!m_imgHudTimer.IsNull()) {
+        int tx = 20, ty = 85;
+        m_imgHudTimer.Draw(hDC, tx, ty);
+        if (!m_imgHudTimerGauge.IsNull()) {
+            float ratio = stageTimer / maxTimer;
+            int gw = m_imgHudTimerGauge.GetWidth();
+            int gh = m_imgHudTimerGauge.GetHeight();
+            int currentGW = (int)(gw * ratio);
+            if (currentGW > 0) m_imgHudTimerGauge.Draw(hDC, tx + 24, ty + 5, currentGW, gh, 0, 0, currentGW, gh);
         }
     }
 
-    if (bGameStarted) {
-        if (!m_imgHudBase.IsNull() && m_imgHudBase.GetWidth() > 0 && m_imgHudBase.GetHeight() > 0)
-            m_imgHudBase.Draw(hDC, 0, 0, m_imgHudBase.GetWidth() * 2, m_imgHudBase.GetHeight() * 2);
-
-        if (!m_imgHudBattery.IsNull() && m_imgHudBattery.GetWidth() > 0 && m_imgHudBattery.GetHeight() > 0)
-            m_imgHudBattery.Draw(hDC, 10, 4, m_imgHudBattery.GetWidth() * 2, m_imgHudBattery.GetHeight() * 2);
-
-        int shiftIconX = 165;
-        int shiftIconY = 7;
-        float shiftScale = 2.0f;
-        CImage* imgShift = isShiftPressed ? &m_imgHudShift[1] : &m_imgHudShift[0];
-        if (imgShift && !imgShift->IsNull() && imgShift->GetWidth() > 0 && imgShift->GetHeight() > 0) {
-            imgShift->Draw(hDC, shiftIconX, shiftIconY,
-                (int)(imgShift->GetWidth() * shiftScale), (int)(imgShift->GetHeight() * shiftScale));
-        }
-
-        int startX = 32; int startY = 12; int gap = 10; float partScale = 2.0f;
-        for (int i = 0; i < 11; i++) {
-            CImage* targetImg = (i >= (int)batteryLevel) ? &m_imgHudBatteryUsed : &m_imgHudBatteryPart;
-            if (targetImg && !targetImg->IsNull() && targetImg->GetWidth() > 0 && targetImg->GetHeight() > 0) {
-                targetImg->Draw(hDC, (int)(startX + i * gap), startY, (int)(targetImg->GetWidth() * partScale), (int)(targetImg->GetHeight() * partScale));
-            }
-        }
-
-        if (!m_imgHudTimer.IsNull() && m_imgHudTimer.GetWidth() > 0 && m_imgHudTimer.GetHeight() > 0) {
-            float timerScale = 2.0f;
-            int timerW = (int)(m_imgHudTimer.GetWidth() * timerScale), timerH = (int)(m_imgHudTimer.GetHeight() * timerScale);
-            int timerX = (virtualWidth / 2 - timerW / 2), timerY = 0;
-            if (timerW > 0 && timerH > 0) m_imgHudTimer.Draw(hDC, timerX, timerY, timerW, timerH);
-            float timeRatio = stageTimer / (stageLimitTime > 0 ? stageLimitTime : 1.0f);
-            if (timeRatio < 0) timeRatio = 0; if (timeRatio > 1.0f) timeRatio = 1.0f;
-            int gaugeMarginX = 10, gaugeMarginY = 8;
-            int gaugeW = timerW - (gaugeMarginX * 2) - 15, gaugeH = timerH - (gaugeMarginY * 2), gaugeX = timerX + gaugeMarginX + 23, gaugeY = timerY + gaugeMarginY - 4;
-            if (!m_imgHudTimerGauge.IsNull()) {
-                int currentGaugeW = (int)(gaugeW * timeRatio), srcW = (int)(m_imgHudTimerGauge.GetWidth() * timeRatio), srcH = m_imgHudTimerGauge.GetHeight();
-                if (currentGaugeW > 0 && gaugeH > 0 && srcW > 0 && srcH > 0) m_imgHudTimerGauge.Draw(hDC, gaugeX, gaugeY, currentGaugeW, gaugeH, 0, 0, srcW, srcH);
-            }
-        }
-
+    // 4. Inventory
+    if (!m_imgHudInven.IsNull()) {
+        int ix = 20, iy = 120;
+        m_imgHudInven.Draw(hDC, ix, iy);
         if (heldItemType != -1) {
             CImage& heldImg = Item::GetHUDImage(static_cast<ItemType>(heldItemType));
-            if (!heldImg.IsNull() && heldImg.GetWidth() > 0 && heldImg.GetHeight() > 0) {
-                heldImg.Draw(hDC, virtualWidth - heldImg.GetWidth() - 80, 0, heldImg.GetWidth() * 2, heldImg.GetHeight() * 2);
-            }
-            else if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0) {
-                m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
+            if (!heldImg.IsNull()) {
+                int iw = 30, ih = 30;
+                heldImg.Draw(hDC, ix + 10, iy + 10, iw, ih);
             }
         }
-        else {
-            if (!m_imgHudInven.IsNull() && m_imgHudInven.GetWidth() > 0 && m_imgHudInven.GetHeight() > 0)
-                m_imgHudInven.Draw(hDC, virtualWidth - m_imgHudInven.GetWidth() - 80, 0, m_imgHudInven.GetWidth() * 2, m_imgHudInven.GetHeight() * 2);
-        }
-
-        int mouseIconScale = 2, mouseIconY = 30, mouseIconX = virtualWidth - 110;
-        if (!m_imgLeftClick.IsNull()) m_imgLeftClick.Draw(hDC, mouseIconX, mouseIconY, m_imgLeftClick.GetWidth() * mouseIconScale, m_imgLeftClick.GetHeight() * mouseIconScale);
-        if (!m_imgRightClick.IsNull()) m_imgRightClick.Draw(hDC, mouseIconX + 70, mouseIconY, m_imgRightClick.GetWidth() * mouseIconScale, m_imgRightClick.GetHeight() * mouseIconScale);
     }
 
-    if (!m_imgCursor.IsNull() && m_imgCursor.GetWidth() > 0 && m_imgCursor.GetHeight() > 0) 
-        m_imgCursor.Draw(hDC, mouseX - m_imgCursor.GetWidth(), mouseY - m_imgCursor.GetHeight(), m_imgCursor.GetWidth() * 2, m_imgCursor.GetHeight() * 2);
+    // 5. Shift Indicator
+    CImage& shiftImg = m_imgHudShift[isShift ? 1 : 0];
+    if (!shiftImg.IsNull()) shiftImg.Draw(hDC, 180, 35);
+
+    // 6. Death Box
+    if (isDead && isAnimFinished) {
+        CImage& box = isTimeout ? m_imgTimeoutBox : m_imgDeathBox;
+        if (!box.IsNull()) {
+            int bw = box.GetWidth() * 2, bh = box.GetHeight() * 2;
+            box.Draw(hDC, (virtualWidth - bw) / 2, (virtualHeight - bh) / 2, bw, bh);
+        }
+    }
+
+    // 7. Stage Clear "GO"
+    if (isStageCleared) {
+        if (!m_imgGoText.IsNull()) {
+            int gw = m_imgGoText.GetWidth() * 2, gh = m_imgGoText.GetHeight() * 2;
+            m_imgGoText.Draw(hDC, (virtualWidth - gw) / 2, 100, gw, gh);
+        }
+        if (!m_imgGoArrow.IsNull()) {
+            int aw = m_imgGoArrow.GetWidth() * 2, ah = m_imgGoArrow.GetHeight() * 2;
+            int animOffset = (GetTickCount() / 200) % 2 * 10;
+            m_imgGoArrow.Draw(hDC, virtualWidth - aw - 50 + animOffset, (virtualHeight - ah) / 2, aw, ah);
+        }
+    }
+
+    // 8. Cursor
+    if (!m_imgCursor.IsNull()) m_imgCursor.Draw(hDC, mouseX - m_imgCursor.GetWidth(), mouseY - m_imgCursor.GetHeight(), m_imgCursor.GetWidth() * 2, m_imgCursor.GetHeight() * 2);
 }

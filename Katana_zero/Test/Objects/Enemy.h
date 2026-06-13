@@ -12,6 +12,8 @@ enum class GruntAction { GR_NONE, GR_ATTACK, GR_SLASH, GR_TURN, GR_RUN, GR_HURT_
 enum class PompAction { PA_NONE, PA_ATTACK, PA_BOX_IDLE, PA_BOX_HIT, PA_TURN, PA_RUN, PA_HURT_FLY, PA_HURT_GROUND };
 enum class ShieldCopAction { SA_NONE, SA_AIM, SA_BASH, SA_TURN, SA_RUN, SA_HURT_FLY, SA_HURT_GROUND };
 
+enum class DeathCause { SWORD, BULLET, BOTTLE, KNIFE, FIRE };
+
 class Enemy {
 protected:
     float m_x, m_y, m_startX, m_startY, m_vx, m_vy, m_colW, m_colH;
@@ -21,6 +23,11 @@ protected:
     EnemyType m_Type; EnemyState m_State;
     int m_CurrentFrame; DWORD m_LastTime, m_patternTimer;
     float m_friction, m_knockbackVx, m_walkDistance, m_patrolRange;
+
+    // Burning state
+    bool m_isBurning = false;
+    float m_burnTimer = 0.0f;
+    static CImage m_imgFire2[6]; // Fire sprites for burning effect
 
     // Detection & Alert
     bool m_isPlayerDetected;
@@ -41,9 +48,12 @@ public:
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo = false) = 0;
     virtual void RenderDetectionRange(HDC hdc, float camX, float camY, float mapScale);
     virtual void RenderExclaim(HDC hdc, float camX, float camY, float mapScale);
-    virtual bool OnTakeDamage(float kvx, float kvy);
+    virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD);
     virtual void ApplyKnockback(float vx);
     
+    static void LoadCommonAssets();
+    void RenderBurningEffect(HDC hdc, float mapScale, float camX, float camY);
+
     bool IsPlayerInCone(float px, float py, float pw, float ph);
     void UpdateDetection(float px, float py, float pw, float ph, float ts);
     void RenderDebug(HDC hdc, float camX, float camY, float mapScale);
@@ -73,7 +83,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual bool OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };
 
@@ -87,7 +97,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual bool OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };
 
@@ -101,7 +111,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual bool OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };
 
@@ -115,6 +125,6 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
-    virtual bool OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };

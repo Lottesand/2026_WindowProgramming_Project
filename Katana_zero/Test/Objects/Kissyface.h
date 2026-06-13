@@ -54,10 +54,8 @@ class Kissyface : public Enemy {
 public:
     // ==========================================
     // [ 속도 조절 설정 (Speed Configuration) ]
-    // 전체 속도 마스터 변수 (1.0: 표준, 낮을수록 전체적으로 느려짐)
     float m_globalSpeedRate = 0.5f; 
 
-    // [ 개별 애니메이션 기준 딜레이 (초) ]
     float m_delayBase       = 0.15f;
     float m_delayThrow      = 0.12f;
     float m_delayPreJump    = 1.2f;
@@ -65,8 +63,6 @@ public:
     float m_delayLunge      = 0.12f;
     float m_delayLungeAttack= 0.1f;
 
-    // [ 개별 물리/이동 기준 속도 ]
-    // 도끼 속도는 그대로 유지하기 위해 베이스 값을 높임 (0.5 곱해질 것 감안)
     float m_speedAxeThrow   = 55.0f;
     float m_speedAxeReturn  = 65.0f;
     float m_speedAxeOrbit   = 0.55f; 
@@ -74,7 +70,9 @@ public:
     // ==========================================
 
 private:
-    static CImage m_imgIdle;
+    static std::vector<CImage> m_imgIdle;
+    static std::vector<CImage> m_imgWalk;
+    static std::vector<CImage> m_imgSlash;
     static std::vector<CImage> m_imgBlock;
     static std::vector<CImage> m_imgThrow;
     static std::vector<CImage> m_imgTug;
@@ -82,7 +80,8 @@ private:
     static std::vector<CImage> m_imgPreJump;
     static std::vector<CImage> m_imgJump;
     static std::vector<CImage> m_imgLand;
-    static std::vector<CImage> m_imgHurt;
+    static std::vector<CImage> m_imgHurtFly;
+    static std::vector<CImage> m_imgHurtGround;
     static std::vector<CImage> m_imgStruggle;
     static std::vector<CImage> m_imgRecover;
     static std::vector<CImage> m_imgPreLunge;
@@ -96,44 +95,41 @@ private:
     std::vector<KissyfaceAfterImage> m_afterImages;
     DWORD m_lastAfterImageTime;
     const int m_maxAfterImages = 5;
-    const int m_afterImageInterval = 30; // ms (기존 60 -> 30으로 간격 좁힘)
+    const int m_afterImageInterval = 30;
 
     KissyfaceAction m_ActionState;
     float m_animTimer;
     int m_animFrame;
-    float m_patternDelayTimer; // Timer for delay before next pattern
-    float m_lungeTargetX;      // Target X position for lunge pattern
-    float m_throwProbability;  // Probability for Throw attack (0-100)
-    bool m_nextCloseAttackIsThrow; // Tracks the alternating close-range pattern
+    float m_patternDelayTimer;
+    float m_lungeTargetX;
+    float m_throwProbability;
+    bool m_nextCloseAttackIsThrow;
 
-    float m_detectDistance = 150.0f; // Distance threshold for triggering patterns
+    float m_detectDistance = 150.0f;
     AxeProjectile m_axe;
 
-    // Struggle mechanic members
     float m_downedTimer;
     float m_struggleTimer;
-    float m_struggleProgress;  // 0.0 to 1.0 (QTE progress)
-    float m_struggleCircleProgress; // 0.0 to 1.0 (Current phase progress)
-    int m_strugglePhase;       // 1 to 4 (Phase of the boss)
+    float m_struggleProgress;
+    float m_struggleCircleProgress;
+    int m_strugglePhase;
     bool m_interactionPossible;
     float m_hp;
     const float m_maxHp = 100.0f;
 
-    // Kissyface hitbox configuration
     static constexpr float FrontHitboxRatio = 0.5f; 
 public:
     Kissyface(float startX, float startY);
+    virtual ~Kissyface();
     
-    // Returns the vulnerable part of the hitbox
     RECT GetVulnerableRect() const;
-    // Returns the invincible part of the hitbox
     RECT GetInvincibleRect() const;
     
     virtual void Init() override;
     virtual void Reset() override;
     virtual void Update(float ts, const class Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo = false) override;
-    virtual bool OnTakeDamage(float kvx, float kvy) override;
+    virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     void Parry();
     
     static void ReleaseAll();
