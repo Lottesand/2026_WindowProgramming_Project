@@ -206,8 +206,8 @@ void Game::Update() {
     
     if (m_isStageCleared && m_gameMode == GameMode::PLAYING) { 
         if (m_currentStage == 5) {
-            // Stage 5 End Scene Trigger: Hit right edge
-            if (m_player.GetX() + m_player.GetColW() >= StageManager::GetMapWidth() - 30.0f) {
+            // Stage 5 End Scene Trigger: Hit right edge (판정 후하게 100px로 변경)
+            if (m_player.GetX() + m_player.GetColW() >= StageManager::GetMapWidth() - 300.0f) {
                 m_gameMode = GameMode::END_SCENE;
                 EndScene::SetActive(true);
                 m_player.SetVisible(false);
@@ -295,7 +295,7 @@ void Game::Update() {
                     float dist = sqrt(dx*dx + dy*dy);
                     if (dist < maxDist && dist > 0.0f) {
                         float dot = (dx * fDirX + dy * fDirY) / dist;
-                        if (dot > 0.85f) { // Within cone
+                        if (dot > 0.85f) { // Within conee
                             e->OnTakeDamage(fDirX * 15.0f, -5.0f, DeathCause::FIRE);
                             m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i);
                         }
