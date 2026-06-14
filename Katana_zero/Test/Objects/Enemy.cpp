@@ -2,6 +2,7 @@
 #include "Player.h"
 #include "Physics.h"
 #include "Bullet.h"
+#include "Door.h"
 #include "../SceneAndMap/Camera.h"
 #include "../Effects/EffectManager.h"
 #include "../Core/SoundManager.h"
@@ -62,6 +63,42 @@ bool Enemy::IsPlayerInCone(float px, float py, float pw, float ph) {
     return m_isFacingLeft ? (absAngle >= 180.0f - m_detectAngle) : (absAngle <= m_detectAngle);
 }
 
+bool Enemy::HasLineOfSight(float px, float py, float pw, float ph) {
+    float ex = m_x + m_colW / 2.0f, ey = m_y + m_colH / 2.0f;
+    float pcx = px + pw / 2.0f, pcy = py + ph / 2.0f;
+    float dx = pcx - ex, dy = pcy - ey;
+    float dist = sqrt(dx * dx + dy * dy);
+    if (dist < 1.0f) return true;
+
+    float ux = dx / dist, uy = dy / dist;
+    float step = 15.0f; // Sampling step in pixels
+    int numSteps = (int)(dist / step);
+
+    auto doors = StageManager::GetCurrentDoors();
+
+    for (int i = 1; i < numSteps; i++) {
+        float testX = ex + ux * i * step;
+        float testY = ey + uy * i * step;
+
+        // Check Terrain (Type 1: Wall/Floor, Type 3: Door/Object fixed)
+        int colType = GetCollisionType((int)testX, (int)testY);
+        if (colType == 1 || colType == 3) return false;
+
+        // Check Closed Doors
+        if (doors) {
+            for (auto& door : *doors) {
+                if (door.IsClosed()) {
+                    if (testX >= door.GetX() && testX <= door.GetX() + door.GetW() &&
+                        testY >= door.GetY() && testY <= door.GetY() + door.GetH()) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 void Enemy::UpdateDetection(float px, float py, float pw, float ph, float ts) {
     if (!m_isAlive) return;
     if (EffectManager::IsInsideSmoke(px + pw / 2.0f, py + ph / 2.0f) || EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) {
@@ -73,8 +110,26 @@ void Enemy::UpdateDetection(float px, float py, float pw, float ph, float ts) {
         }
         return;
     }
-    if (!m_isPlayerDetected) { if (IsPlayerInCone(px, py, pw, ph)) { m_isPlayerDetected = true; m_alertStartTime = GetTickCount(); m_exclaimFrame = 0; m_State = EnemyState::ES_ALERT; m_showQuestionMark = false; } }
-    else { if (m_exclaimFrame == 0 && GetTickCount() - m_alertStartTime > (DWORD)(100.0f / ts)) m_exclaimFrame = 1; }
+    if (!m_isPlayerDetected) { 
+        if (IsPlayerInCone(px, py, pw, ph) && HasLineOfSight(px, py, pw, ph)) { 
+            m_isPlayerDetected = true; 
+            m_alertStartTime = GetTickCount(); 
+            m_exclaimFrame = 0; 
+            m_State = EnemyState::ES_ALERT; 
+            m_showQuestionMark = false; 
+        } 
+    }
+    else { 
+        // Once detected, if line of sight is broken, lose detection (optional, but requested implicitly by "Player-Door-Enemy -> No detection")
+        if (!HasLineOfSight(px, py, pw, ph)) {
+            m_isPlayerDetected = false;
+            m_State = EnemyState::ES_IDLE;
+            m_showQuestionMark = true;
+            m_questionMarkStartTime = GetTickCount();
+        } else if (m_exclaimFrame == 0 && GetTickCount() - m_alertStartTime > (DWORD)(100.0f / ts)) {
+            m_exclaimFrame = 1;
+        }
+    }
 }
 
 void Enemy::RenderExclaim(HDC hdc, float camX, float camY, float mapScale) {

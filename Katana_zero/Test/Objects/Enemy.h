@@ -59,6 +59,7 @@ public:
     void RenderBurningEffect(HDC hdc, float mapScale, float camX, float camY);
 
     bool IsPlayerInCone(float px, float py, float pw, float ph);
+    bool HasLineOfSight(float px, float py, float pw, float ph); // New LOS check
     void UpdateDetection(float px, float py, float pw, float ph, float ts);
     void RenderDebug(HDC hdc, float camX, float camY, float mapScale);
 
