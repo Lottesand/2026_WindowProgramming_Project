@@ -5,7 +5,7 @@
 #include "../Objects/Player.h"
 #include "../Objects/Enemy.h"
 
-enum class GameMode { PLAYING, YES_SCENE, REPLAYING };
+enum class GameMode { PLAYING, YES_SCENE, REPLAYING, END_SCENE };
 enum class TransitionState { NONE, ENTERING, WAITING, LEAVING };
 
 class Game {

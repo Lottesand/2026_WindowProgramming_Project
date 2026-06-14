@@ -10,6 +10,7 @@
 #include "../UI/StartScene.h"
 #include "../Objects/Item.h"
 #include "../Objects/Kissyface.h"
+#include "../UI/EndScene.h"
 #include <time.h>
 #include <stdlib.h>
 #include <gdiplus.h>
@@ -36,6 +37,7 @@ Game::~Game() {
     Bullet::Release();
     Item::ReleaseAssets();
     SoundManager::Release();
+    EndScene::ReleaseAssets();
 }
 
 void Game::Init(HWND hWnd, HINSTANCE hInst) {
@@ -66,6 +68,7 @@ void Game::LoadAllAssets() {
     m_player.Init(); Item::LoadAssets(); m_loadingProgress = 50; Sleep(50);
     UIManager::Init(); m_loadingProgress = 60; Sleep(50);
     StartScene::LoadAssets(); m_loadingProgress = 70; Sleep(50);
+    EndScene::LoadAssets(); m_loadingProgress = 75; Sleep(50);
 
     SoundManager::Load("BGM_MAIN", L"assets/sound/song_katanazero.wav");
     SoundManager::Load("BGM_BOSS", L"assets/sound/bgm_boss.mp3");
@@ -201,7 +204,27 @@ void Game::Update() {
         else { if (activeEnemies > 0 && !m_isStageCleared) { m_isStageCleared = true; SoundManager::Play("SFX_GO"); } }
     }
     
-    if (m_isStageCleared && m_gameMode == GameMode::PLAYING) { if (StageManager::IsInClearZone(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH())) { m_gameMode = GameMode::YES_SCENE; m_yesSceneStartTime = GetTickCount(); m_player.SetState(PlayerState::PS_IDLE); EffectManager::Init(); m_player.ClearAfterImages(); m_prevTime = GetTickCount(); return; } }
+    if (m_isStageCleared && m_gameMode == GameMode::PLAYING) { 
+        if (m_currentStage == 5) {
+            // Stage 5 End Scene Trigger: Hit right edge
+            if (m_player.GetX() + m_player.GetColW() >= StageManager::GetMapWidth() - 30.0f) {
+                m_gameMode = GameMode::END_SCENE;
+                EndScene::SetActive(true);
+                m_player.SetVisible(false);
+                SoundManager::StopAll();
+                m_prevTime = GetTickCount();
+                return;
+            }
+        }
+        else if (StageManager::IsInClearZone(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH())) { 
+            m_gameMode = GameMode::YES_SCENE; m_yesSceneStartTime = GetTickCount(); m_player.SetState(PlayerState::PS_IDLE); EffectManager::Init(); m_player.ClearAfterImages(); m_prevTime = GetTickCount(); return; 
+        } 
+    }
+    if (m_gameMode == GameMode::END_SCENE) {
+        EndScene::Update(dT);
+        m_prevTime = ct;
+        return;
+    }
     if (m_gameMode == GameMode::YES_SCENE) { 
         if (ct - m_yesSceneStartTime > 2000) { 
             m_gameMode = GameMode::REPLAYING; m_replayFrame = 0; EffectManager::SetReplayMode(true); Bullet::SetReplayMode(true); StageManager::Reset(); for (auto& e : m_enemies) if (e) e->Reset(); const auto& fullHistory = m_player.GetSnapshots(); if (!fullHistory.empty()) { m_player.SetPos(fullHistory[0].x, fullHistory[0].y); m_player.SetState(fullHistory[0].state); Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, true); } 
@@ -317,7 +340,11 @@ void Game::Update() {
                             Kissyface* k = static_cast<Kissyface*>(e); 
                             RECT vulR = k->GetVulnerableRect(), invR = k->GetInvincibleRect(), ol; 
                             if (IntersectRect(&ol, &aR, &vulR)) { hitDetected = true; m_player.SetHasHitThisSwing(true); } 
-                            else if (IntersectRect(&ol, &aR, &invR)) { parryDetected = true; m_player.SetHasHitThisSwing(true); } 
+                            else if (IntersectRect(&ol, &aR, &invR)) { 
+                                if (isKissyDead) hitDetected = true; // 죽은 상태에선 패링 대신 히트 판정
+                                else parryDetected = true; 
+                                m_player.SetHasHitThisSwing(true); 
+                            } 
                         } else { 
                             RECT eR = e->GetRect(), ol; if (IntersectRect(&ol, &aR, &eR)) hitDetected = true; 
                         }
@@ -342,9 +369,23 @@ void Game::Update() {
 
 void Game::Render(HDC hDC) {
     HDC hMemDC = CreateCompatibleDC(hDC); HBITMAP hMemBmp = CreateCompatibleBitmap(hDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hMemBmp); PatBlt(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, BLACKNESS);
-    if (!m_isLoaded) { if (!m_imgLoading.IsNull()) m_imgLoading.Draw(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); int barW = 400, barH = 10, margin = 60; RECT barBg = { VIRTUAL_WIDTH - barW - margin, VIRTUAL_HEIGHT - barH - margin, VIRTUAL_WIDTH - margin, VIRTUAL_HEIGHT - margin }; HBRUSH hBgBrush = CreateSolidBrush(RGB(40, 40, 40)); FillRect(hMemDC, &barBg, hBgBrush); DeleteObject(hBgBrush); int progressWidth = (int)((float)barW * (m_displayedProgress / 100.0f)); RECT barProgress = { barBg.left, barBg.top, barBg.left + progressWidth, barBg.bottom }; HBRUSH hPrgBrush = CreateSolidBrush(RGB(0, 255, 255)); FillRect(hMemDC, &barProgress, hPrgBrush); DeleteObject(hPrgBrush); SetBkMode(hMemDC, TRANSPARENT); SetTextColor(hMemDC, RGB(200, 200, 200)); HFONT hFont = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH | FF_SWISS, TEXT("Arial")); HFONT hOldFont = (HFONT)SelectObject(hMemDC, hFont); TCHAR szProgress[32]; wsprintf(szProgress, TEXT("%d%%"), (int)m_displayedProgress); RECT textRect = { barBg.left, barBg.top - 25, barBg.right, barBg.top }; DrawText(hMemDC, szProgress, -1, &textRect, DT_RIGHT | DT_SINGLELINE); SelectObject(hMemDC, hOldFont); DeleteObject(hFont); SetStretchBltMode(hDC, HALFTONE); StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY); SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC); return; }
+    
+    auto drawTransition = [&](HDC dc) { if (m_transitionState == TransitionState::NONE) return; HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0)); RECT tr = { 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT }; if (m_transitionState == TransitionState::ENTERING || m_transitionState == TransitionState::WAITING) tr.left = (int)(VIRTUAL_WIDTH * (1.0f - m_transitionProgress)); else if (m_transitionState == TransitionState::LEAVING) tr.right = (int)(VIRTUAL_WIDTH * (1.0f - m_transitionProgress)); FillRect(dc, &tr, hBlack); DeleteObject(hBlack); };
+
+    if (!m_isLoaded) { if (!m_imgLoading.IsNull()) m_imgLoading.Draw(hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); int barW = 400, barH = 10, margin = 60; RECT barBg = { VIRTUAL_WIDTH - barW - margin, VIRTUAL_HEIGHT - barH - margin, VIRTUAL_WIDTH - margin, VIRTUAL_HEIGHT - margin }; HBRUSH hBgBrush = CreateSolidBrush(RGB(40, 40, 40)); FillRect(hMemDC, &barBg, hBgBrush); DeleteObject(hBgBrush); int progressWidth = (int)((float)barW * (m_displayedProgress / 100.0f)); RECT barProgress = { barBg.left, barBg.top, barBg.left + progressWidth, barBg.bottom }; HBRUSH hPrgBrush = CreateSolidBrush(RGB(0, 255, 255)); FillRect(hMemDC, &barProgress, hPrgBrush); DeleteObject(hPrgBrush); SetBkMode(hMemDC, TRANSPARENT); SetTextColor(hMemDC, RGB(200, 200, 200)); HFONT hFont = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH | FF_SWISS, TEXT("Arial")); HFONT hOldFont = (HFONT)SelectObject(hMemDC, hFont); TCHAR szProgress[32]; wsprintf(szProgress, TEXT("%d%%"), (int)m_displayedProgress); RECT textRect = { barBg.left, barBg.top - 25, barBg.right, barBg.top }; DrawText(hMemDC, szProgress, -1, &textRect, DT_RIGHT | DT_SINGLELINE); SelectObject(hMemDC, hOldFont); DeleteObject(hFont); drawTransition(hMemDC); SetStretchBltMode(hDC, HALFTONE); StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY); SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC); return; }
     float cX = Camera::GetCamX(), cY = Camera::GetCamY(); Camera::ApplyShake(cX, cY); if (Camera::IsRewindEffectActive()) { int mapH = StageManager::GetMapHeight(); if (mapH > 0) { float wrappedY = fmod(cY, (float)mapH); if (wrappedY < 0) wrappedY += (float)mapH; cY = wrappedY; } }
-    Gdiplus::Graphics g(hMemDC); StageManager::Render(hMemDC, &g, m_isFullMapView, m_showDebugRect, mapScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, cX, cY, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetIsSlowMo());
+    Gdiplus::Graphics g(hMemDC); 
+    
+    if (m_gameMode == GameMode::END_SCENE) {
+        EndScene::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        drawTransition(hMemDC);
+        SetStretchBltMode(hDC, HALFTONE);
+        StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY);
+        SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC);
+        return;
+    }
+
+    StageManager::Render(hMemDC, &g, m_isFullMapView, m_showDebugRect, mapScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, cX, cY, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetIsSlowMo());
     if (m_showDebugRect) { TCHAR szFps[32]; wsprintf(szFps, TEXT("FPS: %d"), m_fps); SetTextColor(hMemDC, RGB(255, 255, 0)); SetBkMode(hMemDC, TRANSPARENT); TextOut(hMemDC, 10, 10, szFps, lstrlen(szFps)); }
     for (auto& e : m_enemies) if (e) e->Render(hMemDC, &g, cX, cY, mapScale, m_showDebugRect, m_player.GetIsSlowMo());
     Bullet::RenderAll(hMemDC, cX, cY, mapScale); if (m_player.GetIsSlowMo() && m_gameMode != GameMode::REPLAYING) { Gdiplus::Rect fr(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); Gdiplus::GraphicsPath p; p.AddRectangle(fr); Gdiplus::PathGradientBrush pgb(&p); pgb.SetCenterColor(Gdiplus::Color(0, 0, 0, 0)); pgb.SetCenterPoint(Gdiplus::PointF(VIRTUAL_WIDTH / 2.0f, VIRTUAL_HEIGHT / 2.0f)); Gdiplus::Color ec[] = { Gdiplus::Color(180, 0, 0, 0) }; int cnt = 1; pgb.SetSurroundColors(ec, &cnt); pgb.SetFocusScales(0.2f, 0.2f); g.FillRectangle(&pgb, fr); }
@@ -362,7 +403,6 @@ void Game::Render(HDC hDC) {
     m_player.RenderSilhouette(&g, cX, cY, mapScale);
     for (auto& e : m_enemies) if (e) e->RenderSilhouette(&g, cX, cY, mapScale);
 
-    auto drawTransition = [&](HDC dc) { if (m_transitionState == TransitionState::NONE) return; HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0)); RECT tr = { 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT }; if (m_transitionState == TransitionState::ENTERING || m_transitionState == TransitionState::WAITING) tr.left = (int)(VIRTUAL_WIDTH * (1.0f - m_transitionProgress)); else if (m_transitionState == TransitionState::LEAVING) tr.right = (int)(VIRTUAL_WIDTH * (1.0f - m_transitionProgress)); FillRect(dc, &tr, hBlack); DeleteObject(hBlack); };
     if (m_gameMode == GameMode::REPLAYING || m_gameMode == GameMode::YES_SCENE) {
         HDC hPostDC = CreateCompatibleDC(hDC); HBITMAP hPostBmp = CreateCompatibleBitmap(hDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); HBITMAP hOldPostBmp = (HBITMAP)SelectObject(hPostDC, hPostBmp); Gdiplus::Graphics g(hPostDC); Gdiplus::Bitmap bmp(hMemBmp, NULL); Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix mat = { 0.3f, 0.3f, 0.3f, 0, 0, 0.59f, 0.59f, 0.59f, 0, 0, 0.11f, 0.11f, 0.11f, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 }; attr.SetColorMatrix(&mat); g.DrawImage(&bmp, Gdiplus::Rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT), 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Gdiplus::UnitPixel, &attr);
         if (m_gameMode == GameMode::REPLAYING) { if (!m_imgReplayUI[0].IsNull()) { int w = m_imgReplayUI[0].GetWidth(), h = m_imgReplayUI[0].GetHeight(); m_imgReplayUI[0].Draw(hPostDC, VIRTUAL_WIDTH - w - 20, VIRTUAL_HEIGHT - h - 20, w, h); } int topUIIdx = m_isReplayPaused ? 2 : 1; if (!m_imgReplayUI[topUIIdx].IsNull()) { int w = m_imgReplayUI[topUIIdx].GetWidth(), h = m_imgReplayUI[topUIIdx].GetHeight(); m_imgReplayUI[topUIIdx].Draw(hPostDC, 20, 20, w, h); } } else if (m_gameMode == GameMode::YES_SCENE) { DWORD elapsed = GetTickCount() - m_yesSceneStartTime; int alpha = 255; if (elapsed > 2000) { alpha = 255 - (int)((elapsed - 2000) / 500.0f * 255); if (alpha < 0) alpha = 0; } if (alpha > 0) { Gdiplus::SolidBrush blackBrush(Gdiplus::Color(alpha, 0, 0, 0)); g.FillRectangle(&blackBrush, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); if (!m_imgReplayUI[3].IsNull()) { int w = m_imgReplayUI[3].GetWidth() / 2, h = m_imgReplayUI[3].GetHeight() / 2; Gdiplus::ImageAttributes yesAttr; Gdiplus::ColorMatrix yesMat = { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, alpha / 255.0f, 0, 0, 0, 0, 0, 1 }; yesAttr.SetColorMatrix(&yesMat); HBITMAP hBmpYes = m_imgReplayUI[3]; Gdiplus::Bitmap bmpYes(hBmpYes, NULL); int x = (VIRTUAL_WIDTH - w) / 2, y = (VIRTUAL_HEIGHT - h) / 2; g.DrawImage(&bmpYes, Gdiplus::Rect(x, y, w, h), 0, 0, bmpYes.GetWidth(), bmpYes.GetHeight(), Gdiplus::UnitPixel, &yesAttr); } } }
