@@ -8,17 +8,25 @@
 // ==========================================
 
 // Stage 1
-float S1_BEER_X = 300.0f,  S1_BEER_Y = 400.0f;
-float S1_KNIFE_X = 700.0f, S1_KNIFE_Y = 400.0f;
-float S1_VIAL_X = 500.0f,  S1_VIAL_Y = 400.0f;
-float S1_FLAME_X = 150.0f, S1_FLAME_Y = 400.0f; 
+float S1_BEER_X = 1670.0f,  S1_BEER_Y = 220.0f;
+float S1_KNIFE_X = 3270.0f, S1_KNIFE_Y = 480.0f;
 
 // Stage 2
 float S2_BUST_X = 570.0f,    S2_BUST_Y = 640.0f;
 float S2_BUTCHER_X = 700.0f, S2_BUTCHER_Y = 990.0f;
+float S2_SMOKE_X = 1100.0f,   S2_SMOKE_Y = 700.0f;
 
 // Stage 3
 float S3_PLANT_X = 600.0f, S3_PLANT_Y = 1010.0f;
+float S3_FLAME1_X = 1860.0f, S3_FLAME1_Y = 755.0f;
+float S3_DRUMS_X[5] = { 1200.0f, 1300.0f, 1400.0f, 1550.0f, 1650.0f };
+float S3_DRUMS_Y[5] = { 235.0f, 235.0f, 235.0f, 235.0f, 235.0f };
+
+// Stage 4
+float S4_FLAME1_X = 290.0f, S4_FLAME1_Y = 1010.0f;
+float S4_VIAL_X = 2630.0f, S4_VIAL_Y = 535.0f;
+float S4_DRUMS_X[10] = { 200.0f, 250.0f, 300.0f, 350.0f, 400.0f, 900.0f, 950.0f, 1000.0f, 1050.0f, 1100.0f };
+float S4_DRUMS_Y[10] = { 500.0f, 500.0f, 500.0f, 500.0f, 500.0f, 500.0f, 500.0f, 500.0f, 500.0f, 500.0f };
 
 // ==========================================
 
@@ -53,23 +61,22 @@ void StageManager::PopulateDynamicObjects(int stage, StageData& data) {
 
     if (stage == 1) {
         data.items.push_back(Item(ItemType::BEER_BOTTLE, S1_BEER_X, S1_BEER_Y));
-        data.items.push_back(Item(ItemType::KNIFE, S1_KNIFE_X, S1_KNIFE_Y));
-        data.items.push_back(Item(ItemType::EXPLOSIVE_VIAL, S1_VIAL_X, S1_VIAL_Y));
-        data.items.push_back(Item(ItemType::FLAMETHROWER, S1_FLAME_X, S1_FLAME_Y));
-        data.items.push_back(Item(ItemType::SMOKE_BOMB, 1400.0f, 400.0f));
-
-        data.oilDrums.emplace_back(800.0f, 435.0f);
-        data.oilDrums.emplace_back(840.0f, 435.0f);
-        data.oilDrums.emplace_back(880.0f, 435.0f);
-        data.oilDrums.emplace_back(1100.0f, 435.0f);
-        data.oilDrums.emplace_back(1140.0f, 435.0f);
+        data.items.push_back(Item(ItemType::KNIFE, S1_KNIFE_X, S1_KNIFE_Y));;
     }
     else if (stage == 2) {
         data.items.push_back(Item(ItemType::BUST, S2_BUST_X, S2_BUST_Y));
         data.items.push_back(Item(ItemType::BUTCHER_KNIFE, S2_BUTCHER_X, S2_BUTCHER_Y));
+        data.items.push_back(Item(ItemType::SMOKE_BOMB, S2_SMOKE_X, S2_SMOKE_Y));
     }
     else if (stage == 3) {
         data.items.push_back(Item(ItemType::POTTED_PLANT, S3_PLANT_X, S3_PLANT_Y));
+        data.items.push_back(Item(ItemType::FLAMETHROWER, S3_FLAME1_X, S3_FLAME1_Y));
+        for (int i = 0; i < 5; i++) data.oilDrums.emplace_back(S3_DRUMS_X[i], S3_DRUMS_Y[i]);
+    }
+    else if (stage == 4) {
+        data.items.push_back(Item(ItemType::FLAMETHROWER, S4_FLAME1_X, S4_FLAME1_Y));
+        data.items.push_back(Item(ItemType::EXPLOSIVE_VIAL, S4_VIAL_X, S4_VIAL_Y));
+        for (int i = 0; i < 10; i++) data.oilDrums.emplace_back(S4_DRUMS_X[i], S4_DRUMS_Y[i]);
     }
 }
 

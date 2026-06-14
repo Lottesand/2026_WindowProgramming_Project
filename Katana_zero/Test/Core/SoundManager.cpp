@@ -6,6 +6,10 @@
 std::map<std::string, std::wstring> SoundManager::m_sounds;
 float SoundManager::m_globalVolume = 1.0f;
 
+const int MAX_CHANNELS = 3;
+static std::map<std::string, int> g_playCount;
+static std::map<std::wstring, bool> g_openedAliases;
+
 void SoundManager::Init() {
 }
 
@@ -35,83 +39,81 @@ void SoundManager::Load(const std::string& key, const std::wstring& path) {
     m_sounds[key] = fullPath;
 }
 
-const int CHANNEL_COUNT = 5;
-
 void SoundManager::InitDevices() {
-    for (auto const& [key, path] : m_sounds) {
-        std::wstring aliasBase = std::wstring(key.begin(), key.end());
-        
-        for (int i = 0; i < CHANNEL_COUNT; i++) {
-            std::wstring alias = aliasBase + L"_" + std::to_wstring(i);
-            mciSendStringW((L"close " + alias).c_str(), NULL, 0, NULL);
-
-            std::wstring command = L"open \"" + path + L"\" type mpegvideo alias " + alias;
-            MCIERROR err = mciSendStringW(command.c_str(), NULL, 0, NULL);
-            
-            if (err) {
-                command = L"open \"" + path + L"\" alias " + alias;
-                err = mciSendStringW(command.c_str(), NULL, 0, NULL);
-            }
-        }
-    }
-    SetGlobalVolume(m_globalVolume);
+    // Lazy-loading: 디바이스는 Play 호출 시 메인 스레드에서 생성됩니다.
 }
-
-static std::map<std::string, int> g_lastChannel;
 
 void SoundManager::Play(const std::string& key, bool loop) {
     auto it = m_sounds.find(key);
     if (it == m_sounds.end()) return;
 
-    std::wstring aliasBase = std::wstring(key.begin(), key.end());
-    
-    // 루프인 경우 0번 채널만 사용 (중복 재생 방지)
-    if (loop) {
-        std::wstring alias = aliasBase + L"_0";
-        mciSendStringW((L"seek " + alias + L" to start").c_str(), NULL, 0, NULL);
-        mciSendStringW((L"play " + alias + L" repeat").c_str(), NULL, 0, NULL);
-        return;
+    int channel = 0;
+    if (!loop) {
+        channel = g_playCount[key] % MAX_CHANNELS;
+        g_playCount[key]++;
     }
 
-    // 일반 효과음은 채널을 돌려가며 재생 (Overlapping 지원)
-    int channel = g_lastChannel[key];
+    std::wstring aliasBase = std::wstring(key.begin(), key.end());
     std::wstring alias = aliasBase + L"_" + std::to_wstring(channel);
-    
-    mciSendStringW((L"seek " + alias + L" to start").c_str(), NULL, 0, NULL);
-    mciSendStringW((L"play " + alias).c_str(), NULL, 0, NULL);
 
-    g_lastChannel[key] = (channel + 1) % CHANNEL_COUNT;
+    // 메인 스레드에서 처음 재생될 때 한 번만 디바이스를 엽니다.
+    if (!g_openedAliases[alias]) {
+        std::wstring openCmd = L"open \"" + it->second + L"\" type mpegvideo alias " + alias;
+        MCIERROR err = mciSendStringW(openCmd.c_str(), NULL, 0, NULL);
+        if (err) {
+            openCmd = L"open \"" + it->second + L"\" alias " + alias;
+            mciSendStringW(openCmd.c_str(), NULL, 0, NULL);
+        }
+        
+        int mciVol = (int)(m_globalVolume * 1000.0f);
+        wchar_t volCmd[256];
+        swprintf_s(volCmd, L"setaudio %s volume to %d", alias.c_str(), mciVol);
+        mciSendStringW(volCmd, NULL, 0, NULL);
+        
+        g_openedAliases[alias] = true;
+    }
+
+    mciSendStringW((L"seek " + alias + L" to start").c_str(), NULL, 0, NULL);
+
+    std::wstring playCmd = L"play " + alias;
+    if (loop) playCmd += L" repeat";
+    
+    mciSendStringW(playCmd.c_str(), NULL, 0, NULL);
 }
 
 void SoundManager::Pause(const std::string& key) {
     if (m_sounds.find(key) == m_sounds.end()) return;
     std::wstring aliasBase = std::wstring(key.begin(), key.end());
-    for (int i = 0; i < CHANNEL_COUNT; i++) {
-        mciSendStringW((L"pause " + aliasBase + L"_" + std::to_wstring(i)).c_str(), NULL, 0, NULL);
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        std::wstring alias = aliasBase + L"_" + std::to_wstring(i);
+        mciSendStringW((L"pause " + alias).c_str(), NULL, 0, NULL);
     }
 }
 
 void SoundManager::Resume(const std::string& key) {
     if (m_sounds.find(key) == m_sounds.end()) return;
     std::wstring aliasBase = std::wstring(key.begin(), key.end());
-    for (int i = 0; i < CHANNEL_COUNT; i++) {
-        mciSendStringW((L"resume " + aliasBase + L"_" + std::to_wstring(i)).c_str(), NULL, 0, NULL);
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        std::wstring alias = aliasBase + L"_" + std::to_wstring(i);
+        mciSendStringW((L"resume " + alias).c_str(), NULL, 0, NULL);
     }
 }
 
 void SoundManager::Stop(const std::string& key) {
     if (m_sounds.find(key) == m_sounds.end()) return;
     std::wstring aliasBase = std::wstring(key.begin(), key.end());
-    for (int i = 0; i < CHANNEL_COUNT; i++) {
-        mciSendStringW((L"stop " + aliasBase + L"_" + std::to_wstring(i)).c_str(), NULL, 0, NULL);
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        std::wstring alias = aliasBase + L"_" + std::to_wstring(i);
+        mciSendStringW((L"stop " + alias).c_str(), NULL, 0, NULL);
     }
 }
 
 void SoundManager::StopAll() {
     for (auto const& [key, path] : m_sounds) {
         std::wstring aliasBase = std::wstring(key.begin(), key.end());
-        for (int i = 0; i < CHANNEL_COUNT; i++) {
-            mciSendStringW((L"stop " + aliasBase + L"_" + std::to_wstring(i)).c_str(), NULL, 0, NULL);
+        for (int i = 0; i < MAX_CHANNELS; i++) {
+            std::wstring alias = aliasBase + L"_" + std::to_wstring(i);
+            mciSendStringW((L"stop " + alias).c_str(), NULL, 0, NULL);
         }
     }
 }
@@ -120,11 +122,10 @@ void SoundManager::SetGlobalVolume(float volume) {
     m_globalVolume = (std::max)(0.0f, (std::min)(1.0f, volume));
     
     int mciVol = (int)(m_globalVolume * 1000.0f);
-    for (auto const& [key, path] : m_sounds) {
-        std::wstring aliasBase = std::wstring(key.begin(), key.end());
-        for (int i = 0; i < CHANNEL_COUNT; i++) {
+    for (auto const& [alias, isOpen] : g_openedAliases) {
+        if (isOpen) {
             wchar_t volCmd[256];
-            swprintf_s(volCmd, L"setaudio %s_%d volume to %d", aliasBase.c_str(), i, mciVol);
+            swprintf_s(volCmd, L"setaudio %s volume to %d", alias.c_str(), mciVol);
             mciSendStringW(volCmd, NULL, 0, NULL);
         }
     }

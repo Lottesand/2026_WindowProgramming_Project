@@ -92,15 +92,16 @@ void OilDrum::Explode(const std::vector<Enemy*>& enemies, std::vector<OilDrum>& 
         }
     }
 
-    // Chain Reaction to other Drums with FAST DELAY
+    // Chain Reaction to other Drums with MUCH FASTER DELAY
     for (auto& other : allDrums) {
         if (&other == this || other.m_isExploded || other.m_isPending) continue;
 
         float ox = other.m_x + other.m_width / 2.0f;
         float oy = other.m_y + other.m_height / 2.0f;
         float dx = ox - centerX, dy = oy - centerY;
-        if (sqrt(dx * dx + dy * dy) <= explosionRadius + 20.0f) {
-            other.Trigger(100 + rand() % 200);
+        // 반경을 살짝 늘리고(explosionRadius + 40.0f), 지연 시간을 대폭 줄임(30ms ~ 80ms)
+        if (sqrt(dx * dx + dy * dy) <= explosionRadius + 40.0f) {
+            other.Trigger(30 + rand() % 50);
         }
     }
 }

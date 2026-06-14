@@ -122,6 +122,7 @@ void Game::LoadAllAssets() {
     m_loadingProgress = 80; Sleep(50);
     StageManager::LoadAllStages(&m_loadingProgress);
     LoadStage(1); m_player.SetMaxHistory(m_maxRewindTime); m_loadingProgress = 100; Sleep(500);
+
     m_isLoaded = true;
 }
 
@@ -170,11 +171,6 @@ void Game::Update() {
         if (!m_isLoaded || m_displayedProgress < 100.0f) return;
     }
 
-    static bool s_devicesInitialized = false;
-    if (!s_devicesInitialized) {
-        SoundManager::InitDevices();
-        s_devicesInitialized = true;
-    }
     if (ct - m_prevTime < 16) return;
     float dT = (ct - m_prevTime) / 1000.0f; Input::Update(); UpdateScreenScale();
     if (m_transitionState != TransitionState::NONE) { float transitionSpeed = 3.5f; if (m_transitionState == TransitionState::ENTERING) { m_transitionProgress += dT * transitionSpeed; if (m_transitionProgress >= 1.0f) { m_transitionProgress = 1.0f; m_transitionState = TransitionState::WAITING; m_transitionWaitTime = ct; if (m_transitionToNextStage) { 
@@ -384,4 +380,19 @@ void Game::Render(HDC hDC) {
     SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC);
 }
 
-void Game::UpdateScreenScale() { m_renderMapScale = mapScale; m_renderPlayerScale = playerScale; m_mapOffsetX = 0.0f; m_mapOffsetY = 0.0f; int mapW = StageManager::GetMapWidth(), mapH = StageManager::GetMapHeight(); if (m_isFullMapView && mapW > 0) { float sX = (float)VIRTUAL_WIDTH / mapW, sY = (float)VIRTUAL_HEIGHT / mapH; m_renderMapScale = (sX < sY) ? sX : sY; m_renderPlayerScale = playerScale * (m_renderMapScale / mapScale); m_mapOffsetX = (VIRTUAL_WIDTH - (mapW * m_renderMapScale)) / 2.0f; m_mapOffsetY = (VIRTUAL_HEIGHT - (mapH * m_renderMapScale)) / 2.0f; } }
+void Game::UpdateScreenScale() {
+    m_renderMapScale = mapScale;
+    m_renderPlayerScale = playerScale;
+    m_mapOffsetX = 0.0f;
+    m_mapOffsetY = 0.0f;
+    int mapW = StageManager::GetMapWidth();
+    int mapH = StageManager::GetMapHeight();
+    if (m_isFullMapView && mapW > 0) {
+        float sX = (float)VIRTUAL_WIDTH / mapW;
+        float sY = (float)VIRTUAL_HEIGHT / mapH;
+        m_renderMapScale = (sX < sY) ? sX : sY;
+        m_renderPlayerScale = playerScale * (m_renderMapScale / mapScale);
+        m_mapOffsetX = (VIRTUAL_WIDTH - (mapW * m_renderMapScale)) / 2.0f;
+        m_mapOffsetY = (VIRTUAL_HEIGHT - (mapH * m_renderMapScale)) / 2.0f;
+    }
+}

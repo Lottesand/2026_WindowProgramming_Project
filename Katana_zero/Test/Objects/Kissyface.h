@@ -113,6 +113,7 @@ private:
     float m_struggleTimer;
     float m_struggleProgress;
     float m_struggleCircleProgress;
+    bool m_isStruggleSoundPlaying;
     int m_strugglePhase;
     bool m_interactionPossible;
     float m_hp;

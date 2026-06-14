@@ -888,6 +888,7 @@ void Player::SetState(PlayerState state) {
         if (state == PlayerState::PS_DEAD) {
             m_state = PlayerState::PS_DEAD_FLY_BEGIN;
             ClearAfterImages();
+            DiscardHeldItem(); // 사망 시 인벤토리 비움
             SoundManager::Play("SFX_PLAYER_DIE"); // 소리 재생만 하고 여기서 멈추지 않음
         }
     } 

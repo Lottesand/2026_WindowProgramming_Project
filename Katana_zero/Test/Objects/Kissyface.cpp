@@ -5,6 +5,7 @@
 #include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
 #include "../Core/SoundManager.h"
+#include "../Core/Input.h"
 #include <gdiplus.h>
 #include <cstdio>
 #include <vector>
@@ -46,6 +47,7 @@ Kissyface::Kissyface(float startX, float startY)
     m_axe.state = AxeState::INACTIVE; m_detectDistance = 150.0f;
     m_hp = m_maxHp; m_downedTimer = 0.0f;
     m_struggleTimer = 0.0f; m_struggleProgress = 0.0f; m_struggleCircleProgress = 0.0f;
+    m_isStruggleSoundPlaying = false;
     m_strugglePhase = 0; m_interactionPossible = false;
     m_lastAfterImageTime = GetTickCount();
 }
@@ -61,6 +63,7 @@ void Kissyface::Reset() {
     m_throwProbability = 50.0f; m_axe.state = AxeState::INACTIVE;
     m_vx = 0.0f; m_vy = 0.0f; m_hp = m_maxHp;
     m_downedTimer = 0.0f; m_struggleTimer = 0.0f; m_struggleProgress = 0.0f; m_struggleCircleProgress = 0.0f;
+    m_isStruggleSoundPlaying = false;
     m_strugglePhase = 0; m_interactionPossible = false;
     m_afterImages.clear(); m_lastAfterImageTime = GetTickCount();
 }
@@ -175,6 +178,7 @@ void Kissyface::Update(float ts, const Player& player) {
             m_ActionState = KissyfaceAction::KF_RECOVER; m_animFrame = 0; m_animTimer = 0;
             const_cast<Player&>(player).SetVisible(true); const_cast<Player&>(player).Stun(0.4f, m_isFacingLeft ? 15.0f : -15.0f, -6.0f); break;
         }
+
         if (m_struggleProgress >= targetThreshold) {
             SoundManager::Stop("SFX_KF_STRUGGLE");
             if (m_strugglePhase >= 4) {
@@ -193,7 +197,8 @@ void Kissyface::Update(float ts, const Player& player) {
     break;
 
     case KissyfaceAction::KF_DIE:
-        if (m_animTimer > 0.18f) { 
+        // 사운드 길이에 맞게 애니메이션 프레임 길이 연장 (기존 0.18f -> 0.35f)
+        if (m_animTimer > 0.35f) { 
             m_animTimer = 0;
             m_animFrame++;
             if (m_animFrame >= (int)m_imgDie.size()) {
