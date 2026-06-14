@@ -117,6 +117,8 @@ public:
     static void AddExplosion(float x, float y, DWORD currentTime, float radius = 100.0f);
     static void AddFire(float x, float y, DWORD currentTime);
     
+    static CImage& GetFlamethrowerExplosionImage(int index) { return m_imgVfxFlamethrowerExplosion[index]; }
+
     static void SetReplayMode(bool isReplay) { m_isReplayMode = isReplay; }
     static bool HasActiveVFX();
     static bool HasActiveHitVFX();
@@ -155,6 +157,7 @@ private:
     static CImage m_imgVfxExplosion[10];
     static CImage m_imgVfxFire1[7];
     static CImage m_imgVfxFire2[10];
+    static CImage m_imgVfxFlamethrowerExplosion[10];
 
     static constexpr int m_neonTrailLife = 6;
     static constexpr float m_slashWidth = 10.0f;

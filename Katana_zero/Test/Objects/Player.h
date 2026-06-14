@@ -176,6 +176,8 @@ public:
     bool m_isFiringFlamethrower = false;
     float m_flamethrowerHoldTime = 0.0f;
     float m_flamethrowerFuel = 4.0f; // Max 4 seconds
+    float m_flameDirX = 1.0f;
+    float m_flameDirY = 0.0f;
     CImage imgFlamethrowerUI[8];
     
     void PickUpItem(class Item* item);
@@ -184,6 +186,12 @@ public:
     
     bool HasHeldItem() const { return m_pHeldItem != nullptr; }
     int GetHeldItemType() const;
+    bool IsFiringFlamethrower() const { return m_isFiringFlamethrower; }
+    float GetFlamethrowerHoldTime() const { return m_flamethrowerHoldTime; }
+    float GetFlameDirX() const { return m_flameDirX; }
+    float GetFlameDirY() const { return m_flameDirY; }
+    float GetFlamethrowerFuel() const { return m_flamethrowerFuel; }
+
 
     // Stun logic
     bool m_isStunned = false;

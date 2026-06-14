@@ -35,6 +35,9 @@ CImage EffectManager::m_imgVfxBloodBleed[9];
 CImage EffectManager::m_imgVfxMapBloodDir[48];
 CImage EffectManager::m_imgVfxMapBloodStatic[7];
 CImage EffectManager::m_imgVfxExplosion[10];
+CImage EffectManager::m_imgVfxFire1[7];
+CImage EffectManager::m_imgVfxFire2[10];
+CImage EffectManager::m_imgVfxFlamethrowerExplosion[10];
 
 void EffectManager::Init() {
     m_neonTrails.clear();
@@ -85,6 +88,7 @@ void EffectManager::LoadAssets() {
     for (int i = 0; i < 9; ++i) { swprintf_s(path, L"assets/blood/Blood/%d.png", i); if (m_imgVfxBloodBleed[i].IsNull()) m_imgVfxBloodBleed[i].Load(path); }
     for (int i = 0; i < 48; ++i) { swprintf_s(path, L"assets/blood/spr_bloodsplatter_dir/%d.png", i); if (m_imgVfxMapBloodDir[i].IsNull()) m_imgVfxMapBloodDir[i].Load(path); }
     for (int i = 0; i < 10; ++i) { swprintf_s(path, L"assets/spr_explosion_1/spr_explosion_1_%d.png", i + 1); if (m_imgVfxExplosion[i].IsNull()) m_imgVfxExplosion[i].Load(path); }
+    for (int i = 0; i < 10; ++i) { swprintf_s(path, L"assets/spr_flamethrower/spr_flamethrower_explosion/spr_flamethrower_explosion_%d.png", i); if (m_imgVfxFlamethrowerExplosion[i].IsNull()) m_imgVfxFlamethrowerExplosion[i].Load(path); }
 }
 
 void EffectManager::ReleaseAssets() {
@@ -99,6 +103,7 @@ void EffectManager::ReleaseAssets() {
     for (int i = 0; i < 9; ++i) m_imgVfxBloodBleed[i].Destroy();
     for (int i = 0; i < 48; ++i) m_imgVfxMapBloodDir[i].Destroy();
     for (int i = 0; i < 10; ++i) m_imgVfxExplosion[i].Destroy();
+    for (int i = 0; i < 10; ++i) m_imgVfxFlamethrowerExplosion[i].Destroy();
 }
 
 void EffectManager::Update(float timeScale, DWORD currentTime) {

@@ -90,6 +90,7 @@ void Player::Init() {
     for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/player/spr_hurtfly_begin/%d.png"), i); imgHurtFlyBegin[i].Load(path); }
     for (int i = 0; i < 4; i++) { wsprintf(path, TEXT("assets/player/spr_hurtfly_loop/%d.png"), i); imgHurtFlyLoop[i].Load(path); }
     for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/player/spr_hurtground/%d.png"), i); imgHurtGround[i].Load(path); }
+    for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/spr_flamethrower/spr_ui_flamethrower/spr_ui_flamethrower_%d.png"), i); imgFlamethrowerUI[i].Load(path); }
 }
 
 void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv) {
@@ -184,8 +185,45 @@ void Player::Update(int mouseX, int mouseY, float camX, float camY, float rs, fl
         }
     }
 
-    if (curR && !prR && !pickupHappened && m_pHeldItem) {
-        ThrowItem(mouseX, mouseY, camX, camY, rs, ox, oy, fv);
+    if (m_pHeldItem && m_pHeldItem->GetType() == ItemType::FLAMETHROWER && !isDead) {
+        if (curR && !pickupHappened) {
+            if (m_flamethrowerFuel > 0.0f) {
+                if (!m_isFiringFlamethrower) {
+                    m_isFiringFlamethrower = true;
+                    m_flamethrowerHoldTime = 0.0f;
+                    SoundManager::Play("SFX_FLAMETHROWER", true);
+                }
+                m_flamethrowerHoldTime += dT; // real time
+                m_flamethrowerFuel -= dT * ts; // use fuel
+                
+                float wx = (mouseX - ox) / rs, wy = (mouseY - oy) / rs;
+                if (!fv) { wx += camX; wy += camY; }
+                float dx = wx - (m_x + m_colW / 2.0f);
+                float dy = wy - (m_y + m_colH / 2.0f);
+                float dist = sqrt(dx * dx + dy * dy);
+                if (dist > 0) {
+                    m_flameDirX = dx / dist;
+                    m_flameDirY = dy / dist;
+                } else {
+                    m_flameDirX = m_isFacingRight ? 1.0f : -1.0f;
+                    m_flameDirY = 0.0f;
+                }
+            } else {
+                if (m_isFiringFlamethrower) SoundManager::Stop("SFX_FLAMETHROWER");
+                m_isFiringFlamethrower = false;
+                DiscardHeldItem(); // Auto-discard when empty
+            }
+        } else {
+            if (m_isFiringFlamethrower) SoundManager::Stop("SFX_FLAMETHROWER");
+            m_isFiringFlamethrower = false;
+            m_flamethrowerHoldTime = 0.0f;
+        }
+    } else {
+        if (m_isFiringFlamethrower) SoundManager::Stop("SFX_FLAMETHROWER");
+        m_isFiringFlamethrower = false;
+        if (curR && !prR && !pickupHappened && m_pHeldItem) {
+            ThrowItem(mouseX, mouseY, camX, camY, rs, ox, oy, fv);
+        }
     }
     prR = curR;
 
@@ -645,6 +683,73 @@ void Player::Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, fl
         }
     }
 
+    if (m_isFiringFlamethrower && !IsDead()) {
+        float ratio = (std::min)(1.0f, m_flamethrowerHoldTime / 2.0f);
+        int numSprites = 3 + (int)(4.0f * ratio);
+        float pX, pY;
+        if (g_isFullMapView) {
+            float fsW = 1280.0f / (float)(mapW > 0 ? mapW : 1);
+            float fsH = 720.0f / (float)(mapH > 0 ? mapH : 1);
+            float fs = (fsW < fsH) ? fsW : fsH;
+            pX = (m_x + m_colW / 2.0f) * fs + (1280.0f - mapW * fs) / 2.0f;
+            pY = (m_y + m_colH / 2.0f + 5.0f) * fs + (720.0f - mapH * fs) / 2.0f;
+        } else {
+            pX = (m_x + m_colW / 2.0f - camX) * mapScale;
+            pY = (m_y + m_colH / 2.0f + 5.0f - camY) * mapScale;
+        }
+        float angle = atan2(m_flameDirY, m_flameDirX);
+        DWORD ct = GetTickCount();
+        int baseFrame = (ct / 40) % 10;
+        
+        for (int i = 0; i < numSprites; i++) {
+            float dist = (20.0f + i * 35.0f) * pFS; 
+            float fx = pX + cos(angle) * dist;
+            float fy = pY + sin(angle) * dist;
+            int frame = (baseFrame + i * 2) % 10;
+            CImage& img = EffectManager::GetFlamethrowerExplosionImage(frame);
+            if (!img.IsNull()) {
+                void* bits = img.GetBits();
+                if (bits) {
+                    Gdiplus::Bitmap bmp(img.GetWidth(), img.GetHeight(), img.GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+                    float vfxScale = 2.5f * pFS;
+                    float vW = (float)img.GetWidth() * vfxScale;
+                    float vH = (float)img.GetHeight() * vfxScale;
+                    
+                    g->TranslateTransform(fx, fy);
+                    g->RotateTransform(angle * 180.0f / 3.14159f);
+                    g->DrawImage(&bmp, -vW / 2.0f, -vH / 2.0f, vW, vH);
+                    g->ResetTransform();
+                }
+            }
+        }
+        
+        // Render Flamethrower UI Gauge above head (Counting DOWN from 7 to 0)
+        // Fuel is 4.0s max. Each step is 0.5s. 
+        // 4.0 -> index 7, 3.5 -> index 6, ..., 0.5 -> index 0
+        int uiIdx = (int)(m_flamethrowerFuel / 0.51f); // Using 0.51 to ensure 4.0 stays at index 7
+        if (uiIdx < 0) uiIdx = 0; if (uiIdx > 7) uiIdx = 7;
+        
+        CImage& uiImg = imgFlamethrowerUI[uiIdx];
+        if (!uiImg.IsNull()) {
+            float vx, vy;
+            if (g_isFullMapView) {
+                float fsW = 1280.0f / (float)(mapW > 0 ? mapW : 1);
+                float fsH = 720.0f / (float)(mapH > 0 ? mapH : 1);
+                float fs = (fsW < fsH) ? fsW : fsH;
+                vx = (m_x + m_colW / 2.0f) * fs + (1280.0f - mapW * fs) / 2.0f;
+                vy = (m_y - 25.0f) * fs + (720.0f - mapH * fs) / 2.0f;
+                pFS = fs;
+            } else {
+                vx = (m_x + m_colW / 2.0f - camX) * mapScale;
+                vy = (m_y - 25.0f - camY) * mapScale;
+                pFS = mapScale;
+            }
+            int uw = (int)(uiImg.GetWidth() * pFS * 1.5f);
+            int uh = (int)(uiImg.GetHeight() * pFS * 1.5f);
+            uiImg.Draw(hMemDC, (int)vx - uw / 2, (int)vy - uh, uw, uh);
+        }
+    }
+
     if (!bmpCache.empty()) {
         std::map<CImage*, Gdiplus::Bitmap*>::iterator it_render;
         for (it_render = bmpCache.begin(); it_render != bmpCache.end(); ++it_render) {
@@ -878,6 +983,7 @@ void Player::StartRewind(int speed) {
     m_isSlowMo = false; 
     m_batteryLevel = m_batteryMax; 
     m_hasHitThisSwing = false; // 리와인드 시작 시 판정 초기화
+    m_flamethrowerFuel = 4.0f; // Rewind resets fuel
     ClearAfterImages();
 }
 
@@ -889,6 +995,10 @@ void Player::PickUpItem(Item* item) {
     }
     m_pHeldItem = item;
     item->OnPickUp();
+    
+    if (item->GetType() == ItemType::FLAMETHROWER) {
+        m_flamethrowerFuel = 4.0f; // Pickup resets fuel
+    }
 
     // Show popup
     m_itemPopupTimer = 1.0f; // 1 second

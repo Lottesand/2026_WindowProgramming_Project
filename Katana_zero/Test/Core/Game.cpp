@@ -106,6 +106,7 @@ void Game::LoadAllAssets() {
     SoundManager::Load("SFX_EXPLOSION_1", L"assets/sound/explosion1.wav");
     SoundManager::Load("SFX_EXPLOSION_2", L"assets/sound/explosion2.wav");
     SoundManager::Load("vial_explosion", L"assets/sound/vial_explosion.wav");
+    SoundManager::Load("SFX_FLAMETHROWER", L"assets/sound/flamethrower.wav");
 
     m_loadingProgress = 80; Sleep(50);
     StageManager::LoadAllStages(&m_loadingProgress);
@@ -245,6 +246,50 @@ void Game::Update() {
         StageManager::UpdateItems(ts, m_player, m_enemies);
         StageManager::UpdateOilDrums(ts, m_enemies, &m_player);
         if (!m_player.IsDead()) { for (auto& e : m_enemies) if (e) e->Update(ts, m_player); }
+
+        if (m_player.IsFiringFlamethrower()) {
+            float fDirX = m_player.GetFlameDirX();
+            float fDirY = m_player.GetFlameDirY();
+            float holdTime = m_player.GetFlamethrowerHoldTime();
+            float ratio = (std::min)(1.0f, holdTime / 2.0f);
+            int numSprites = 3 + (int)(4.0f * ratio);
+            float pX = m_player.GetX() + m_player.GetColW() / 2.0f;
+            float pY = m_player.GetY() + m_player.GetColH() / 2.0f;
+            float maxDist = numSprites * 40.0f; 
+            for (int i = 0; i < (int)m_enemies.size(); i++) {
+                Enemy* e = m_enemies[i];
+                if (e && e->GetIsAlive()) {
+                    float ex = e->GetX() + e->GetColW() / 2.0f;
+                    float ey = e->GetY() + e->GetColH() / 2.0f;
+                    float dx = ex - pX, dy = ey - pY;
+                    float dist = sqrt(dx*dx + dy*dy);
+                    if (dist < maxDist && dist > 0.0f) {
+                        float dot = (dx * fDirX + dy * fDirY) / dist;
+                        if (dot > 0.85f) { // Within cone
+                            e->OnTakeDamage(fDirX * 15.0f, -5.0f, DeathCause::FIRE);
+                            m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i);
+                        }
+                    }
+                }
+            }
+            
+            // Check collision with Oil Drums
+            auto oilDrums = StageManager::GetCurrentOilDrums();
+            if (oilDrums) {
+                for (auto& drum : *oilDrums) {
+                    if (drum.IsExploded() || drum.IsPending()) continue;
+                    float dx = (drum.GetX() + drum.GetWidth() / 2.0f) - pX;
+                    float dy = (drum.GetY() + drum.GetHeight() / 2.0f) - pY;
+                    float dist = sqrt(dx * dx + dy * dy);
+                    if (dist < maxDist && dist > 0.0f) {
+                        float dot = (dx * fDirX + dy * fDirY) / dist;
+                        if (dot > 0.85f) { // Within cone
+                            drum.Trigger(100 + rand() % 200);
+                        }
+                    }
+                }
+            }
+        }
     }
     static int laF = -1;
     if (!m_isTimePaused && m_player.GetState() == PlayerState::PS_ATTACK) {
@@ -302,7 +347,13 @@ void Game::Render(HDC hDC) {
         if (m_gameMode == GameMode::REPLAYING) { if (!m_imgReplayUI[0].IsNull()) { int w = m_imgReplayUI[0].GetWidth(), h = m_imgReplayUI[0].GetHeight(); m_imgReplayUI[0].Draw(hPostDC, VIRTUAL_WIDTH - w - 20, VIRTUAL_HEIGHT - h - 20, w, h); } int topUIIdx = m_isReplayPaused ? 2 : 1; if (!m_imgReplayUI[topUIIdx].IsNull()) { int w = m_imgReplayUI[topUIIdx].GetWidth(), h = m_imgReplayUI[topUIIdx].GetHeight(); m_imgReplayUI[topUIIdx].Draw(hPostDC, 20, 20, w, h); } } else if (m_gameMode == GameMode::YES_SCENE) { DWORD elapsed = GetTickCount() - m_yesSceneStartTime; int alpha = 255; if (elapsed > 2000) { alpha = 255 - (int)((elapsed - 2000) / 500.0f * 255); if (alpha < 0) alpha = 0; } if (alpha > 0) { Gdiplus::SolidBrush blackBrush(Gdiplus::Color(alpha, 0, 0, 0)); g.FillRectangle(&blackBrush, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); if (!m_imgReplayUI[3].IsNull()) { int w = m_imgReplayUI[3].GetWidth() / 2, h = m_imgReplayUI[3].GetHeight() / 2; Gdiplus::ImageAttributes yesAttr; Gdiplus::ColorMatrix yesMat = { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, alpha / 255.0f, 0, 0, 0, 0, 0, 1 }; yesAttr.SetColorMatrix(&yesMat); HBITMAP hBmpYes = m_imgReplayUI[3]; Gdiplus::Bitmap bmpYes(hBmpYes, NULL); int x = (VIRTUAL_WIDTH - w) / 2, y = (VIRTUAL_HEIGHT - h) / 2; g.DrawImage(&bmpYes, Gdiplus::Rect(x, y, w, h), 0, 0, bmpYes.GetWidth(), bmpYes.GetHeight(), Gdiplus::UnitPixel, &yesAttr); } } }
         drawTransition(hPostDC); SetStretchBltMode(hDC, HALFTONE); StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hPostDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY); SelectObject(hPostDC, hOldPostBmp); DeleteObject(hPostBmp); DeleteDC(hPostDC);
     } else {
-        if (!m_player.IsRewinding()) { bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0; UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage, m_player.GetHeldItemType()); if (StartScene::IsActive()) StartScene::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), mapScale); }
+        if (!m_player.IsRewinding()) { 
+            bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0; 
+            if (!StartScene::IsActive()) {
+                UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage, m_player.GetHeldItemType());
+            }
+            if (StartScene::IsActive()) StartScene::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), mapScale); 
+        }
         drawTransition(hMemDC); SetStretchBltMode(hDC, HALFTONE); StretchBlt(hDC, 0, 0, m_winWidth, m_winHeight, hMemDC, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, SRCCOPY);
     }
     SelectObject(hMemDC, hOldBmp); DeleteObject(hMemBmp); DeleteDC(hMemDC);
