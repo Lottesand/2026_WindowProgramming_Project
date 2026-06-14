@@ -1069,3 +1069,35 @@ void Player::Stun(float duration, float kvx, float kvy) {
         SetState(PlayerState::PS_IDLE);
     }
 }
+
+void Player::RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) return;
+    CImage* img = nullptr; int safeF = (m_currentFrame < 0) ? 0 : m_currentFrame;
+    switch (m_state) {
+    case PlayerState::PS_IDLE: img = &imgIdle[(safeF > 10) ? 10 : safeF]; break;
+    case PlayerState::PS_IDLE_TO_WALK: img = &imgIdleToWalk[(safeF > 3) ? 3 : safeF]; break;
+    case PlayerState::PS_WALK: img = &imgWalk[(safeF > 9) ? 9 : safeF]; break;
+    case PlayerState::PS_WALK_TO_IDLE: img = &imgWalkToIdle[(safeF > 4) ? 4 : safeF]; break;
+    case PlayerState::PS_RUN: img = &imgRun[(safeF > 9) ? 9 : safeF]; break;
+    case PlayerState::PS_JUMP_UP: img = &imgJumpUp[(safeF > 3) ? 3 : safeF]; break;
+    case PlayerState::PS_FALL: img = &imgFall[(safeF > 3) ? 3 : safeF]; break;
+    case PlayerState::PS_ROLL: img = &imgRoll[(safeF > 5) ? 5 : safeF]; break;
+    case PlayerState::PS_ATTACK: img = &imgAttack[(safeF > 6) ? 6 : safeF]; break;
+    case PlayerState::PS_WALL_GRAB: img = &imgWallGrab[(safeF > 1) ? 1 : safeF]; break;
+    case PlayerState::PS_WALL_SLIDE: img = &imgWallSlide[0]; break;
+    case PlayerState::PS_WALL_FLIP: img = &imgWallFlip[(safeF > 10) ? 10 : safeF]; break;
+    case PlayerState::PS_DOOR_KICK: img = &imgDoorKick[(safeF > 5) ? 5 : safeF]; break;
+    case PlayerState::PS_DOOR_KICK_FULL: img = &imgDoorKickFull[(safeF > 9) ? 9 : safeF]; break;
+    case PlayerState::PS_DEAD_FLY_BEGIN: img = &imgHurtFlyBegin[(safeF > 1) ? 1 : safeF]; break;
+    case PlayerState::PS_DEAD_FLY_LOOP: img = &imgHurtFlyLoop[(safeF > 3) ? 3 : safeF]; break;
+    case PlayerState::PS_DEAD_GROUND: img = &imgHurtGround[(safeF > 5) ? 5 : safeF]; break;
+    }
+    if (img && !img->IsNull()) {
+        float dx = (m_x - camX) * mapScale, dy = (m_y - camY) * mapScale, sw = img->GetWidth() * 2.0f * mapScale, sh = img->GetHeight() * 2.0f * mapScale;
+        dx = dx + (40.0f * mapScale / 2.0f) - (sw / 2.0f); dy = dy + (64.0f * mapScale) - sh;
+        Gdiplus::Bitmap bmp(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)img->GetBits());
+        Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix cm = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0.5f,0, 0,0,0,0,1.0f }; attr.SetColorMatrix(&cm);
+        if (m_isFacingRight) g->DrawImage(&bmp, Gdiplus::RectF(dx, dy, sw, sh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr);
+        else { g->ScaleTransform(-1.0f, 1.0f); g->TranslateTransform(-(dx * 2 + sw), 0); g->DrawImage(&bmp, Gdiplus::RectF(dx, dy, sw, sh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr); g->ResetTransform(); }
+    }
+}

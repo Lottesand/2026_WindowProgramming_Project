@@ -33,6 +33,10 @@ protected:
     DWORD m_alertStartTime;
     int m_exclaimFrame;
     static CImage m_ImgExclaim[2];
+    static CImage m_ImgQuestion; // 추가
+
+    bool m_showQuestionMark = false; // 추가
+    DWORD m_questionMarkStartTime = 0; // 추가
 
     // Detection constants
     float m_detectRange = 600.0f;
@@ -45,6 +49,7 @@ public:
     virtual void Reset();
     virtual void Update(float ts, const class Player& player);
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo = false) = 0;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) = 0; // 추가
     virtual void RenderDetectionRange(HDC hdc, float camX, float camY, float mapScale);
     virtual void RenderExclaim(HDC hdc, float camX, float camY, float mapScale);
     virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD);
@@ -82,6 +87,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override; // 추가
     virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };
@@ -96,6 +102,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override; // 추가
     virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };
@@ -110,6 +117,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override; // 추가
     virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };
@@ -124,6 +132,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override; // 추가
     virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     static void Release();
 };

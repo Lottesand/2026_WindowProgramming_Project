@@ -343,7 +343,18 @@ void Game::Render(HDC hDC) {
     Bullet::RenderAll(hMemDC, cX, cY, mapScale); if (m_player.GetIsSlowMo() && m_gameMode != GameMode::REPLAYING) { Gdiplus::Rect fr(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); Gdiplus::GraphicsPath p; p.AddRectangle(fr); Gdiplus::PathGradientBrush pgb(&p); pgb.SetCenterColor(Gdiplus::Color(0, 0, 0, 0)); pgb.SetCenterPoint(Gdiplus::PointF(VIRTUAL_WIDTH / 2.0f, VIRTUAL_HEIGHT / 2.0f)); Gdiplus::Color ec[] = { Gdiplus::Color(180, 0, 0, 0) }; int cnt = 1; pgb.SetSurroundColors(ec, &cnt); pgb.SetFocusScales(0.2f, 0.2f); g.FillRectangle(&pgb, fr); }
     if (m_stageTimer <= 3.0f && m_bGameStarted && !m_player.IsRewinding() && m_gameMode != GameMode::REPLAYING && !m_player.IsDeathAnimationFinished()) { float alphaRatio = 1.0f - (m_stageTimer / 3.0f); if (alphaRatio < 0) alphaRatio = 0; if (alphaRatio > 1.0f) alphaRatio = 1.0f; int alpha = m_player.IsDead() ? 200 : (int)(alphaRatio * 150); Gdiplus::SolidBrush warningBrush(Gdiplus::Color(alpha, 255, 50, 200)); g.FillRectangle(&warningBrush, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); }
     float fW = (float)VIRTUAL_WIDTH, fH = (float)VIRTUAL_HEIGHT, fCW = (float)StageManager::GetMapWidth(), fCH = (float)StageManager::GetMapHeight(), scX = fW / fCW, scY = fH / fCH, cFS = (scX < scY) ? scX : scY, cFX = (fW - fCW * cFS) / 2.0f, cFY = (fH - fCH * cFS) / 2.0f;
-    EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY); if (StartScene::ShouldShowInGamePlayer()) m_player.Render(hMemDC, &g, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect, m_stageTimer);
+
+    // 1. 플레이어와 적을 먼저 렌더링 (연막에 가려지기 위함)
+    for (auto& e : m_enemies) if (e) e->Render(hMemDC, &g, cX, cY, mapScale, m_showDebugRect, m_player.GetIsSlowMo());
+    if (StartScene::ShouldShowInGamePlayer()) m_player.Render(hMemDC, &g, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect, m_stageTimer);
+
+    // 2. 연막 및 이펙트 렌더링
+    EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
+
+    // 3. 연막 위에 실루엣 렌더링 (연막 속에 있을 때만 보이게 됨)
+    m_player.RenderSilhouette(&g, cX, cY, mapScale);
+    for (auto& e : m_enemies) if (e) e->RenderSilhouette(&g, cX, cY, mapScale);
+
     auto drawTransition = [&](HDC dc) { if (m_transitionState == TransitionState::NONE) return; HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0)); RECT tr = { 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT }; if (m_transitionState == TransitionState::ENTERING || m_transitionState == TransitionState::WAITING) tr.left = (int)(VIRTUAL_WIDTH * (1.0f - m_transitionProgress)); else if (m_transitionState == TransitionState::LEAVING) tr.right = (int)(VIRTUAL_WIDTH * (1.0f - m_transitionProgress)); FillRect(dc, &tr, hBlack); DeleteObject(hBlack); };
     if (m_gameMode == GameMode::REPLAYING || m_gameMode == GameMode::YES_SCENE) {
         HDC hPostDC = CreateCompatibleDC(hDC); HBITMAP hPostBmp = CreateCompatibleBitmap(hDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT); HBITMAP hOldPostBmp = (HBITMAP)SelectObject(hPostDC, hPostBmp); Gdiplus::Graphics g(hPostDC); Gdiplus::Bitmap bmp(hMemBmp, NULL); Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix mat = { 0.3f, 0.3f, 0.3f, 0, 0, 0.59f, 0.59f, 0.59f, 0, 0, 0.11f, 0.11f, 0.11f, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 }; attr.SetColorMatrix(&mat); g.DrawImage(&bmp, Gdiplus::Rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT), 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Gdiplus::UnitPixel, &attr);

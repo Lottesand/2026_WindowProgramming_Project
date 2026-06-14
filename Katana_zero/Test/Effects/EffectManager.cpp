@@ -2,6 +2,7 @@
 #include <math.h>
 #include <algorithm>
 #include "../Objects/Physics.h"
+#include "../Objects/Enemy.h"
 #include "../SceneAndMap/StageManager.h"
 
 #pragma comment(lib, "msimg32.lib")
@@ -14,6 +15,7 @@ std::vector<LandCloudVFX> EffectManager::m_landCloudVFXs;
 std::vector<PendingHit> EffectManager::m_pendingHits;
 std::vector<BloodSplatterVFX> EffectManager::m_bloodSplatters;
 std::vector<ExplosionVFX> EffectManager::m_explosions;
+std::vector<FireVFX> EffectManager::m_fires;
 std::vector<SmokeVFX> EffectManager::m_smokeVFXs;
 
 HDC EffectManager::m_hBloodLayerDC = NULL;
@@ -52,6 +54,7 @@ void EffectManager::Init() {
     m_pendingHits.clear();
     m_bloodSplatters.clear();
     m_explosions.clear();
+    m_fires.clear();
     m_smokeVFXs.clear();
     
     if (m_pBloodLayerBits && m_bloodLayerWidth > 0 && m_bloodLayerHeight > 0) {
@@ -93,6 +96,8 @@ void EffectManager::LoadAssets() {
     for (int i = 0; i < 9; ++i) { swprintf_s(path, L"assets/blood/Blood/%d.png", i); if (m_imgVfxBloodBleed[i].IsNull()) m_imgVfxBloodBleed[i].Load(path); }
     for (int i = 0; i < 48; ++i) { swprintf_s(path, L"assets/blood/spr_bloodsplatter_dir/%d.png", i); if (m_imgVfxMapBloodDir[i].IsNull()) m_imgVfxMapBloodDir[i].Load(path); }
     for (int i = 0; i < 10; ++i) { swprintf_s(path, L"assets/spr_explosion_1/spr_explosion_1_%d.png", i + 1); if (m_imgVfxExplosion[i].IsNull()) m_imgVfxExplosion[i].Load(path); }
+    for (int i = 0; i < 7; i++) { swprintf_s(path, L"assets/spr_fire_1/spr_fire_1_%d.png", i); if (m_imgVfxFire1[i].IsNull()) m_imgVfxFire1[i].Load(path); }
+    for (int i = 0; i < 6; i++) { swprintf_s(path, L"assets/spr_fire_2/spr_fire_2_%d.png", i); if (m_imgVfxFire2[i].IsNull()) m_imgVfxFire2[i].Load(path); }
     for (int i = 0; i < 10; ++i) { swprintf_s(path, L"assets/spr_flamethrower/spr_flamethrower_explosion/spr_flamethrower_explosion_%d.png", i); if (m_imgVfxFlamethrowerExplosion[i].IsNull()) m_imgVfxFlamethrowerExplosion[i].Load(path); }
     for (int i = 0; i < 3; ++i) { swprintf_s(path, L"assets/spr_smoke_appear/%d.png", i); if (m_imgVfxSmokeAppear[i].IsNull()) m_imgVfxSmokeAppear[i].Load(path); }
     for (int i = 0; i < 6; ++i) { swprintf_s(path, L"assets/spr_smoke_loop/%d.png", i); if (m_imgVfxSmokeLoop[i].IsNull()) m_imgVfxSmokeLoop[i].Load(path); }
@@ -111,6 +116,8 @@ void EffectManager::ReleaseAssets() {
     for (int i = 0; i < 9; ++i) m_imgVfxBloodBleed[i].Destroy();
     for (int i = 0; i < 48; ++i) m_imgVfxMapBloodDir[i].Destroy();
     for (int i = 0; i < 10; ++i) m_imgVfxExplosion[i].Destroy();
+    for (int i = 0; i < 7; i++) m_imgVfxFire1[i].Destroy();
+    for (int i = 0; i < 6; i++) m_imgVfxFire2[i].Destroy();
     for (int i = 0; i < 10; ++i) m_imgVfxFlamethrowerExplosion[i].Destroy();
     for (int i = 0; i < 3; ++i) m_imgVfxSmokeAppear[i].Destroy();
     for (int i = 0; i < 6; ++i) m_imgVfxSmokeLoop[i].Destroy();
@@ -150,6 +157,10 @@ void EffectManager::Update(float timeScale, DWORD currentTime) {
     for (auto it = m_explosions.begin(); it != m_explosions.end(); ) {
         if (currentTime - it->lastTime >= (DWORD)(50 / timeScale)) { it->currentFrame++; it->lastTime = currentTime; }
         if (it->currentFrame >= it->maxFrame) it = m_explosions.erase(it); else it++;
+    }
+    for (auto it = m_fires.begin(); it != m_fires.end(); ) {
+        if (currentTime - it->lastTime >= (DWORD)(100 / timeScale)) { it->currentFrame++; it->lastTime = currentTime; }
+        if (it->currentFrame >= it->maxFrame) it = m_fires.erase(it); else it++;
     }
     for (auto it = m_smokeVFXs.begin(); it != m_smokeVFXs.end(); ) {
         if (currentTime - it->lastTime >= (DWORD)(80 / timeScale)) {
@@ -252,14 +263,20 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             if (vW > 0 && vH > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH / 2, vW, vH);
         }
     }
+    for (const auto& v : m_fires) {
+        int safeF = (std::max)(0, v.currentFrame); CImage* vI = (v.type == 1) ? &m_imgVfxFire1[(std::min)(safeF, 6)] : &m_imgVfxFire2[(std::min)(safeF, 5)];
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale); int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY; if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; } else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            if (vW > 0 && vH > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH / 2, vW, vH);
+        }
+    }
     for (const auto& v : m_smokeVFXs) {
         CImage* vI = nullptr;
         int frame = (std::max)(0, (std::min)(v.currentFrame, v.maxFrame - 1));
-
         if (v.state == SmokeState::APPEARING) vI = &m_imgVfxSmokeAppear[frame];
         else if (v.state == SmokeState::LOOPING) vI = &m_imgVfxSmokeLoop[frame];
         else vI = &m_imgVfxSmokeDissolve[frame];
-
         if (vI && !vI->IsNull()) {
             float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale);
             int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
@@ -367,5 +384,9 @@ void EffectManager::AddExplosion(float x, float y, DWORD currentTime, float radi
     ExplosionVFX e; e.x = x; e.y = y; e.currentFrame = 0; e.maxFrame = 10; e.lastTime = currentTime; e.radius = radius; m_explosions.push_back(e);
 }
 
+void EffectManager::AddFire(float x, float y, DWORD currentTime) {
+    FireVFX f; f.x = x; f.y = y; f.currentFrame = 0; f.maxFrame = 6; f.lastTime = currentTime; f.type = 1; m_fires.push_back(f);
+}
+
 bool EffectManager::HasActiveHitVFX() { return !m_hitVFXs.empty(); }
-bool EffectManager::HasActiveVFX() { return !m_neonTrails.empty() || !m_hitVFXs.empty() || !m_jumpCloudVFXs.empty() || !m_dustCloudVFXs.empty() || !m_landCloudVFXs.empty() || !m_explosions.empty(); }
+bool EffectManager::HasActiveVFX() { return !m_neonTrails.empty() || !m_hitVFXs.empty() || !m_jumpCloudVFXs.empty() || !m_dustCloudVFXs.empty() || !m_landCloudVFXs.empty() || !m_explosions.empty() || !m_fires.empty(); }

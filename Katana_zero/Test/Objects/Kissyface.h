@@ -129,6 +129,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const class Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo = false) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override; // 추가
     virtual bool OnTakeDamage(float kvx, float kvy, DeathCause cause = DeathCause::SWORD) override;
     void Parry();
     

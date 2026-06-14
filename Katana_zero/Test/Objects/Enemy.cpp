@@ -8,8 +8,10 @@
 #include <gdiplus.h>
 #include <cmath>
 #include <map>
+#include <algorithm>
 
 CImage Enemy::m_ImgExclaim[2];
+CImage Enemy::m_ImgQuestion;
 CImage Enemy::m_imgFire2[6];
 
 Enemy::Enemy(float startX, float startY, EnemyType type, float patrolRange) {
@@ -24,6 +26,8 @@ Enemy::Enemy(float startX, float startY, EnemyType type, float patrolRange) {
     m_lastBleedTime = 0;
     m_isBurning = false;
     m_burnTimer = 0.0f;
+    m_showQuestionMark = false;
+    m_questionMarkStartTime = 0;
 }
 Enemy::~Enemy() {}
 
@@ -36,10 +40,19 @@ void Enemy::LoadCommonAssets() {
     }
     wsprintf(path, TEXT("assets/enemy/spr_enemy_follow/spr_enemy_follow_%d.png"), 0); m_ImgExclaim[0].Load(path);
     wsprintf(path, TEXT("assets/enemy/spr_enemy_follow/spr_enemy_follow_%d.png"), 1); m_ImgExclaim[1].Load(path);
+    m_ImgQuestion.Load(TEXT("assets/spr_enemy_question/0.png"));
 }
 
 void Enemy::RenderBurningEffect(HDC hdc, float mapScale, float camX, float camY) {
-    // Burning visual effect (fire2) disabled per user request.
+    if (!m_isBurning) return;
+    int frame = (int)(GetTickCount() / 100) % 6;
+    CImage* img = &m_imgFire2[frame];
+    if (img && !img->IsNull()) {
+        float es = 2.0f;
+        int fw = (int)(img->GetWidth() * es * mapScale), fh = (int)(img->GetHeight() * es * mapScale);
+        int dx = (int)((m_x + m_colW / 2.0f - camX) * mapScale) - fw / 2, dy = (int)((m_y + m_colH / 2.0f - camY) * mapScale) - fh / 2;
+        img->Draw(hdc, dx, dy, fw, fh);
+    }
 }
 
 bool Enemy::IsPlayerInCone(float px, float py, float pw, float ph) {
@@ -51,25 +64,33 @@ bool Enemy::IsPlayerInCone(float px, float py, float pw, float ph) {
 
 void Enemy::UpdateDetection(float px, float py, float pw, float ph, float ts) {
     if (!m_isAlive) return;
-
     if (EffectManager::IsInsideSmoke(px + pw / 2.0f, py + ph / 2.0f) || EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) {
         if (m_isPlayerDetected) {
             m_isPlayerDetected = false;
             m_State = EnemyState::ES_IDLE;
+            m_showQuestionMark = true;
+            m_questionMarkStartTime = GetTickCount();
         }
         return;
     }
-
-    if (!m_isPlayerDetected) { if (IsPlayerInCone(px, py, pw, ph)) { m_isPlayerDetected = true; m_alertStartTime = GetTickCount(); m_exclaimFrame = 0; m_State = EnemyState::ES_ALERT; } }
+    if (!m_isPlayerDetected) { if (IsPlayerInCone(px, py, pw, ph)) { m_isPlayerDetected = true; m_alertStartTime = GetTickCount(); m_exclaimFrame = 0; m_State = EnemyState::ES_ALERT; m_showQuestionMark = false; } }
     else { if (m_exclaimFrame == 0 && GetTickCount() - m_alertStartTime > (DWORD)(100.0f / ts)) m_exclaimFrame = 1; }
 }
 
 void Enemy::RenderExclaim(HDC hdc, float camX, float camY, float mapScale) {
-    if (!m_isPlayerDetected || !m_isAlive) return;
-    if (!m_ImgExclaim[m_exclaimFrame].IsNull()) {
-        int ew = (int)(m_ImgExclaim[m_exclaimFrame].GetWidth() * 2.0f * mapScale), eh = (int)(m_ImgExclaim[m_exclaimFrame].GetHeight() * 2.0f * mapScale);
-        int ex = (int)((m_x + m_colW / 2.0f - camX) * mapScale) - ew / 2, ey = (int)((m_y - camY) * mapScale) - eh - 10;
-        m_ImgExclaim[m_exclaimFrame].Draw(hdc, ex, ey, ew, eh);
+    if (!m_isAlive) return;
+    if (m_isPlayerDetected) {
+        if (!m_ImgExclaim[m_exclaimFrame].IsNull()) {
+            int ew = (int)(m_ImgExclaim[m_exclaimFrame].GetWidth() * 2.0f * mapScale), eh = (int)(m_ImgExclaim[m_exclaimFrame].GetHeight() * 2.0f * mapScale);
+            int ex = (int)((m_x + m_colW / 2.0f - camX) * mapScale) - ew / 2, ey = (int)((m_y - camY) * mapScale) - eh - 10;
+            m_ImgExclaim[m_exclaimFrame].Draw(hdc, ex, ey, ew, eh);
+        }
+    } else if (m_showQuestionMark) {
+        if (!m_ImgQuestion.IsNull()) {
+            int ew = (int)(m_ImgQuestion.GetWidth() * 2.0f * mapScale), eh = (int)(m_ImgQuestion.GetHeight() * 2.0f * mapScale);
+            int ex = (int)((m_x + m_colW / 2.0f - camX) * mapScale) - ew / 2, ey = (int)((m_y - camY) * mapScale) - eh - 10;
+            m_ImgQuestion.Draw(hdc, ex, ey, ew, eh);
+        }
     }
 }
 
@@ -96,24 +117,20 @@ void Enemy::RenderDebug(HDC hdc, float camX, float camY, float mapScale) {
 void Enemy::ReleaseAll() { 
     Gangster::Release(); Grunt::Release(); Pomp::Release(); ShieldCop::Release(); 
     if (!m_ImgExclaim[0].IsNull()) m_ImgExclaim[0].Destroy(); if (!m_ImgExclaim[1].IsNull()) m_ImgExclaim[1].Destroy();
+    if (!m_ImgQuestion.IsNull()) m_ImgQuestion.Destroy();
     for (int i = 0; i < 6; i++) m_imgFire2[i].Destroy();
 }
 
 void Enemy::Reset() {
     m_x = m_startX; m_y = m_startY; m_vx = 2.0f; m_vy = 0.0f; m_isAlive = true; m_isFacingLeft = false; m_State = EnemyState::ES_IDLE;
     m_CurrentFrame = 0; m_LastTime = GetTickCount(); m_knockbackVx = 0.0f; m_patternTimer = GetTickCount(); m_isWaiting = false; m_walkDistance = 0.0f; m_isPlayerDetected = false; m_bloodDistance = 0.0f; m_alertStartTime = 0; m_exclaimFrame = 0;
-    m_isBurning = false; m_burnTimer = 0.0f;
+    m_isBurning = false; m_burnTimer = 0.0f; m_showQuestionMark = false;
 }
 
 bool Enemy::OnTakeDamage(float kvx, float kvy, DeathCause cause) {
     if (!m_isImmortal) {
-        m_isAlive = false; m_State = EnemyState::ES_DEAD; m_vx = kvx; m_vy = kvy; m_CurrentFrame = 0;
-        if (cause == DeathCause::FIRE) { 
-            m_isBurning = true; 
-            m_burnTimer = 2.0f; 
-            if (rand() % 2 == 0) SoundManager::Play("explosion1"); 
-            else SoundManager::Play("explosion2");
-        }
+        m_isAlive = false; m_State = EnemyState::ES_DEAD; m_vx = kvx; m_vy = kvy; m_CurrentFrame = 0; m_showQuestionMark = false;
+        if (cause == DeathCause::FIRE) { m_isBurning = true; m_burnTimer = 2.0f; }
         switch (cause) {
         case DeathCause::BOTTLE: SoundManager::Play("SFX_ENEMY_DIE_BOTTLE"); break;
         case DeathCause::BULLET: SoundManager::Play("SFX_ENEMY_DIE_BULLET"); break;
@@ -147,6 +164,7 @@ bool Enemy::CheckDoorCollision(float nx, float ny, float nw, float nh) {
 void Enemy::Update(float ts, const Player& player) {
     DWORD ct = GetTickCount(); float oldX = m_x, oldY = m_y;
     if (m_isBurning) { m_burnTimer -= ts; if (m_burnTimer <= 0) m_isBurning = false; }
+    if (m_showQuestionMark && ct - m_questionMarkStartTime > 2000) m_showQuestionMark = false;
     if (m_isAlive && m_vx != 0.0f) {
         float nx = m_x + m_vx * ts, checkX = (m_vx > 0) ? (nx + m_colW) : nx, checkY = m_y + m_colH + 1.0f; int colType = GetCollisionType((int)checkX, (int)checkY);
         bool canMove = true; if (colType == 0) { if (m_isPlayerDetected && player.GetY() > m_y + 20.0f) canMove = true; else { m_vx = 0.0f; m_isWaiting = true; m_patternTimer = ct; canMove = false; } }
@@ -265,6 +283,25 @@ void Gangster::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, flo
     if (imgArm && (m_ActionState == GangsterAction::GA_AIM || m_ActionState == GangsterAction::GA_FIRE)) Draw(imgArm, 1.0f, 1.0f, (m_isFacingLeft ? -5.0f : 5.0f), -30.0f, true);
     RenderBurningEffect(hdc, mapScale, camX, camY); if (showDebugRect) RenderDebug(hdc, camX, camY, mapScale);
 }
+void Gangster::RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!m_isAlive || !EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) return;
+    int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
+    CImage *imgBody = nullptr; float es = 1.8f;
+    if (m_isFacingLeft) {
+        if (m_ActionState == GangsterAction::GA_HURT_FLY) imgBody = &m_ImgHurtFly_L[m_CurrentFrame % 2]; else if (m_ActionState == GangsterAction::GA_HURT_GROUND || m_State == EnemyState::ES_DEAD) imgBody = &m_ImgHurtGround_L[m_CurrentFrame % 14]; else if (m_State == EnemyState::ES_FALL) imgBody = &m_ImgFall_L[m_CurrentFrame % 12];
+        else { switch (m_ActionState) { case GangsterAction::GA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) imgBody = &m_ImgIdle_L[m_CurrentFrame % 8]; else if (m_State == EnemyState::ES_WALK) imgBody = &m_ImgWalk_L[m_CurrentFrame % 8]; break; case GangsterAction::GA_AIM: imgBody = &m_ImgAim_L[m_CurrentFrame % 4]; break; case GangsterAction::GA_FIRE: imgBody = &m_ImgAim_L[3]; break; case GangsterAction::GA_TURN: imgBody = &m_ImgTurn_L[m_CurrentFrame % 6]; break; case GangsterAction::GA_RUN: imgBody = &m_ImgRun_L[m_CurrentFrame % 10]; break; } }
+    } else {
+        if (m_ActionState == GangsterAction::GA_HURT_FLY) imgBody = &m_ImgHurtFly_R[m_CurrentFrame % 2]; else if (m_ActionState == GangsterAction::GA_HURT_GROUND || m_State == EnemyState::ES_DEAD) imgBody = &m_ImgHurtGround_R[m_CurrentFrame % 14]; else if (m_State == EnemyState::ES_FALL) imgBody = &m_ImgFall_R[m_CurrentFrame % 12];
+        else { switch (m_ActionState) { case GangsterAction::GA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) imgBody = &m_ImgIdle_R[m_CurrentFrame % 8]; else if (m_State == EnemyState::ES_WALK) imgBody = &m_ImgWalk_R[m_CurrentFrame % 8]; break; case GangsterAction::GA_AIM: imgBody = &m_ImgAim_R[m_CurrentFrame % 4]; break; case GangsterAction::GA_FIRE: imgBody = &m_ImgAim_R[3]; break; case GangsterAction::GA_TURN: imgBody = &m_ImgTurn_R[m_CurrentFrame % 6]; break; case GangsterAction::GA_RUN: imgBody = &m_ImgRun_R[m_CurrentFrame % 10]; break; } }
+    }
+    if (imgBody && !imgBody->IsNull()) {
+        int fw = (int)(imgBody->GetWidth() * es * mapScale), fh = (int)(imgBody->GetHeight() * es * mapScale), dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2), dy = sy + (int)(m_colH * mapScale) - fh;
+        Gdiplus::Bitmap bmp(imgBody->GetWidth(), imgBody->GetHeight(), imgBody->GetPitch(), PixelFormat32bppARGB, (BYTE*)imgBody->GetBits());
+        Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix cm = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0.5f,0, 0,0,0,0,1.0f }; attr.SetColorMatrix(&cm);
+        if (m_isFacingLeft) { g->TranslateTransform((float)dx + fw / 2.0f, (float)dy + fh / 2.0f); g->ScaleTransform(-1.0f, 1.0f); g->DrawImage(&bmp, Gdiplus::RectF(-fw / 2.0f, -fh / 2.0f, (float)fw, (float)fh), 0, 0, (float)imgBody->GetWidth(), (float)imgBody->GetHeight(), Gdiplus::UnitPixel, &attr); g->ResetTransform(); }
+        else g->DrawImage(&bmp, Gdiplus::RectF((float)dx, (float)dy, (float)fw, (float)fh), 0, 0, (float)imgBody->GetWidth(), (float)imgBody->GetHeight(), Gdiplus::UnitPixel, &attr);
+    }
+}
 
 // Grunt
 CImage Grunt::m_ImgIdle_R[8], Grunt::m_ImgIdle_L[8], Grunt::m_ImgWalk_R[10], Grunt::m_ImgWalk_L[10], Grunt::m_ImgAttack_R[8], Grunt::m_ImgAttack_L[8], Grunt::m_ImgSlash_R[5], Grunt::m_ImgSlash_L[5], Grunt::m_ImgTurn_R[8], Grunt::m_ImgTurn_L[8], Grunt::m_ImgFall_R[13], Grunt::m_ImgFall_L[13], Grunt::m_ImgHurtFly_R[2], Grunt::m_ImgHurtFly_L[2], Grunt::m_ImgHurtGround_R[16], Grunt::m_ImgHurtGround_L[16], Grunt::m_ImgRun_R[10], Grunt::m_ImgRun_L[10];
@@ -310,31 +347,11 @@ void Grunt::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float 
     RenderExclaim(hdc, camX, camY, mapScale); int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
     float es = 1.8f, msX = 1.0f, msY = 1.0f; CImage *img = nullptr, *imgSlash = nullptr;
     if (m_isFacingLeft) { 
-        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_L[m_CurrentFrame % 2]; 
-        else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_L[m_CurrentFrame % 16]; 
-        else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_L[m_CurrentFrame % 13]; 
-        else {
-            switch (m_ActionState) {
-                case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_L[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break;
-                case GruntAction::GR_ATTACK: img = &m_ImgAttack_L[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_L[m_CurrentFrame - 3]; break;
-                case GruntAction::GR_SLASH: img = &m_ImgSlash_L[m_CurrentFrame % 5]; break;
-                case GruntAction::GR_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 8]; break;
-                case GruntAction::GR_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break;
-            }
-        }
+        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_L[m_CurrentFrame % 2]; else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_L[m_CurrentFrame % 16]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_L[m_CurrentFrame % 13]; 
+        else { switch (m_ActionState) { case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_L[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break; case GruntAction::GR_ATTACK: img = &m_ImgAttack_L[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_L[m_CurrentFrame - 3]; break; case GruntAction::GR_SLASH: img = &m_ImgSlash_L[m_CurrentFrame % 5]; break; case GruntAction::GR_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 8]; break; case GruntAction::GR_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break; } }
     } else { 
-        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; 
-        else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 16]; 
-        else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_R[m_CurrentFrame % 13]; 
-        else {
-            switch (m_ActionState) {
-                case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_R[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break;
-                case GruntAction::GR_ATTACK: img = &m_ImgAttack_R[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_R[m_CurrentFrame - 3]; break;
-                case GruntAction::GR_SLASH: img = &m_ImgSlash_R[m_CurrentFrame % 5]; break;
-                case GruntAction::GR_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 8]; break;
-                case GruntAction::GR_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break;
-            }
-        }
+        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 16]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_R[m_CurrentFrame % 13]; 
+        else { switch (m_ActionState) { case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_R[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break; case GruntAction::GR_ATTACK: img = &m_ImgAttack_R[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_R[m_CurrentFrame - 3]; break; case GruntAction::GR_SLASH: img = &m_ImgSlash_R[m_CurrentFrame % 5]; break; case GruntAction::GR_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 8]; break; case GruntAction::GR_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break; } }
     }
     auto DrawImg = [&](CImage* im, float sX, float sY) {
         if (!im || im->IsNull()) return; int fw = (int)(im->GetWidth() * es * sX * mapScale), fh = (int)(im->GetHeight() * es * sY * mapScale);
@@ -345,6 +362,25 @@ void Grunt::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float 
     DrawImg(img, msX, msY); if (imgSlash) DrawImg(imgSlash, 1.0f, 1.0f);
     RenderBurningEffect(hdc, mapScale, camX, camY); if (showDebugRect) RenderDebug(hdc, camX, camY, mapScale);
 }
+void Grunt::RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!m_isAlive || !EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) return;
+    int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
+    float es = 1.8f; CImage *img = nullptr;
+    if (m_isFacingLeft) {
+        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_L[m_CurrentFrame % 2]; else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_L[m_CurrentFrame % 16]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_L[m_CurrentFrame % 13];
+        else { switch (m_ActionState) { case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) img = &m_ImgIdle_L[m_CurrentFrame % 8]; else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break; case GruntAction::GR_ATTACK: img = &m_ImgAttack_L[m_CurrentFrame % 8]; break; case GruntAction::GR_SLASH: img = &m_ImgSlash_L[m_CurrentFrame % 5]; break; case GruntAction::GR_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 8]; break; case GruntAction::GR_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break; } }
+    } else {
+        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 16]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_R[m_CurrentFrame % 13];
+        else { switch (m_ActionState) { case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) img = &m_ImgIdle_R[m_CurrentFrame % 8]; else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break; case GruntAction::GR_ATTACK: img = &m_ImgAttack_R[m_CurrentFrame % 8]; break; case GruntAction::GR_SLASH: img = &m_ImgSlash_R[m_CurrentFrame % 5]; break; case GruntAction::GR_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 8]; break; case GruntAction::GR_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break; } }
+    }
+    if (img && !img->IsNull()) {
+        int fw = (int)(img->GetWidth() * es * mapScale), fh = (int)(img->GetHeight() * es * mapScale), dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2), dy = sy + (int)(m_colH * mapScale) - fh;
+        Gdiplus::Bitmap bmp(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)img->GetBits());
+        Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix cm = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0.5f,0, 0,0,0,0,1.0f }; attr.SetColorMatrix(&cm);
+        if (m_isFacingLeft) { g->TranslateTransform((float)dx + fw / 2.0f, (float)dy + fh / 2.0f); g->ScaleTransform(-1.0f, 1.0f); g->DrawImage(&bmp, Gdiplus::RectF(-fw / 2.0f, -fh / 2.0f, (float)fw, (float)fh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr); g->ResetTransform(); }
+        else g->DrawImage(&bmp, Gdiplus::RectF((float)dx, (float)dy, (float)fw, (float)fh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr);
+    }
+}
 
 // Pomp
 CImage Pomp::m_ImgIdle_R[8], Pomp::m_ImgIdle_L[8], Pomp::m_ImgWalk_R[10], Pomp::m_ImgWalk_L[10], Pomp::m_ImgAttack_R[6], Pomp::m_ImgAttack_L[6], Pomp::m_ImgBoxIdle_R[10], Pomp::m_ImgBoxIdle_L[10], Pomp::m_ImgBoxHit_R[14], Pomp::m_ImgBoxHit_L[14], Pomp::m_ImgTurn_R[6], Pomp::m_ImgTurn_L[6], Pomp::m_ImgFall_R[13], Pomp::m_ImgFall_L[13], Pomp::m_ImgHurtFly_R[2], Pomp::m_ImgHurtFly_L[2], Pomp::m_ImgHurtGround_R[15], Pomp::m_ImgHurtGround_L[15], Pomp::m_ImgRun_R[10], Pomp::m_ImgRun_L[10];
@@ -352,7 +388,7 @@ Pomp::Pomp(float x, float y) : Enemy(x, y, EnemyType::POMP) { m_ActionState = Po
 Pomp::~Pomp() {}
 void Pomp::Reset() { Enemy::Reset(); m_ActionState = PompAction::PA_NONE; }
 bool Pomp::OnTakeDamage(float kvx, float kvy, DeathCause cause) { if (m_isImmortal) return false; Enemy::OnTakeDamage(kvx, kvy, cause); m_ActionState = PompAction::PA_HURT_FLY; return false; }
-void Pomp::Init() { if (!m_ImgIdle_R[0].IsNull()) return; TCHAR path[256]; for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_idle/%d.png"), i); m_ImgIdle_R[i].Load(path); m_ImgIdle_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_walk/%d.png"), i); m_ImgWalk_R[i].Load(path); m_ImgWalk_L[i].Load(path); } for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_attack/%d.png"), i); m_ImgAttack_R[i].Load(path); m_ImgAttack_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_box_idle/%d.png"), i); m_ImgBoxIdle_R[i].Load(path); m_ImgBoxIdle_L[i].Load(path); } for (int i = 0; i < 14; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_box_hit/%d.png"), i); m_ImgBoxHit_R[i].Load(path); m_ImgBoxHit_L[i].Load(path); } for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_turn/%d.png"), i); m_ImgTurn_R[i].Load(path); m_ImgTurn_L[i].Load(path); } for (int i = 0; i < 13; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_fall/%d.png"), i); m_ImgFall_R[i].Load(path); m_ImgFall_L[i].Load(path); } for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_hurtfly/%d.png"), i); m_ImgHurtFly_R[i].Load(path); m_ImgHurtFly_L[i].Load(path); } for (int i = 0; i < 15; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_hurtground/%d.png"), i); m_ImgHurtGround_R[i].Load(path); m_ImgHurtGround_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_run/%d.png"), i); m_ImgRun_R[i].Destroy(); m_ImgRun_L[i].Destroy(); m_ImgRun_R[i].Load(path); m_ImgRun_L[i].Load(path); } }
+void Pomp::Init() { if (!m_ImgIdle_R[0].IsNull()) return; TCHAR path[256]; for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_idle/%d.png"), i); m_ImgIdle_R[i].Load(path); m_ImgIdle_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_walk/%d.png"), i); m_ImgWalk_R[i].Load(path); m_ImgWalk_L[i].Load(path); } for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_attack/%d.png"), i); m_ImgAttack_R[i].Load(path); m_ImgAttack_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_box_idle/%d.png"), i); m_ImgBoxIdle_R[i].Load(path); m_ImgBoxIdle_L[i].Load(path); } for (int i = 0; i < 14; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_box_hit/%d.png"), i); m_ImgBoxHit_R[i].Load(path); m_ImgBoxHit_L[i].Load(path); } for (int i = 0; i < 6; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_turn/%d.png"), i); m_ImgTurn_R[i].Load(path); m_ImgTurn_L[i].Load(path); } for (int i = 0; i < 13; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_fall/%d.png"), i); m_ImgFall_R[i].Load(path); m_ImgFall_L[i].Load(path); } for (int i = 0; i < 2; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_hurtfly/%d.png"), i); m_ImgHurtFly_R[i].Load(path); m_ImgHurtFly_L[i].Load(path); } for (int i = 0; i < 15; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_hurtground/%d.png"), i); m_ImgHurtGround_R[i].Load(path); m_ImgHurtGround_L[i].Load(path); } for (int i = 0; i < 10; i++) { wsprintf(path, TEXT("assets/enemy/spr_pomp_run/%d.png"), i); m_ImgRun_R[i].Load(path); m_ImgRun_L[i].Load(path); } }
 void Pomp::Release() { for (int i = 0; i < 8; i++) { m_ImgIdle_R[i].Destroy(); m_ImgIdle_L[i].Destroy(); } for (int i = 0; i < 6; i++) { m_ImgAttack_R[i].Destroy(); m_ImgAttack_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgBoxIdle_R[i].Destroy(); m_ImgBoxIdle_L[i].Destroy(); } for (int i = 0; i < 14; i++) { m_ImgBoxHit_R[i].Destroy(); m_ImgBoxHit_L[i].Destroy(); } for (int i = 0; i < 6; i++) { m_ImgTurn_R[i].Destroy(); m_ImgTurn_L[i].Destroy(); } for (int i = 0; i < 13; i++) { m_ImgFall_R[i].Destroy(); m_ImgFall_L[i].Destroy(); } for (int i = 0; i < 2; i++) { m_ImgHurtFly_R[i].Destroy(); m_ImgHurtFly_L[i].Destroy(); } for (int i = 0; i < 15; i++) { m_ImgHurtGround_R[i].Destroy(); m_ImgHurtGround_L[i].Destroy(); } for (int i = 0; i < 10; i++) { m_ImgRun_R[i].Destroy(); m_ImgRun_L[i].Destroy(); } }
 void Pomp::Update(float ts, const Player& player) {
     if (!m_isAlive) { if (m_ActionState == PompAction::PA_HURT_FLY && m_vy == 0) { m_ActionState = PompAction::PA_HURT_GROUND; m_vx = 0; m_CurrentFrame = 0; } if (GetTickCount() - m_LastTime >= 100) { if (m_ActionState == PompAction::PA_HURT_GROUND) { if (m_CurrentFrame < 14) m_CurrentFrame++; } else m_CurrentFrame++; m_LastTime = GetTickCount(); } Enemy::Update(ts, player); return; }
@@ -393,7 +429,7 @@ void Pomp::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float m
         if (m_ActionState == PompAction::PA_HURT_FLY) img = &m_ImgHurtFly_L[m_CurrentFrame % 2]; else if (m_ActionState == PompAction::PA_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_L[m_CurrentFrame % 15]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_L[m_CurrentFrame % 13];
         else { switch (m_ActionState) { case PompAction::PA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_L[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break; case PompAction::PA_ATTACK: img = &m_ImgAttack_L[m_CurrentFrame % 6]; break; case PompAction::PA_BOX_IDLE: img = &m_ImgBoxIdle_L[m_CurrentFrame % 10]; break; case PompAction::PA_BOX_HIT: img = &m_ImgBoxHit_L[m_CurrentFrame % 14]; break; case PompAction::PA_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 6]; break; case PompAction::PA_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break; } }
     } else { 
-        if (m_ActionState == PompAction::PA_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; else if (m_ActionState == PompAction::PA_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 15]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_R[m_CurrentFrame % 13];
+        if (m_ActionState == PompAction::PA_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; else if (m_ActionState == PompAction::PA_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 15]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgIdle_R[m_CurrentFrame % 8];
         else { switch (m_ActionState) { case PompAction::PA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_R[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break; case PompAction::PA_ATTACK: img = &m_ImgAttack_R[m_CurrentFrame % 6]; break; case PompAction::PA_BOX_IDLE: img = &m_ImgBoxIdle_R[m_CurrentFrame % 10]; break; case PompAction::PA_BOX_HIT: img = &m_ImgBoxHit_R[m_CurrentFrame % 14]; break; case PompAction::PA_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 6]; break; case PompAction::PA_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break; } }
     }
     if (img && !img->IsNull()) {
@@ -402,6 +438,25 @@ void Pomp::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float m
         else img->Draw(hdc, dx, fy, fw, fh);
     }
     RenderBurningEffect(hdc, mapScale, camX, camY); if (showDebugRect) RenderDebug(hdc, camX, camY, mapScale);
+}
+void Pomp::RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!m_isAlive || !EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) return;
+    int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
+    float es = 1.8f; CImage* img = nullptr;
+    if (m_isFacingLeft) {
+        if (m_ActionState == PompAction::PA_HURT_FLY) img = &m_ImgHurtFly_L[m_CurrentFrame % 2]; else if (m_ActionState == PompAction::PA_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_L[m_CurrentFrame % 15]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_L[m_CurrentFrame % 13];
+        else { switch (m_ActionState) { case PompAction::PA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) img = &m_ImgIdle_L[m_CurrentFrame % 8]; else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break; case PompAction::PA_ATTACK: img = &m_ImgAttack_L[m_CurrentFrame % 6]; break; case PompAction::PA_BOX_IDLE: img = &m_ImgBoxIdle_L[m_CurrentFrame % 10]; break; case PompAction::PA_BOX_HIT: img = &m_ImgBoxHit_L[m_CurrentFrame % 14]; break; case PompAction::PA_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 6]; break; case PompAction::PA_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break; } }
+    } else {
+        if (m_ActionState == PompAction::PA_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; else if (m_ActionState == PompAction::PA_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 15]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgIdle_R[m_CurrentFrame % 8];
+        else { switch (m_ActionState) { case PompAction::PA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) img = &m_ImgIdle_R[m_CurrentFrame % 8]; else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break; case PompAction::PA_ATTACK: img = &m_ImgAttack_R[m_CurrentFrame % 6]; break; case PompAction::PA_BOX_IDLE: img = &m_ImgBoxIdle_R[m_CurrentFrame % 10]; break; case PompAction::PA_BOX_HIT: img = &m_ImgBoxHit_R[m_CurrentFrame % 14]; break; case PompAction::PA_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 6]; break; case PompAction::PA_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break; } }
+    }
+    if (img && !img->IsNull()) {
+        int fw = (int)(img->GetWidth() * es * mapScale), fh = (int)(img->GetHeight() * es * mapScale), dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2), dy = sy + (int)(m_colH * mapScale) - fh;
+        Gdiplus::Bitmap bmp(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)img->GetBits());
+        Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix cm = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0.5f,0, 0,0,0,0,1.0f }; attr.SetColorMatrix(&cm);
+        if (m_isFacingLeft) { g->TranslateTransform((float)dx + fw / 2.0f, (float)dy + fh / 2.0f); g->ScaleTransform(-1.0f, 1.0f); g->DrawImage(&bmp, Gdiplus::RectF(-fw / 2.0f, -fh / 2.0f, (float)fw, (float)fh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr); g->ResetTransform(); }
+        else g->DrawImage(&bmp, Gdiplus::RectF((float)dx, (float)dy, (float)fw, (float)fh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr);
+    }
 }
 
 // ShieldCop
@@ -419,7 +474,7 @@ void ShieldCop::Update(float ts, const Player& player) {
         float dx = player.GetX() - m_x; bool nextFacingLeft = (dx < 0);
         if (m_isFacingLeft != nextFacingLeft && m_ActionState != ShieldCopAction::SA_TURN) { m_ActionState = ShieldCopAction::SA_TURN; m_CurrentFrame = 0; m_patternTimer = ct; }
         m_isFacingLeft = nextFacingLeft;
-        if (m_ActionState == ShieldCopAction::SA_TURN) { m_vx = 0; if (ct - m_LastTime >= (DWORD)(100.0f / ts)) { m_CurrentFrame++; m_LastTime = ct; if (m_CurrentFrame >= 8) { m_ActionState = ShieldCopAction::SA_NONE; } } }
+        if (m_ActionState == ShieldCopAction::SA_TURN) { m_vx = 0; if (ct - m_LastTime >= (DWORD)(100.0f / ts)) { m_CurrentFrame++; m_LastTime = ct; if (m_CurrentFrame >= 8) m_ActionState = ShieldCopAction::SA_NONE; } }
         else if (m_ActionState == ShieldCopAction::SA_BASH) {
             m_vx = 0; m_State = EnemyState::ES_IDLE; if (ct - m_LastTime >= (DWORD)(100.0f / ts)) {
                 m_CurrentFrame++; m_LastTime = ct;
@@ -460,4 +515,23 @@ void ShieldCop::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, fl
         else img->Draw(hdc, dx, fy, fw, fh);
     }
     RenderBurningEffect(hdc, mapScale, camX, camY); if (showDebugRect) RenderDebug(hdc, camX, camY, mapScale);
+}
+void ShieldCop::RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!m_isAlive || !EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) return;
+    int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
+    float es = 1.8f; CImage* img = nullptr;
+    if (m_isFacingLeft) {
+        if (m_ActionState == ShieldCopAction::SA_HURT_FLY) img = &m_ImgKnockback_L[m_CurrentFrame % 2]; else if (m_ActionState == ShieldCopAction::SA_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgTragedyDie_L[m_CurrentFrame % 15]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgIdle_L[m_CurrentFrame % 6];
+        else { switch (m_ActionState) { case ShieldCopAction::SA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) img = &m_ImgIdle_L[m_CurrentFrame % 6]; else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break; case ShieldCopAction::SA_AIM: img = &m_ImgAim_L[m_CurrentFrame % 19]; break; case ShieldCopAction::SA_BASH: img = &m_ImgBash_L[m_CurrentFrame % 6]; break; case ShieldCopAction::SA_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 8]; break; case ShieldCopAction::SA_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break; } }
+    } else {
+        if (m_ActionState == ShieldCopAction::SA_HURT_FLY) img = &m_ImgKnockback_R[m_CurrentFrame % 2]; else if (m_ActionState == ShieldCopAction::SA_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgTragedyDie_R[m_CurrentFrame % 15]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgIdle_R[m_CurrentFrame % 6];
+        else { switch (m_ActionState) { case ShieldCopAction::SA_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) img = &m_ImgIdle_R[m_CurrentFrame % 6]; else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break; case ShieldCopAction::SA_AIM: img = &m_ImgAim_R[m_CurrentFrame % 19]; break; case ShieldCopAction::SA_BASH: img = &m_ImgBash_R[m_CurrentFrame % 6]; break; case ShieldCopAction::SA_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 8]; break; case ShieldCopAction::SA_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break; } }
+    }
+    if (img && !img->IsNull()) {
+        int fw = (int)(img->GetWidth() * es * mapScale), fh = (int)(img->GetHeight() * es * mapScale), dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2), dy = sy + (int)(m_colH * mapScale) - fh;
+        Gdiplus::Bitmap bmp(img->GetWidth(), img->GetHeight(), img->GetPitch(), PixelFormat32bppARGB, (BYTE*)img->GetBits());
+        Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix cm = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0.5f,0, 0,0,0,0,1.0f }; attr.SetColorMatrix(&cm);
+        if (m_isFacingLeft) { g->TranslateTransform((float)dx + fw / 2.0f, (float)dy + fh / 2.0f); g->ScaleTransform(-1.0f, 1.0f); g->DrawImage(&bmp, Gdiplus::RectF(-fw / 2.0f, -fh / 2.0f, (float)fw, (float)fh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr); g->ResetTransform(); }
+        else g->DrawImage(&bmp, Gdiplus::RectF((float)dx, (float)dy, (float)fw, (float)fh), 0, 0, (float)img->GetWidth(), (float)img->GetHeight(), Gdiplus::UnitPixel, &attr);
+    }
 }

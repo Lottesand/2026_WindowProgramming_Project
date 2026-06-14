@@ -99,6 +99,7 @@ public:
     void Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
     void UpdateAnimation();
     void Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect, float stageTimer = 10.0f);
+    void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale); // 추가
     
     void SetState(PlayerState state);
 

@@ -570,3 +570,45 @@ void Kissyface::ReleaseAll() {
     destroyVec(m_imgDie); destroyVec(m_imgDead); destroyVec(m_imgNoHead);
     m_imgAxe.Destroy();
 }
+
+void Kissyface::RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) {
+    if (!m_isAlive || !EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) return;
+    float pFS = mapScale, vx = (m_x - camX) * pFS, vy = (m_y - camY) * pFS;
+    CImage* currentImg = (m_imgIdle.empty() ? nullptr : &m_imgIdle[0]);
+    switch (m_ActionState) {
+    case KissyfaceAction::KF_BLOCK: if (!m_imgBlock.empty()) currentImg = &m_imgBlock[m_animFrame % m_imgBlock.size()]; break;
+    case KissyfaceAction::KF_THROW: if (!m_imgThrow.empty()) currentImg = &m_imgThrow[m_animFrame % m_imgThrow.size()]; break;
+    case KissyfaceAction::KF_TUG: if (!m_imgTug.empty()) currentImg = &m_imgTug[m_animFrame % m_imgTug.size()]; break;
+    case KissyfaceAction::KF_RETURN_AXE: if (!m_imgReturnAxe.empty()) currentImg = &m_imgReturnAxe[m_animFrame % m_imgReturnAxe.size()]; break;
+    case KissyfaceAction::KF_PREJUMP: if (!m_imgPreJump.empty()) currentImg = &m_imgPreJump[m_animFrame % m_imgPreJump.size()]; break;
+    case KissyfaceAction::KF_JUMP: if (!m_imgJump.empty()) currentImg = &m_imgJump[m_animFrame % m_imgJump.size()]; break;
+    case KissyfaceAction::KF_LAND: if (!m_imgLand.empty()) currentImg = &m_imgLand[m_animFrame % m_imgLand.size()]; break;
+    case KissyfaceAction::KF_HURT_FLY: if (!m_imgHurtFly.empty()) currentImg = &m_imgHurtFly[m_animFrame % m_imgHurtFly.size()]; break;
+    case KissyfaceAction::KF_HURT_GROUND: if (!m_imgHurtGround.empty()) currentImg = &m_imgHurtGround[m_animFrame % m_imgHurtGround.size()]; break;
+    case KissyfaceAction::KF_DOWNED: if (m_imgHurtFly.size() >= 6) currentImg = &m_imgHurtFly[5]; break;
+    case KissyfaceAction::KF_STRUGGLE: if (!m_imgStruggle.empty()) currentImg = &m_imgStruggle[m_animFrame % m_imgStruggle.size()]; break;
+    case KissyfaceAction::KF_RECOVER: if (!m_imgRecover.empty()) currentImg = &m_imgRecover[m_animFrame % m_imgRecover.size()]; break;
+    case KissyfaceAction::KF_PRELUNGE: if (!m_imgPreLunge.empty()) currentImg = &m_imgPreLunge[m_animFrame % m_imgPreLunge.size()]; break;
+    case KissyfaceAction::KF_LUNGE: if (!m_imgLunge.empty()) currentImg = &m_imgLunge[m_animFrame % m_imgLunge.size()]; break;
+    case KissyfaceAction::KF_LUNGEATTACK: if (!m_imgLungeAttack.empty()) currentImg = &m_imgLungeAttack[m_animFrame % m_imgLungeAttack.size()]; break;
+    case KissyfaceAction::KF_DIE: if (!m_imgDie.empty()) currentImg = &m_imgDie[m_animFrame % m_imgDie.size()]; break;
+    case KissyfaceAction::KF_DEAD: if (!m_imgDead.empty()) currentImg = &m_imgDead[m_animFrame % m_imgDead.size()]; break;
+    case KissyfaceAction::KF_NOHEAD: if (!m_imgNoHead.empty()) currentImg = &m_imgNoHead[m_animFrame % m_imgNoHead.size()]; break;
+    default: break;
+    }
+    if (currentImg && !currentImg->IsNull()) {
+        int imgW = currentImg->GetWidth(), imgH = currentImg->GetHeight(); float ds = 2.0f * pFS;
+        int fw = (int)(imgW * ds), fh = (int)(imgH * ds);
+        int dx = (int)(vx + (m_colW * pFS) / 2.0f - fw / 2.0f), dy = (int)(vy + (m_colH * pFS) - fh);
+        if (m_ActionState == KissyfaceAction::KF_TUG) dx += (int)(m_isFacingLeft ? -35.0f * pFS : 35.0f * pFS);
+        void* bits = currentImg->GetBits();
+        if (bits) {
+            Gdiplus::Bitmap bmp(imgW, imgH, currentImg->GetPitch(), PixelFormat32bppARGB, (BYTE*)bits);
+            Gdiplus::ImageAttributes attr; Gdiplus::ColorMatrix cm = { 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0.5f,0, 0,0,0,0,1.0f }; attr.SetColorMatrix(&cm);
+            Gdiplus::Matrix originalMatrix; g->GetTransform(&originalMatrix);
+            if (m_isFacingLeft) { g->TranslateTransform((float)(dx + fw), (float)dy); g->ScaleTransform(-1.0f, 1.0f); g->DrawImage(&bmp, Gdiplus::Rect(0, 0, fw, fh), 0, 0, imgW, imgH, Gdiplus::UnitPixel, &attr); }
+            else { g->DrawImage(&bmp, Gdiplus::Rect(dx, dy, fw, fh), 0, 0, imgW, imgH, Gdiplus::UnitPixel, &attr); }
+            g->SetTransform(&originalMatrix);
+        }
+    }
+}
