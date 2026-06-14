@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <atlimage.h>
 #include <math.h>
+#include "../Core/Common.h"
 
 class Player;
 
@@ -11,8 +12,6 @@ enum class GangsterAction { GA_NONE, GA_AIM, GA_FIRE, GA_TURN, GA_RUN, GA_HURT_F
 enum class GruntAction { GR_NONE, GR_ATTACK, GR_SLASH, GR_TURN, GR_RUN, GR_HURT_FLY, GR_HURT_GROUND };
 enum class PompAction { PA_NONE, PA_ATTACK, PA_BOX_IDLE, PA_BOX_HIT, PA_TURN, PA_RUN, PA_HURT_FLY, PA_HURT_GROUND };
 enum class ShieldCopAction { SA_NONE, SA_AIM, SA_BASH, SA_TURN, SA_RUN, SA_HURT_FLY, SA_HURT_GROUND };
-
-enum class DeathCause { SWORD, BULLET, BOTTLE, KNIFE, FIRE };
 
 class Enemy {
 protected:

@@ -66,13 +66,14 @@ void Item::ReleaseAssets() {
 }
 
 void Item::OnPickUp() { m_state = ItemState::HELD; m_isActive = true; }
-void Item::OnThrow(float vx, float vy) { m_state = ItemState::THROWN; m_vx = vx; m_vy = vy; m_isActive = true; }
+void Item::OnThrow(float vx, float vy) { m_state = ItemState::THROWN; m_vx = vx; m_vy = vy; m_isActive = true; if (m_type == ItemType::EXPLOSIVE_VIAL) SoundManager::Play("vial_explosion"); }
 
 void Item::OnHit(const std::vector<Enemy*>& enemies, Player* player) {
     if (m_type == ItemType::EXPLOSIVE_VIAL) {
-        float rad = 150.0f; EffectManager::AddExplosion(m_x, m_y, GetTickCount(), rad); SoundManager::Play("SFX_EXPLOSION");
-        for (auto enemy : enemies) { if (enemy && enemy->GetIsAlive()) { float ex = enemy->GetX() + enemy->GetColW() / 2.0f, ey = enemy->GetY() + enemy->GetColH() / 2.0f, dx = ex - m_x, dy = ey - m_y; if (sqrt(dx * dx + dy * dy) <= rad) { float kbx = (ex > m_x) ? 20.0f : -20.0f; enemy->OnTakeDamage(kbx, -10.0f, DeathCause::FIRE); } } }
-        if (player && !player->IsDead() && !player->IsGodMode()) { float px = player->GetX() + player->GetColW() / 2.0f, py = player->GetY() + player->GetColH() / 2.0f, dx = px - m_x, dy = py - m_y; if (sqrt(dx * dx + dy * dy) <= rad) { float kbx = (px > m_x) ? 20.0f : -20.0f; player->OnTakeDamage(1.0f, kbx, -10.0f, m_x, m_y); } }
+        float rad = 180.0f; EffectManager::AddExplosion(m_x, m_y, GetTickCount(), rad); 
+        SoundManager::Play(rand() % 2 == 0 ? "SFX_EXPLOSION_1" : "SFX_EXPLOSION_2");
+        for (auto enemy : enemies) { if (enemy && enemy->GetIsAlive()) { float ex = enemy->GetX() + enemy->GetColW() / 2.0f, ey = enemy->GetY() + enemy->GetColH() / 2.0f, dx = ex - m_x, dy = ey - m_y; if (sqrt(dx * dx + dy * dy) <= rad) { float kbx = (ex > m_x) ? 25.0f : -25.0f; enemy->OnTakeDamage(kbx, -12.0f, DeathCause::FIRE); } } }
+        if (player && !player->IsDead() && !player->IsGodMode()) { float px = player->GetX() + player->GetColW() / 2.0f, py = player->GetY() + player->GetColH() / 2.0f, dx = px - m_x, dy = py - m_y; if (sqrt(dx * dx + dy * dy) <= rad) { float kbx = (px > m_x) ? 20.0f : -20.0f; player->OnTakeDamage(1.0f, kbx, -10.0f, m_x, m_y, DeathCause::FIRE); } }
         auto oilDrums = StageManager::GetCurrentOilDrums(); if (oilDrums) { for (auto& drum : *oilDrums) { if (drum.IsExploded() || drum.IsPending()) continue; float dx = (drum.GetX() + drum.GetWidth() / 2.0f) - m_x, dy = (drum.GetY() + drum.GetHeight() / 2.0f) - m_y; if (sqrt(dx * dx + dy * dy) <= rad) drum.Trigger(100 + rand() % 200); } }
     }
 }
@@ -87,8 +88,47 @@ CImage& Item::GetHUDImage(ItemType type) { if (m_hudImages.count(type) && !m_hud
 
 void Item::Update(float ts, Player& player, const std::vector<Enemy*>& enemies) {
     if (!m_isActive || m_state == ItemState::HELD) return;
-    if (m_state == ItemState::ON_GROUND) { if (m_showIndicator) { DWORD ct = GetTickCount(); if (ct - m_arrowLastTime >= 80) { m_arrowFrame = (m_arrowFrame + 1) % 8; m_arrowLastTime = ct; } } m_vy += 1.0f * ts; float ny = m_y + m_vy * ts; if (CheckMapCollision(m_x, ny, m_width, m_height)) m_vy = 0; else m_y = ny; }
-    else if (m_state == ItemState::THROWN) { m_x += m_vx * ts; m_y += m_vy * ts; m_rotation += 0.5f * ts; RECT itemR = { (int)m_x, (int)m_y, (int)(m_x + m_width), (int)(m_y + m_height) }; for (auto enemy : enemies) { if (enemy && enemy->GetIsAlive()) { RECT eR = enemy->GetRect(), ol; if (IntersectRect(&ol, &itemR, &eR)) { float spd = sqrt(m_vx * m_vx + m_vy * m_vy); if (spd > 0) EffectManager::AddNeonTrail(m_x + m_width / 2.0f, m_y + m_height / 2.0f, m_vx / spd, m_vy / spd, atan2(m_vy, m_vx)); DeathCause cause = (m_type == ItemType::EXPLOSIVE_VIAL) ? DeathCause::FIRE : ((m_type == ItemType::KNIFE || m_type == ItemType::BUTCHER_KNIFE) ? DeathCause::KNIFE : DeathCause::BOTTLE); enemy->OnTakeDamage(m_vx * 0.5f, -5.0f, cause); OnHit(enemies, &player); m_isActive = false; return; } } } if (CheckMapCollision(m_x, m_y, m_width, m_height)) { OnHit(enemies, &player); m_isActive = false; } }
+    if (m_state == ItemState::ON_GROUND) { 
+        if (m_showIndicator) { 
+            DWORD ct = GetTickCount(); 
+            if (ct - m_arrowLastTime >= 80) { 
+                m_arrowFrame = (m_arrowFrame + 1) % 8; 
+                m_arrowLastTime = ct; 
+            } 
+        } 
+    }
+    else if (m_state == ItemState::THROWN) {
+        m_x += m_vx * ts; m_y += m_vy * ts; m_rotation += 0.5f * ts;
+        RECT itemR = { (int)m_x, (int)m_y, (int)(m_x + m_width), (int)(m_y + m_height) };
+        
+        // Oil Drum Collision
+        auto oilDrums = StageManager::GetCurrentOilDrums();
+        if (oilDrums && m_type == ItemType::EXPLOSIVE_VIAL) {
+            for (auto& drum : *oilDrums) {
+                if (drum.IsExploded()) continue;
+                RECT dR = { (int)drum.GetX(), (int)drum.GetY(), (int)(drum.GetX() + drum.GetWidth()), (int)(drum.GetY() + drum.GetHeight()) }, ol;
+                if (IntersectRect(&ol, &itemR, &dR)) {
+                    drum.Trigger(0); // Explode drum IMMEDIATELY
+                    OnHit(enemies, &player);
+                    m_isActive = false;
+                    return;
+                }
+            }
+        }
+
+        for (auto enemy : enemies) {
+            if (enemy && enemy->GetIsAlive()) {
+                RECT eR = enemy->GetRect(), ol;
+                if (IntersectRect(&ol, &itemR, &eR)) {
+                    float spd = sqrt(m_vx * m_vx + m_vy * m_vy);
+                    if (spd > 0 && m_type != ItemType::EXPLOSIVE_VIAL) EffectManager::AddNeonTrail(m_x + m_width / 2.0f, m_y + m_height / 2.0f, m_vx / spd, m_vy / spd, atan2(m_vy, m_vx));
+                    DeathCause cause = (m_type == ItemType::EXPLOSIVE_VIAL) ? DeathCause::FIRE : ((m_type == ItemType::KNIFE || m_type == ItemType::BUTCHER_KNIFE) ? DeathCause::KNIFE : DeathCause::BOTTLE);
+                    enemy->OnTakeDamage(m_vx * 0.5f, -5.0f, cause); OnHit(enemies, &player); m_isActive = false; return;
+                }
+            }
+        }
+        if (CheckMapCollision(m_x, m_y, m_width, m_height)) { OnHit(enemies, &player); m_isActive = false; }
+    }
 }
 
 void Item::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale) {

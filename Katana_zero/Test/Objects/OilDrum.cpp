@@ -66,7 +66,7 @@ void OilDrum::Explode(const std::vector<Enemy*>& enemies, std::vector<OilDrum>& 
 
     // Trigger VFX and Sound
     EffectManager::AddExplosion(centerX, centerY, GetTickCount(), explosionRadius);
-    SoundManager::Play("SFX_EXPLOSION");
+    SoundManager::Play(rand() % 2 == 0 ? "SFX_EXPLOSION_1" : "SFX_EXPLOSION_2");
 
     // Damage Enemies
     for (auto enemy : enemies) {
@@ -88,7 +88,7 @@ void OilDrum::Explode(const std::vector<Enemy*>& enemies, std::vector<OilDrum>& 
         float dx = px - centerX, dy = py - centerY;
         if (sqrt(dx * dx + dy * dy) <= explosionRadius) {
             float kbx = (px > centerX) ? 20.0f : -20.0f;
-            player->OnTakeDamage(1.0f, kbx, -10.0f, centerX, centerY);
+            player->OnTakeDamage(1.0f, kbx, -10.0f, centerX, centerY, DeathCause::FIRE);
         }
     }
 
@@ -99,9 +99,8 @@ void OilDrum::Explode(const std::vector<Enemy*>& enemies, std::vector<OilDrum>& 
         float ox = other.m_x + other.m_width / 2.0f;
         float oy = other.m_y + other.m_height / 2.0f;
         float dx = ox - centerX, dy = oy - centerY;
-        if (sqrt(dx * dx + dy * dy) <= explosionRadius) {
-            // Speed up to 50-150ms
-            other.Trigger(50 + rand() % 100);
+        if (sqrt(dx * dx + dy * dy) <= explosionRadius + 20.0f) {
+            other.Trigger(100 + rand() % 200);
         }
     }
 }

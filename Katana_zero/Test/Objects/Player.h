@@ -6,6 +6,7 @@
 #include <vector>
 #include "Item.h"
 #include <deque>
+#include "../Core/Common.h"
 
 // ?꾩뿭 蹂???좎뼵
 extern int g_playerAfterImageInterval;
@@ -164,7 +165,7 @@ public:
     bool IsGodMode() const { return m_isGodMode; }
     float m_bloodDistance;
     DWORD m_lastBleedTime;
-    void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f, float sourceX = -1.0f, float sourceY = -1.0f);
+    void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f, float sourceX = -1.0f, float sourceY = -1.0f, DeathCause cause = DeathCause::SWORD);
 
     // Item management
     class Item* m_pHeldItem = nullptr;

@@ -39,23 +39,7 @@ void Enemy::LoadCommonAssets() {
 }
 
 void Enemy::RenderBurningEffect(HDC hdc, float mapScale, float camX, float camY) {
-    if (!m_isBurning) return;
-    int fireFrame = (GetTickCount() / 100) % 6;
-    CImage* img = &m_imgFire2[fireFrame];
-    if (img->IsNull()) return;
-    int om = SetGraphicsMode(hdc, GM_ADVANCED); XFORM xo; GetWorldTransform(hdc, &xo);
-    struct FirePos { float ox, oy, scale; };
-    FirePos positions[] = { { 0.2f, 0.2f, 1.2f }, { 0.7f, 0.3f, 1.0f }, { 0.4f, 0.6f, 1.3f }, { 0.1f, 0.8f, 0.9f }, { 0.8f, 0.7f, 1.1f } };
-    float rad = -1.5708f; float cosA = cos(rad), sinA = sin(rad);
-    for (auto& p : positions) {
-        float fx = m_x + m_colW * p.ox, fy = m_y + m_colH * p.oy;
-        int screenX = (int)((fx - camX) * mapScale), screenY = (int)((fy - camY) * mapScale);
-        int fw = (int)(img->GetWidth() * p.scale * mapScale * 2.0f), fh = (int)(img->GetHeight() * p.scale * mapScale * 2.0f);
-        XFORM rot = { cosA, sinA, -sinA, cosA, (float)screenX, (float)screenY }, combined; CombineTransform(&combined, &rot, &xo);
-        SetWorldTransform(hdc, &combined); img->TransparentBlt(hdc, -fw / 2, -fh / 2, fw, fh, 0, 0, img->GetWidth(), img->GetHeight(), RGB(0, 0, 0));
-        SetWorldTransform(hdc, &xo);
-    }
-    SetGraphicsMode(hdc, om);
+    // Burning visual effect (fire2) disabled per user request.
 }
 
 bool Enemy::IsPlayerInCone(float px, float py, float pw, float ph) {
@@ -115,7 +99,12 @@ void Enemy::Reset() {
 bool Enemy::OnTakeDamage(float kvx, float kvy, DeathCause cause) {
     if (!m_isImmortal) {
         m_isAlive = false; m_State = EnemyState::ES_DEAD; m_vx = kvx; m_vy = kvy; m_CurrentFrame = 0;
-        if (cause == DeathCause::FIRE) { m_isBurning = true; m_burnTimer = 2.0f; }
+        if (cause == DeathCause::FIRE) { 
+            m_isBurning = true; 
+            m_burnTimer = 2.0f; 
+            if (rand() % 2 == 0) SoundManager::Play("explosion1"); 
+            else SoundManager::Play("explosion2");
+        }
         switch (cause) {
         case DeathCause::BOTTLE: SoundManager::Play("SFX_ENEMY_DIE_BOTTLE"); break;
         case DeathCause::BULLET: SoundManager::Play("SFX_ENEMY_DIE_BULLET"); break;
@@ -312,14 +301,35 @@ void Grunt::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float 
     RenderExclaim(hdc, camX, camY, mapScale); int sx = (int)((m_x - camX) * mapScale), sy = (int)((m_y - camY) * mapScale);
     float es = 1.8f, msX = 1.0f, msY = 1.0f; CImage *img = nullptr, *imgSlash = nullptr;
     if (m_isFacingLeft) { 
-        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_L[m_CurrentFrame % 2]; else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_L[m_CurrentFrame % 16]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_L[m_CurrentFrame % 13];
-        else { switch (m_ActionState) { case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_L[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break; case GruntAction::GR_ATTACK: img = &m_ImgAttack_L[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_L[m_CurrentFrame - 3]; break; case GruntAction::GR_SLASH: img = &m_ImgSlash_L[m_CurrentFrame % 5]; break; case GruntAction::GR_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 8]; break; case GruntAction::GR_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break; } }
+        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_L[m_CurrentFrame % 2]; 
+        else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_L[m_CurrentFrame % 16]; 
+        else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_L[m_CurrentFrame % 13]; 
+        else {
+            switch (m_ActionState) {
+                case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_L[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_L[m_CurrentFrame % 10]; break;
+                case GruntAction::GR_ATTACK: img = &m_ImgAttack_L[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_L[m_CurrentFrame - 3]; break;
+                case GruntAction::GR_SLASH: img = &m_ImgSlash_L[m_CurrentFrame % 5]; break;
+                case GruntAction::GR_TURN: img = &m_ImgTurn_L[m_CurrentFrame % 8]; break;
+                case GruntAction::GR_RUN: img = &m_ImgRun_L[m_CurrentFrame % 10]; break;
+            }
+        }
     } else { 
-        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 16]; else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_R[m_CurrentFrame % 13];
-        else { switch (m_ActionState) { case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_R[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break; case GruntAction::GR_ATTACK: img = &m_ImgAttack_R[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_R[m_CurrentFrame - 3]; break; case GruntAction::GR_SLASH: img = &m_ImgSlash_R[m_CurrentFrame % 5]; break; case GruntAction::GR_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 8]; break; case GruntAction::GR_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break; } }
+        if (m_ActionState == GruntAction::GR_HURT_FLY) img = &m_ImgHurtFly_R[m_CurrentFrame % 2]; 
+        else if (m_ActionState == GruntAction::GR_HURT_GROUND || m_State == EnemyState::ES_DEAD) img = &m_ImgHurtGround_R[m_CurrentFrame % 16]; 
+        else if (m_State == EnemyState::ES_FALL) img = &m_ImgFall_R[m_CurrentFrame % 13]; 
+        else {
+            switch (m_ActionState) {
+                case GruntAction::GR_NONE: if (m_State == EnemyState::ES_IDLE || m_State == EnemyState::ES_ALERT) { img = &m_ImgIdle_R[m_CurrentFrame % 8]; msX = 1.1f; msY = 1.1f; } else if (m_State == EnemyState::ES_WALK) img = &m_ImgWalk_R[m_CurrentFrame % 10]; break;
+                case GruntAction::GR_ATTACK: img = &m_ImgAttack_R[m_CurrentFrame % 8]; if (m_CurrentFrame >= 3 && m_CurrentFrame <= 7) imgSlash = &m_ImgSlash_R[m_CurrentFrame - 3]; break;
+                case GruntAction::GR_SLASH: img = &m_ImgSlash_R[m_CurrentFrame % 5]; break;
+                case GruntAction::GR_TURN: img = &m_ImgTurn_R[m_CurrentFrame % 8]; break;
+                case GruntAction::GR_RUN: img = &m_ImgRun_R[m_CurrentFrame % 10]; break;
+            }
+        }
     }
     auto DrawImg = [&](CImage* im, float sX, float sY) {
-        if (!im || im->IsNull()) return; int fw = (int)(im->GetWidth() * es * sX * mapScale), fh = (int)(im->GetHeight() * es * sY * mapScale), fy = sy + (int)(m_colH * mapScale) - fh, dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2);
+        if (!im || im->IsNull()) return; int fw = (int)(im->GetWidth() * es * sX * mapScale), fh = (int)(im->GetHeight() * es * sY * mapScale);
+        int fy = sy + (int)(m_colH * mapScale) - fh, dx = sx + (int)(m_colW * mapScale / 2) - (fw / 2);
         if (m_isFacingLeft) { int om = SetGraphicsMode(hdc, GM_ADVANCED); XFORM xo; GetWorldTransform(hdc, &xo); XFORM xl = { -1.0f, 0.0f, 0.0f, 1.0f, (float)(2 * dx + fw), 0.0f }; SetWorldTransform(hdc, &xl); im->Draw(hdc, dx, fy, fw, fh); SetWorldTransform(hdc, &xo); SetGraphicsMode(hdc, om); }
         else im->Draw(hdc, dx, fy, fw, fh);
     };

@@ -2,12 +2,14 @@
 #include "Player.h"
 #include "Physics.h"
 #include "../SceneAndMap/Camera.h"
+#include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
 #include "../Core/SoundManager.h"
 #include <gdiplus.h>
 #include <cstdio>
 #include <vector>
 #include <cmath>
+#include <cstdlib>
 #include <map>
 
 std::vector<CImage> Kissyface::m_imgIdle;
@@ -184,7 +186,7 @@ void Kissyface::Update(float ts, const Player& player) {
     break;
 
     case KissyfaceAction::KF_DIE:
-        if (m_animTimer > 3.0f) { 
+        if (m_animTimer > 0.12f) { 
             m_animTimer = 0;
             m_animFrame++;
             if (m_animFrame >= (int)m_imgDie.size()) {
@@ -197,6 +199,16 @@ void Kissyface::Update(float ts, const Player& player) {
 
     case KissyfaceAction::KF_DEAD:
         m_animFrame = 0;
+        break;
+
+    case KissyfaceAction::KF_NOHEAD:
+        if (m_animTimer > 0.12f) {
+            m_animTimer = 0;
+            m_animFrame++;
+            if (m_animFrame >= (int)m_imgNoHead.size()) {
+                m_animFrame = (int)m_imgNoHead.size() - 1;
+            }
+        }
         break;
 
     case KissyfaceAction::KF_RECOVER:
@@ -370,6 +382,21 @@ bool Kissyface::OnTakeDamage(float kvx, float kvy, DeathCause cause) {
     if (m_ActionState == KissyfaceAction::KF_DEAD) {
         m_ActionState = KissyfaceAction::KF_NOHEAD;
         m_animFrame = 0;
+        m_animTimer = 0;
+
+        SoundManager::Play("SFX_BLOODSPLAT");
+        if (rand() % 2 == 0) SoundManager::Play("SFX_ENEMY_DIE_SWORD1"); else SoundManager::Play("SFX_ENEMY_DIE_SWORD2");
+
+        float length = (float)sqrt(kvx * kvx + kvy * kvy);
+        if (length > 0) {
+            float nvx = kvx / length, nvy = kvy / length, perpX = -nvy, perpY = nvx; DWORD ct = GetTickCount();
+            for (int i = 0; i < 20; i++) {
+                float speed = 4.0f + (rand() % 60) / 10.0f, pvx = kvx * 0.5f + (i % 2 == 0 ? perpX : -perpX) * speed, pvy = kvy * 0.5f + (i % 2 == 0 ? perpY : -perpY) * speed;
+                ::EffectManager::AddBloodSplatter(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, pvx, pvy, atan2(pvy, pvx), ct);
+            }
+        }
+        if (!IsMapTransparent((int)(m_x + m_colW / 2.0f), (int)(m_y + m_colH / 2.0f))) ::EffectManager::AddMapBlood(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, 0, rand() % 9);
+
         return false;
     }
 
@@ -453,8 +480,8 @@ void Kissyface::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, fl
     case KissyfaceAction::KF_LUNGE: if (!m_imgLunge.empty()) currentImg = &m_imgLunge[m_animFrame % m_imgLunge.size()]; break;
     case KissyfaceAction::KF_LUNGEATTACK: if (!m_imgLungeAttack.empty()) currentImg = &m_imgLungeAttack[m_animFrame % m_imgLungeAttack.size()]; break;
     case KissyfaceAction::KF_DIE: if (!m_imgDie.empty()) currentImg = &m_imgDie[m_animFrame % m_imgDie.size()]; break;
-    case KissyfaceAction::KF_DEAD: if (!m_imgDead.empty()) currentImg = &m_imgDead[0]; break;
-    case KissyfaceAction::KF_NOHEAD: if (!m_imgNoHead.empty()) currentImg = &m_imgNoHead[0]; break;
+    case KissyfaceAction::KF_DEAD: if (!m_imgDead.empty()) currentImg = &m_imgDead[m_animFrame % m_imgDead.size()]; break;
+    case KissyfaceAction::KF_NOHEAD: if (!m_imgNoHead.empty()) currentImg = &m_imgNoHead[m_animFrame % m_imgNoHead.size()]; break;
     default: break;
     }
 

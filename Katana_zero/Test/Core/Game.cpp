@@ -103,7 +103,9 @@ void Game::LoadAllAssets() {
     SoundManager::Load("SFX_REPLAY_EJECT", L"assets/sound/replay_eject.wav");
     SoundManager::Load("SFX_REPLAY_PLAY_LOOP", L"assets/sound/replay_play.wav");
     SoundManager::Load("SFX_REPLAY_PAUSE_LOOP", L"assets/sound/replay_pause.wav");
-    SoundManager::Load("SFX_EXPLOSION", L"assets/sound/glassbreak.wav");
+    SoundManager::Load("SFX_EXPLOSION_1", L"assets/sound/explosion1.wav");
+    SoundManager::Load("SFX_EXPLOSION_2", L"assets/sound/explosion2.wav");
+    SoundManager::Load("vial_explosion", L"assets/sound/vial_explosion.wav");
 
     m_loadingProgress = 80; Sleep(50);
     StageManager::LoadAllStages(&m_loadingProgress);
@@ -239,7 +241,9 @@ void Game::Update() {
             RECT attackRect = m_player.GetAttackRect(); InflateRect(&attackRect, 15, 15);
             for (auto b : Bullet::GetBullets()) { if (b && b->IsActive() && !b->IsDeflected()) { RECT bulletRect = b->GetRect(), overlap; if (IntersectRect(&overlap, &attackRect, &bulletRect)) { b->Deflect(-b->GetVX(), -b->GetVY()); EffectManager::AddBulletReflectVFX((float)(overlap.left + overlap.right) / 2.0f, (float)(overlap.top + overlap.bottom) / 2.0f, atan2(-b->GetVY(), -b->GetVX()), ct); SoundManager::Play("SFX_DEFLECT"); } } }
         }
-        Bullet::UpdateAll(ts, m_player, m_enemies); StageManager::UpdateItems(ts, m_player, m_enemies);
+        Bullet::UpdateAll(ts, m_player, m_enemies); 
+        StageManager::UpdateItems(ts, m_player, m_enemies);
+        StageManager::UpdateOilDrums(ts, m_enemies, &m_player);
         if (!m_player.IsDead()) { for (auto& e : m_enemies) if (e) e->Update(ts, m_player); }
     }
     static int laF = -1;
@@ -248,12 +252,25 @@ void Game::Update() {
             float cX = m_player.GetX() + m_player.GetColW() / 2.0f, cY = m_player.GetY() + m_player.GetColH() / 2.0f, hX = cX + m_player.GetAttackDirX() * 40.0f - 40.0f, hY = cY + m_player.GetAttackDirY() * 40.0f - 30.0f; RECT aR = { (int)hX, (int)hY, (int)(hX + 80.0f), (int)(hY + 60.0f) };
             if (m_player.GetAttackDirY() > 0.5f) { auto glassDomes = StageManager::GetCurrentGlassDomes(); if (glassDomes) { for (auto& gd : *glassDomes) { if (!gd.IsBroken()) { RECT gdR = { (int)gd.GetX(), (int)gd.GetY(), (int)(gd.GetX() + gd.GetW()), (int)(gd.GetY() + gd.GetH()) }, ol; if (IntersectRect(&ol, &aR, &gdR)) { gd.Break(ct); Camera::AddShake(2.0f); } } } } }
             for (int i = 0; i < (int)m_enemies.size(); i++) {
-                Enemy* e = m_enemies[i]; if (e && e->GetIsAlive()) {
-                    bool hitDetected = false, parryDetected = false; if (e->GetType() == EnemyType::KISSYFACE) { if (m_player.HasHitThisSwing()) continue; Kissyface* k = static_cast<Kissyface*>(e); RECT vulR = k->GetVulnerableRect(), invR = k->GetInvincibleRect(), ol; if (IntersectRect(&ol, &aR, &vulR)) { hitDetected = true; m_player.SetHasHitThisSwing(true); } else if (IntersectRect(&ol, &aR, &invR)) { parryDetected = true; m_player.SetHasHitThisSwing(true); } } else { RECT eR = e->GetRect(), ol; if (IntersectRect(&ol, &aR, &eR)) hitDetected = true; }
-                    if (hitDetected || parryDetected) {
-                        m_isTimePaused = true; m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i); float ex = e->GetX() + e->GetColW() / 2.0f, ey = e->GetY() + e->GetColH() / 2.0f, dx = ex - cX, dy = ey - cY, dist = (std::max)(1.0f, (float)sqrt(dx * dx + dy * dy)), ux = dx / dist, uy = dy / dist; EffectManager::AddNeonTrail(ex, ey, ux, uy, atan2(uy, ux)); EffectManager::AddHitVFX(ex, ey, atan2(uy, ux), ct); Camera::AddPush(ux * 30.0f, uy * 30.0f); Camera::AddShake(1.0f); float kbPower = 25.0f, attackDx = m_player.GetAttackDirX(), attackDy = m_player.GetAttackDirY(), kvx = attackDx * kbPower, kvy = attackDy * kbPower; if (kvy > -5.0f) kvy -= 8.0f;
-                        if (parryDetected) { m_player.Stun(0.5f, -kvx * 1.8f, -10.0f); EffectManager::AddBulletReflectVFX((float)aR.left + (aR.right - aR.left) / 2.0f, (float)aR.top + (aR.bottom - aR.top) / 2.0f, atan2(-kvy, -kvx), GetTickCount()); static_cast<Kissyface*>(e)->Parry(); SoundManager::Play("SFX_PARRY"); }
-                        else e->OnTakeDamage(kvx, kvy, DeathCause::SWORD);
+                Enemy* e = m_enemies[i]; 
+                if (e) {
+                    bool isKissyDead = (e->GetType() == EnemyType::KISSYFACE && static_cast<Kissyface*>(e)->GetActionState() == KissyfaceAction::KF_DEAD);
+                    if (e->GetIsAlive() || isKissyDead) {
+                        bool hitDetected = false, parryDetected = false; 
+                        if (e->GetType() == EnemyType::KISSYFACE) { 
+                            if (m_player.HasHitThisSwing()) continue; 
+                            Kissyface* k = static_cast<Kissyface*>(e); 
+                            RECT vulR = k->GetVulnerableRect(), invR = k->GetInvincibleRect(), ol; 
+                            if (IntersectRect(&ol, &aR, &vulR)) { hitDetected = true; m_player.SetHasHitThisSwing(true); } 
+                            else if (IntersectRect(&ol, &aR, &invR)) { parryDetected = true; m_player.SetHasHitThisSwing(true); } 
+                        } else { 
+                            RECT eR = e->GetRect(), ol; if (IntersectRect(&ol, &aR, &eR)) hitDetected = true; 
+                        }
+                        if (hitDetected || parryDetected) {
+                            m_isTimePaused = true; m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i); float ex = e->GetX() + e->GetColW() / 2.0f, ey = e->GetY() + e->GetColH() / 2.0f, dx = ex - cX, dy = ey - cY, dist = (std::max)(1.0f, (float)sqrt(dx * dx + dy * dy)), ux = dx / dist, uy = dy / dist; EffectManager::AddNeonTrail(ex, ey, ux, uy, atan2(uy, ux)); EffectManager::AddHitVFX(ex, ey, atan2(uy, ux), ct); Camera::AddPush(ux * 30.0f, uy * 30.0f); Camera::AddShake(1.0f); float kbPower = 25.0f, attackDx = m_player.GetAttackDirX(), attackDy = m_player.GetAttackDirY(), kvx = attackDx * kbPower, kvy = attackDy * kbPower; if (kvy > -5.0f) kvy -= 8.0f;
+                            if (parryDetected) { m_player.Stun(0.5f, -kvx * 1.8f, -10.0f); EffectManager::AddBulletReflectVFX((float)aR.left + (aR.right - aR.left) / 2.0f, (float)aR.top + (aR.bottom - aR.top) / 2.0f, atan2(-kvy, -kvx), GetTickCount()); static_cast<Kissyface*>(e)->Parry(); SoundManager::Play("SFX_PARRY"); }
+                            else e->OnTakeDamage(kvx, kvy, DeathCause::SWORD);
+                        }
                     }
                 }
             }

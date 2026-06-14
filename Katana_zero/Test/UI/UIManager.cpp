@@ -96,11 +96,10 @@ void UIManager::Render(HDC hDC, int virtualWidth, int virtualHeight, int mouseX,
     if (isDead && isAnimFinished) {
         CImage* boxImg = isTimeout ? &m_imgTimeoutBox : &m_imgDeathBox;
         if (boxImg && !boxImg->IsNull()) {
-            int baseW = boxImg->GetWidth();
-            int baseH = boxImg->GetHeight();
-            float scale = 0.65f; 
-            float widthScale = isTimeout ? scale * 1.15f : scale; 
-            int targetW = (int)(baseW * widthScale);
+            float baseW = boxImg->GetWidth();
+            float baseH = boxImg->GetHeight();
+            float scale = 0.65f;
+            int targetW = (int)(baseW * scale);
             int targetH = (int)(baseH * scale);
             int startX = (virtualWidth - targetW) / 2;
             int startY = (virtualHeight - targetH) / 2;

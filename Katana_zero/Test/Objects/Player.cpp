@@ -802,7 +802,7 @@ bool Player::IsDeathAnimationFinished() const {
     return m_state == PlayerState::PS_DEAD_GROUND && m_currentFrame >= 5; 
 }
 
-void Player::OnTakeDamage(float damage, float kvx, float kvy, float sourceX, float sourceY) {
+void Player::OnTakeDamage(float damage, float kvx, float kvy, float sourceX, float sourceY, DeathCause cause) {
     if (!m_isGodMode && !IsDead() && m_state != PlayerState::PS_ROLL) {
         SetState(PlayerState::PS_DEAD);
         SoundManager::Play("SFX_HIT"); // 플레이어 피격 시 소리
@@ -836,8 +836,10 @@ void Player::OnTakeDamage(float damage, float kvx, float kvy, float sourceX, flo
             }
             float angle = atan2(trailVy, trailVx);
 
-            // 적중 시 네온 트레일 (적과 동일한 이펙트 적용)
-            EffectManager::AddNeonTrail(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, trailVx, trailVy, angle);
+            // 적중 시 네온 트레일 (FIRE가 아닐 때만)
+            if (cause != DeathCause::FIRE) {
+                EffectManager::AddNeonTrail(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f, trailVx, trailVy, angle);
+            }
             
             DWORD ct = GetTickCount();
             for (int i = 0; i < 12; i++) {
