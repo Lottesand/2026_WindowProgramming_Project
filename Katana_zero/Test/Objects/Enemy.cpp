@@ -427,8 +427,11 @@ void Grunt::Update(float ts, const Player& player) {
                 }
                 if (m_CurrentFrame >= 8) { m_ActionState = GruntAction::GR_NONE; m_CurrentFrame = 0; m_patternTimer = ct; }
             }
-        } else if (fabs(dx) > 60.0f) { m_ActionState = GruntAction::GR_RUN; m_State = EnemyState::ES_WALK; m_vx = m_isFacingLeft ? -9.0f : 9.0f; }
-        else { if (m_ActionState == GruntAction::GR_RUN) m_ActionState = GruntAction::GR_NONE; m_State = EnemyState::ES_IDLE; m_vx = 0; if (ct - m_patternTimer > 500) { m_ActionState = GruntAction::GR_ATTACK; m_CurrentFrame = 0; m_patternTimer = ct; } }
+        } else if (fabs(dx) > 60.0f) { 
+            m_ActionState = GruntAction::GR_RUN; m_State = EnemyState::ES_WALK; m_vx = m_isFacingLeft ? -9.0f : 9.0f; 
+        } else { 
+            m_ActionState = GruntAction::GR_ATTACK; m_CurrentFrame = 0; m_LastTime = ct; 
+        }
     } else {
         if (m_isWaiting) { 
             m_vx = 0.0f; m_State = EnemyState::ES_IDLE; 
