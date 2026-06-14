@@ -98,6 +98,7 @@ private:
     const int m_afterImageInterval = 30;
 
     KissyfaceAction m_ActionState;
+    KissyfaceAction m_lastActionState;
     float m_animTimer;
     int m_animFrame;
     float m_patternDelayTimer;

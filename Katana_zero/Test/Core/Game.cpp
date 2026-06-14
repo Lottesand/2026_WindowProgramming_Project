@@ -108,6 +108,17 @@ void Game::LoadAllAssets() {
     SoundManager::Load("vial_explosion", L"assets/sound/vial_explosion.wav");
     SoundManager::Load("SFX_FLAMETHROWER", L"assets/sound/flamethrower.wav");
 
+    // Kissyface Sounds
+    SoundManager::Load("SFX_KF_STRUGGLE", L"assets/sound/boss/struggle.wav");
+    SoundManager::Load("SFX_KF_THROW", L"assets/sound/boss/axethrow.wav");
+    SoundManager::Load("SFX_KF_RETURN", L"assets/sound/boss/axereturn.wav");
+    SoundManager::Load("SFX_KF_CATCH", L"assets/sound/boss/axecatch.wav");
+    SoundManager::Load("SFX_KF_LUNGE", L"assets/sound/boss/axelunge.wav");
+    SoundManager::Load("SFX_KF_CLASH", L"assets/sound/boss/clash.wav");
+    SoundManager::Load("SFX_KF_JUMP", L"assets/sound/boss/jump.wav");
+    SoundManager::Load("SFX_KF_WHIRL", L"assets/sound/boss/axewhirl.wav");
+    SoundManager::Load("SFX_KF_DEATH", L"assets/sound/boss/death.wav");
+
     m_loadingProgress = 80; Sleep(50);
     StageManager::LoadAllStages(&m_loadingProgress);
     LoadStage(1); m_player.SetMaxHistory(m_maxRewindTime); m_loadingProgress = 100; Sleep(500);
@@ -316,7 +327,7 @@ void Game::Update() {
                         }
                         if (hitDetected || parryDetected) {
                             m_isTimePaused = true; m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, i); float ex = e->GetX() + e->GetColW() / 2.0f, ey = e->GetY() + e->GetColH() / 2.0f, dx = ex - cX, dy = ey - cY, dist = (std::max)(1.0f, (float)sqrt(dx * dx + dy * dy)), ux = dx / dist, uy = dy / dist; EffectManager::AddNeonTrail(ex, ey, ux, uy, atan2(uy, ux)); EffectManager::AddHitVFX(ex, ey, atan2(uy, ux), ct); Camera::AddPush(ux * 30.0f, uy * 30.0f); Camera::AddShake(1.0f); float kbPower = 25.0f, attackDx = m_player.GetAttackDirX(), attackDy = m_player.GetAttackDirY(), kvx = attackDx * kbPower, kvy = attackDy * kbPower; if (kvy > -5.0f) kvy -= 8.0f;
-                            if (parryDetected) { m_player.Stun(0.5f, -kvx * 1.8f, -10.0f); EffectManager::AddBulletReflectVFX((float)aR.left + (aR.right - aR.left) / 2.0f, (float)aR.top + (aR.bottom - aR.top) / 2.0f, atan2(-kvy, -kvx), GetTickCount()); static_cast<Kissyface*>(e)->Parry(); SoundManager::Play("SFX_PARRY"); }
+                            if (parryDetected) { m_player.Stun(0.5f, -kvx * 1.8f, -10.0f); EffectManager::AddBulletReflectVFX((float)aR.left + (aR.right - aR.left) / 2.0f, (float)aR.top + (aR.bottom - aR.top) / 2.0f, atan2(-kvy, -kvx), GetTickCount()); static_cast<Kissyface*>(e)->Parry(); SoundManager::Play("SFX_KF_CLASH"); }
                             else e->OnTakeDamage(kvx, kvy, DeathCause::SWORD);
                         }
                     }

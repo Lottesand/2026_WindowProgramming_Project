@@ -38,6 +38,7 @@ Kissyface::Kissyface(float startX, float startY)
     : Enemy(startX, startY, EnemyType::KISSYFACE) {
     m_colW = 40.0f; m_colH = 100.0f;
     m_ActionState = KissyfaceAction::KF_IDLE;
+    m_lastActionState = KissyfaceAction::KF_NONE;
     m_vx = 0.0f; m_vy = 0.0f;
     m_animTimer = 0.0f; m_animFrame = 0;
     m_patternDelayTimer = 0.0f; m_lungeTargetX = -1.0f;
@@ -54,6 +55,7 @@ Kissyface::~Kissyface() {}
 void Kissyface::Reset() {
     Enemy::Reset();
     m_ActionState = KissyfaceAction::KF_IDLE;
+    m_lastActionState = KissyfaceAction::KF_NONE;
     m_animTimer = 0.0f; m_animFrame = 0;
     m_patternDelayTimer = 0.0f; m_nextCloseAttackIsThrow = false;
     m_throwProbability = 50.0f; m_axe.state = AxeState::INACTIVE;
@@ -151,12 +153,14 @@ void Kissyface::Update(float ts, const Player& player) {
         }
     }
 
+    KissyfaceAction prevState = m_ActionState;
     m_animTimer += ts;
     float frameDelay = m_delayBase / m_globalSpeedRate;
 
     switch (m_ActionState) {
     case KissyfaceAction::KF_STRUGGLE:
     {
+        if (prevState != KissyfaceAction::KF_STRUGGLE) SoundManager::Play("SFX_KF_STRUGGLE", true);
         if (m_animTimer > 0.4f) { m_animTimer = 0; m_animFrame = (m_animFrame + 1) % 2; }
         float targetThreshold = (float)m_strugglePhase * 0.25f;
         if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
@@ -167,13 +171,16 @@ void Kissyface::Update(float ts, const Player& player) {
             if (m_struggleCircleProgress > 1.0f) m_struggleCircleProgress = 1.0f;
         }
         else {
+            SoundManager::Stop("SFX_KF_STRUGGLE");
             m_ActionState = KissyfaceAction::KF_RECOVER; m_animFrame = 0; m_animTimer = 0;
             const_cast<Player&>(player).SetVisible(true); const_cast<Player&>(player).Stun(0.4f, m_isFacingLeft ? 15.0f : -15.0f, -6.0f); break;
         }
         if (m_struggleProgress >= targetThreshold) {
+            SoundManager::Stop("SFX_KF_STRUGGLE");
             if (m_strugglePhase >= 4) {
                 m_ActionState = KissyfaceAction::KF_DIE;
                 m_animFrame = 0; m_animTimer = 0;
+                SoundManager::Play("SFX_KF_DEATH");
             }
             else {
                 m_ActionState = KissyfaceAction::KF_RECOVER;
@@ -186,7 +193,7 @@ void Kissyface::Update(float ts, const Player& player) {
     break;
 
     case KissyfaceAction::KF_DIE:
-        if (m_animTimer > 0.12f) { 
+        if (m_animTimer > 0.18f) { 
             m_animTimer = 0;
             m_animFrame++;
             if (m_animFrame >= (int)m_imgDie.size()) {
@@ -222,6 +229,7 @@ void Kissyface::Update(float ts, const Player& player) {
         if (m_animTimer > frameDelay) { m_animTimer = 0; m_animFrame++; if (m_animFrame >= 5) { m_animFrame = 0; m_ActionState = KissyfaceAction::KF_IDLE; m_patternDelayTimer = 0.0f; } }
         break;
     case KissyfaceAction::KF_THROW:
+        if (prevState != KissyfaceAction::KF_THROW) SoundManager::Play("SFX_KF_THROW");
         if (m_animTimer > m_delayThrow / m_globalSpeedRate) {
             m_animTimer = 0; if (m_animFrame < 8) {
                 m_animFrame++;
@@ -234,7 +242,7 @@ void Kissyface::Update(float ts, const Player& player) {
         }
         break;
     case KissyfaceAction::KF_PREJUMP:
-        if (m_animTimer > 0.18f) { m_animTimer = 0; m_animFrame++; if (m_animFrame >= 4) { m_ActionState = KissyfaceAction::KF_JUMP; m_animFrame = 0; m_y -= 100.0f; m_vy = 0; m_axe.state = AxeState::ORBITING; m_axe.orbitAngle = 0; m_axe.rotation = 0; } }
+        if (m_animTimer > 0.18f) { m_animTimer = 0; m_animFrame++; if (m_animFrame >= 4) { m_ActionState = KissyfaceAction::KF_JUMP; m_animFrame = 0; m_y -= 100.0f; m_vy = 0; m_axe.state = AxeState::ORBITING; m_axe.orbitAngle = 0; m_axe.rotation = 0; SoundManager::Play("SFX_KF_JUMP"); SoundManager::Play("SFX_KF_WHIRL"); } }
         break;
     case KissyfaceAction::KF_JUMP:
         if (m_animTimer > 0.18f) { m_animTimer = 0; m_animFrame++; if (m_animFrame >= 2) m_animFrame = 1; }
@@ -249,6 +257,7 @@ void Kissyface::Update(float ts, const Player& player) {
             m_animTimer = 0; m_animFrame++;
             if (m_animFrame >= 4) {
                 m_ActionState = KissyfaceAction::KF_LUNGE; m_animFrame = 0;
+                SoundManager::Play("SFX_KF_LUNGE");
                 float diff = m_lungeTargetX - (m_x + m_colW / 2.0f); float flightFrames = fabs(diff) / m_lungeFlightDiv;
                 if (flightFrames < 15.0f) flightFrames = 15.0f; if (flightFrames > 45.0f) flightFrames = 45.0f;
                 m_vx = diff / flightFrames; m_vy = -0.5f * flightFrames; m_isFacingLeft = (m_vx < 0);
@@ -273,7 +282,10 @@ void Kissyface::Update(float ts, const Player& player) {
             if (m_animFrame == 4) {
                 float px = player.GetX(), py = player.GetY(), pw = player.GetColW(), ph = player.GetColH(); float ex = m_x + (m_isFacingLeft ? -30.0f : 30.0f), ey = m_y + 30.0f;
                 float dist = sqrt(pow(px + pw / 2 - ex, 2) + pow(py + ph / 2 - ey, 2));
-                if (dist < 100.0f && !player.IsGodMode() && !player.IsDead() && player.GetState() != PlayerState::PS_ROLL) { const_cast<Player&>(player).OnTakeDamage(1.0f, m_isFacingLeft ? -15.0f : 15.0f, -8.0f, m_x + m_colW / 2.0f, m_y + m_colH / 2.0f); }
+                if (dist < 100.0f && !player.IsGodMode() && !player.IsDead() && player.GetState() != PlayerState::PS_ROLL) { 
+                    const_cast<Player&>(player).OnTakeDamage(1.0f, m_isFacingLeft ? -15.0f : 15.0f, -8.0f, m_x + m_colW / 2.0f, m_y + m_colH / 2.0f); 
+                    SoundManager::Play("SFX_KF_CLASH");
+                }
             }
             if (m_animFrame >= 9) { m_ActionState = KissyfaceAction::KF_IDLE; m_animFrame = 0; m_patternDelayTimer = -0.8f; m_lungeTargetX = 0.0f; }
         }
@@ -323,6 +335,8 @@ void Kissyface::Update(float ts, const Player& player) {
     if (!floorHit) m_y = ny;
     m_x = nx;
     if (m_ActionState == KissyfaceAction::KF_IDLE || m_ActionState == KissyfaceAction::KF_WALK || m_ActionState == KissyfaceAction::KF_DOWNED) { m_isFacingLeft = (player.GetX() < m_x); }
+
+    m_lastActionState = m_ActionState;
 }
 
 void Kissyface::UpdateAxe(float ts, const Player& player) {
@@ -338,10 +352,16 @@ void Kissyface::UpdateAxe(float ts, const Player& player) {
         break;
     case AxeState::RETURNING:
     {
-        if (m_ActionState != KissyfaceAction::KF_RETURN_AXE && m_ActionState != KissyfaceAction::KF_TUG) { m_ActionState = KissyfaceAction::KF_TUG; m_animFrame = 0; m_animTimer = 0; }
+        if (m_ActionState != KissyfaceAction::KF_RETURN_AXE && m_ActionState != KissyfaceAction::KF_TUG) { 
+            m_ActionState = KissyfaceAction::KF_TUG; m_animFrame = 0; m_animTimer = 0; 
+            SoundManager::Play("SFX_KF_RETURN");
+        }
         float targetX = m_x + (m_isFacingLeft ? 10.0f : 30.0f), targetY = m_y + 40.0f;
         float dx = targetX - m_axe.x, dy = targetY - m_axe.y, dist = (float)sqrt(dx * dx + dy * dy);
-        if (dist < 40.0f) { m_axe.state = AxeState::INACTIVE; m_ActionState = KissyfaceAction::KF_RETURN_AXE; m_animFrame = 0; m_animTimer = 0; }
+        if (dist < 40.0f) { 
+            m_axe.state = AxeState::INACTIVE; m_ActionState = KissyfaceAction::KF_RETURN_AXE; m_animFrame = 0; m_animTimer = 0; 
+            SoundManager::Play("SFX_KF_CATCH");
+        }
         else { float speed = 30.0f; m_axe.vx = (dx / dist) * speed; m_axe.vy = (dy / dist) * speed; m_axe.x += m_axe.vx * ts; m_axe.y += m_axe.vy * ts; m_axe.rotation -= 60.0f * ts; }
         break;
     }
@@ -411,6 +431,7 @@ bool Kissyface::OnTakeDamage(float kvx, float kvy, DeathCause cause) {
 void Kissyface::Parry() {
     m_ActionState = KissyfaceAction::KF_BLOCK; m_animTimer = 0; m_animFrame = 0; m_vx = 0; m_vy = 0;
     if (m_axe.state == AxeState::ORBITING) { m_axe.state = AxeState::INACTIVE; }
+    SoundManager::Play("SFX_KF_CLASH");
 }
 
 void Kissyface::Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) {
