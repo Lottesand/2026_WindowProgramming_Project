@@ -51,6 +51,15 @@ bool Enemy::IsPlayerInCone(float px, float py, float pw, float ph) {
 
 void Enemy::UpdateDetection(float px, float py, float pw, float ph, float ts) {
     if (!m_isAlive) return;
+
+    if (EffectManager::IsInsideSmoke(px + pw / 2.0f, py + ph / 2.0f) || EffectManager::IsInsideSmoke(m_x + m_colW / 2.0f, m_y + m_colH / 2.0f)) {
+        if (m_isPlayerDetected) {
+            m_isPlayerDetected = false;
+            m_State = EnemyState::ES_IDLE;
+        }
+        return;
+    }
+
     if (!m_isPlayerDetected) { if (IsPlayerInCone(px, py, pw, ph)) { m_isPlayerDetected = true; m_alertStartTime = GetTickCount(); m_exclaimFrame = 0; m_State = EnemyState::ES_ALERT; } }
     else { if (m_exclaimFrame == 0 && GetTickCount() - m_alertStartTime > (DWORD)(100.0f / ts)) m_exclaimFrame = 1; }
 }

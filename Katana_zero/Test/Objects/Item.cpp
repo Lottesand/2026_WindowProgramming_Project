@@ -16,6 +16,7 @@ CImage Item::m_imgPottedPlant[2];
 CImage Item::m_imgKnife[2];
 CImage Item::m_imgExplosiveVial[2];
 CImage Item::m_imgFlamethrower[2];
+CImage Item::m_imgSmokeBomb[2];
 CImage Item::m_imgArrow[8];
 std::map<ItemType, CImage> Item::m_hudImages;
 
@@ -49,6 +50,8 @@ void Item::LoadAssets() {
     m_imgExplosiveVial[1].Load(TEXT("assets/spr_explosive_vial/spr_explosive_vial_1.png"));
     m_imgFlamethrower[0].Load(TEXT("assets/spr_flamethrower/spr_flamethrower_0.png"));
     m_imgFlamethrower[1].Load(TEXT("assets/spr_flamethrower/spr_flamethrower_1.png"));
+    m_imgSmokeBomb[0].Load(TEXT("assets/spr_smoke/0.png"));
+    m_imgSmokeBomb[1].Load(TEXT("assets/spr_smoke/1.png"));
     m_hudImages[ItemType::BEER_BOTTLE].Load(TEXT("assets/hud/inven_beer_bottle.png"));
     m_hudImages[ItemType::BUTCHER_KNIFE].Load(TEXT("assets/hud/inven_butcher_knife.png"));
     m_hudImages[ItemType::BUST].Load(TEXT("assets/hud/inven_bust.png"));
@@ -56,11 +59,12 @@ void Item::LoadAssets() {
     m_hudImages[ItemType::KNIFE].Load(TEXT("assets/hud/inven_knife.png"));
     m_hudImages[ItemType::EXPLOSIVE_VIAL].Load(TEXT("assets/hud/inven_explosive_vial.png"));
     m_hudImages[ItemType::FLAMETHROWER].Load(TEXT("assets/hud/inven_flamethrower.png"));
+    m_hudImages[ItemType::SMOKE_BOMB].Load(TEXT("assets/hud/inven_smoke.png"));
     for (int i = 0; i < 8; i++) { wsprintf(path, TEXT("assets/arrow/%d.png"), i); m_imgArrow[i].Load(path); }
 }
 
 void Item::ReleaseAssets() {
-    for (int i = 0; i < 2; i++) { m_imgBeerBottle[i].Destroy(); m_imgButcherKnife[i].Destroy(); m_imgBust[i].Destroy(); m_imgPottedPlant[i].Destroy(); m_imgKnife[i].Destroy(); m_imgExplosiveVial[i].Destroy(); m_imgFlamethrower[i].Destroy(); }
+    for (int i = 0; i < 2; i++) { m_imgBeerBottle[i].Destroy(); m_imgButcherKnife[i].Destroy(); m_imgBust[i].Destroy(); m_imgPottedPlant[i].Destroy(); m_imgKnife[i].Destroy(); m_imgExplosiveVial[i].Destroy(); m_imgFlamethrower[i].Destroy(); m_imgSmokeBomb[i].Destroy(); }
     for (auto& pair : m_hudImages) pair.second.Destroy(); m_hudImages.clear();
     for (int i = 0; i < 8; i++) m_imgArrow[i].Destroy();
 }
@@ -75,12 +79,18 @@ void Item::OnHit(const std::vector<Enemy*>& enemies, Player* player) {
         for (auto enemy : enemies) { if (enemy && enemy->GetIsAlive()) { float ex = enemy->GetX() + enemy->GetColW() / 2.0f, ey = enemy->GetY() + enemy->GetColH() / 2.0f, dx = ex - m_x, dy = ey - m_y; if (sqrt(dx * dx + dy * dy) <= rad) { float kbx = (ex > m_x) ? 25.0f : -25.0f; enemy->OnTakeDamage(kbx, -12.0f, DeathCause::FIRE); } } }
         if (player && !player->IsDead() && !player->IsGodMode()) { float px = player->GetX() + player->GetColW() / 2.0f, py = player->GetY() + player->GetColH() / 2.0f, dx = px - m_x, dy = py - m_y; if (sqrt(dx * dx + dy * dy) <= rad) { float kbx = (px > m_x) ? 20.0f : -20.0f; player->OnTakeDamage(1.0f, kbx, -10.0f, m_x, m_y, DeathCause::FIRE); } }
         auto oilDrums = StageManager::GetCurrentOilDrums(); if (oilDrums) { for (auto& drum : *oilDrums) { if (drum.IsExploded() || drum.IsPending()) continue; float dx = (drum.GetX() + drum.GetWidth() / 2.0f) - m_x, dy = (drum.GetY() + drum.GetHeight() / 2.0f) - m_y; if (sqrt(dx * dx + dy * dy) <= rad) drum.Trigger(100 + rand() % 200); } }
+    } else if (m_type == ItemType::SMOKE_BOMB) {
+        for (int i = 0; i < 100; ++i) {
+            float offX = (float)(rand() % 400 - 200);
+            float offY = (float)(rand() % 150 - 75);
+            EffectManager::AddSmokeVFX(m_x + m_width / 2.0f + offX, m_y + m_height / 2.0f + offY, GetTickCount());
+        }
     }
 }
 
 CImage& Item::GetItemImage(ItemType type, int index) {
     int idx = (index < 0 || index > 1) ? 0 : index;
-    switch (type) { case ItemType::BEER_BOTTLE: return m_imgBeerBottle[idx]; case ItemType::BUTCHER_KNIFE: return m_imgButcherKnife[idx]; case ItemType::BUST: return m_imgBust[idx]; case ItemType::POTTED_PLANT: return m_imgPottedPlant[idx]; case ItemType::KNIFE: return m_imgKnife[idx]; case ItemType::EXPLOSIVE_VIAL: return m_imgExplosiveVial[idx]; case ItemType::FLAMETHROWER: return m_imgFlamethrower[idx]; }
+    switch (type) { case ItemType::BEER_BOTTLE: return m_imgBeerBottle[idx]; case ItemType::BUTCHER_KNIFE: return m_imgButcherKnife[idx]; case ItemType::BUST: return m_imgBust[idx]; case ItemType::POTTED_PLANT: return m_imgPottedPlant[idx]; case ItemType::KNIFE: return m_imgKnife[idx]; case ItemType::EXPLOSIVE_VIAL: return m_imgExplosiveVial[idx]; case ItemType::FLAMETHROWER: return m_imgFlamethrower[idx]; case ItemType::SMOKE_BOMB: return m_imgSmokeBomb[idx]; }
     return m_imgBeerBottle[idx];
 }
 

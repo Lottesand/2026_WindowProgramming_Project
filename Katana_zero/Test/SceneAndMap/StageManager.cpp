@@ -56,6 +56,7 @@ void StageManager::PopulateDynamicObjects(int stage, StageData& data) {
         data.items.push_back(Item(ItemType::KNIFE, S1_KNIFE_X, S1_KNIFE_Y));
         data.items.push_back(Item(ItemType::EXPLOSIVE_VIAL, S1_VIAL_X, S1_VIAL_Y));
         data.items.push_back(Item(ItemType::FLAMETHROWER, S1_FLAME_X, S1_FLAME_Y));
+        data.items.push_back(Item(ItemType::SMOKE_BOMB, 1400.0f, 400.0f));
 
         data.oilDrums.emplace_back(800.0f, 435.0f);
         data.oilDrums.emplace_back(840.0f, 435.0f);

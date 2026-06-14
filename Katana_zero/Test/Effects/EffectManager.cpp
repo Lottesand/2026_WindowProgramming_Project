@@ -14,6 +14,7 @@ std::vector<LandCloudVFX> EffectManager::m_landCloudVFXs;
 std::vector<PendingHit> EffectManager::m_pendingHits;
 std::vector<BloodSplatterVFX> EffectManager::m_bloodSplatters;
 std::vector<ExplosionVFX> EffectManager::m_explosions;
+std::vector<SmokeVFX> EffectManager::m_smokeVFXs;
 
 HDC EffectManager::m_hBloodLayerDC = NULL;
 HBITMAP EffectManager::m_hBloodLayerBmp = NULL;
@@ -38,6 +39,9 @@ CImage EffectManager::m_imgVfxExplosion[10];
 CImage EffectManager::m_imgVfxFire1[7];
 CImage EffectManager::m_imgVfxFire2[10];
 CImage EffectManager::m_imgVfxFlamethrowerExplosion[10];
+CImage EffectManager::m_imgVfxSmokeAppear[3];
+CImage EffectManager::m_imgVfxSmokeLoop[6];
+CImage EffectManager::m_imgVfxSmokeDissolve[7];
 
 void EffectManager::Init() {
     m_neonTrails.clear();
@@ -48,6 +52,7 @@ void EffectManager::Init() {
     m_pendingHits.clear();
     m_bloodSplatters.clear();
     m_explosions.clear();
+    m_smokeVFXs.clear();
     
     if (m_pBloodLayerBits && m_bloodLayerWidth > 0 && m_bloodLayerHeight > 0) {
         memset(m_pBloodLayerBits, 0, m_bloodLayerWidth * m_bloodLayerHeight * 4);
@@ -89,6 +94,9 @@ void EffectManager::LoadAssets() {
     for (int i = 0; i < 48; ++i) { swprintf_s(path, L"assets/blood/spr_bloodsplatter_dir/%d.png", i); if (m_imgVfxMapBloodDir[i].IsNull()) m_imgVfxMapBloodDir[i].Load(path); }
     for (int i = 0; i < 10; ++i) { swprintf_s(path, L"assets/spr_explosion_1/spr_explosion_1_%d.png", i + 1); if (m_imgVfxExplosion[i].IsNull()) m_imgVfxExplosion[i].Load(path); }
     for (int i = 0; i < 10; ++i) { swprintf_s(path, L"assets/spr_flamethrower/spr_flamethrower_explosion/spr_flamethrower_explosion_%d.png", i); if (m_imgVfxFlamethrowerExplosion[i].IsNull()) m_imgVfxFlamethrowerExplosion[i].Load(path); }
+    for (int i = 0; i < 3; ++i) { swprintf_s(path, L"assets/spr_smoke_appear/%d.png", i); if (m_imgVfxSmokeAppear[i].IsNull()) m_imgVfxSmokeAppear[i].Load(path); }
+    for (int i = 0; i < 6; ++i) { swprintf_s(path, L"assets/spr_smoke_loop/%d.png", i); if (m_imgVfxSmokeLoop[i].IsNull()) m_imgVfxSmokeLoop[i].Load(path); }
+    for (int i = 0; i < 7; ++i) { swprintf_s(path, L"assets/spr_smoke_dissolve/%d.png", i); if (m_imgVfxSmokeDissolve[i].IsNull()) m_imgVfxSmokeDissolve[i].Load(path); }
 }
 
 void EffectManager::ReleaseAssets() {
@@ -104,6 +112,9 @@ void EffectManager::ReleaseAssets() {
     for (int i = 0; i < 48; ++i) m_imgVfxMapBloodDir[i].Destroy();
     for (int i = 0; i < 10; ++i) m_imgVfxExplosion[i].Destroy();
     for (int i = 0; i < 10; ++i) m_imgVfxFlamethrowerExplosion[i].Destroy();
+    for (int i = 0; i < 3; ++i) m_imgVfxSmokeAppear[i].Destroy();
+    for (int i = 0; i < 6; ++i) m_imgVfxSmokeLoop[i].Destroy();
+    for (int i = 0; i < 7; ++i) m_imgVfxSmokeDissolve[i].Destroy();
 }
 
 void EffectManager::Update(float timeScale, DWORD currentTime) {
@@ -139,6 +150,27 @@ void EffectManager::Update(float timeScale, DWORD currentTime) {
     for (auto it = m_explosions.begin(); it != m_explosions.end(); ) {
         if (currentTime - it->lastTime >= (DWORD)(50 / timeScale)) { it->currentFrame++; it->lastTime = currentTime; }
         if (it->currentFrame >= it->maxFrame) it = m_explosions.erase(it); else it++;
+    }
+    for (auto it = m_smokeVFXs.begin(); it != m_smokeVFXs.end(); ) {
+        if (currentTime - it->lastTime >= (DWORD)(80 / timeScale)) {
+            it->currentFrame++;
+            it->lastTime = currentTime;
+            if (it->currentFrame >= it->maxFrame) {
+                if (it->state == SmokeState::APPEARING) {
+                    it->state = SmokeState::LOOPING;
+                    it->currentFrame = 0;
+                    it->maxFrame = 6;
+                    it->lastTime = currentTime;
+                } else if (it->state == SmokeState::LOOPING) {
+                    it->currentFrame = 0; // Restart loop
+                    it->lastTime = currentTime;
+                } else if (it->state == SmokeState::DISSOLVING) {
+                    it = m_smokeVFXs.erase(it);
+                    continue;
+                }
+            }
+        }
+        it++;
     }
 }
 
@@ -218,6 +250,51 @@ void EffectManager::Render(HDC hDC, float camX, float camY, float mapScale, bool
             float vfxScale = 4.0f * (isFullMapView ? cFS : mapScale); int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
             float dX, dY; if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; } else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
             if (vW > 0 && vH > 0) vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH / 2, vW, vH);
+        }
+    }
+    for (const auto& v : m_smokeVFXs) {
+        CImage* vI = nullptr;
+        int frame = (std::max)(0, (std::min)(v.currentFrame, v.maxFrame - 1));
+
+        if (v.state == SmokeState::APPEARING) vI = &m_imgVfxSmokeAppear[frame];
+        else if (v.state == SmokeState::LOOPING) vI = &m_imgVfxSmokeLoop[frame];
+        else vI = &m_imgVfxSmokeDissolve[frame];
+
+        if (vI && !vI->IsNull()) {
+            float vfxScale = 2.0f * (isFullMapView ? cFS : mapScale);
+            int vW = (int)(vI->GetWidth() * vfxScale), vH = (int)(vI->GetHeight() * vfxScale);
+            float dX, dY;
+            if (isFullMapView) { dX = v.x * cFS + cFX; dY = v.y * cFS + cFY; }
+            else { dX = (v.x - camX) * mapScale; dY = (v.y - camY) * mapScale; }
+            vI->Draw(hDC, (int)dX - vW / 2, (int)dY - vH / 2, vW, vH);
+        }
+    }
+}
+
+bool EffectManager::IsInsideSmoke(float x, float y) {
+    for (const auto& s : m_smokeVFXs) {
+        if (s.state == SmokeState::LOOPING || s.state == SmokeState::APPEARING) {
+            float dx = x - s.x;
+            float dy = y - (s.y - 30.0f);
+            if (dx * dx + dy * dy < s.radius * s.radius) return true;
+        }
+    }
+    return false;
+}
+
+void EffectManager::AddSmokeVFX(float x, float y, DWORD currentTime) {
+    SmokeVFX s; s.x = x; s.y = y; s.radius = 60.0f; s.state = SmokeState::APPEARING; s.currentFrame = 0; s.maxFrame = 3; s.lastTime = currentTime;
+    m_smokeVFXs.push_back(s);
+}
+
+void EffectManager::RemoveSmokeInArea(float x, float y, float w, float h) {
+    for (auto& s : m_smokeVFXs) {
+        if (s.state == SmokeState::DISSOLVING) continue;
+        if (s.x >= x && s.x <= x + w && s.y >= y && s.y <= y + h) {
+            s.state = SmokeState::DISSOLVING;
+            s.currentFrame = 0;
+            s.maxFrame = 7;
+            s.lastTime = GetTickCount();
         }
     }
 }

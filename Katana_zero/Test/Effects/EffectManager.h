@@ -91,6 +91,21 @@ struct FireVFX {
     int type; // 1 or 2
 };
 
+enum class SmokeState {
+    APPEARING,
+    LOOPING,
+    DISSOLVING
+};
+
+struct SmokeVFX {
+    float x, y;
+    int currentFrame;
+    int maxFrame;
+    DWORD lastTime;
+    SmokeState state;
+    float radius;
+};
+
 class EffectManager {
 public:
     static void Init();
@@ -116,6 +131,11 @@ public:
     static void AddMapBlood(float x, float y, float angle, int imgIndex);
     static void AddExplosion(float x, float y, DWORD currentTime, float radius = 100.0f);
     static void AddFire(float x, float y, DWORD currentTime);
+    static void AddSmokeVFX(float x, float y, DWORD currentTime);
+    static void RemoveSmokeInArea(float x, float y, float w, float h);
+
+    static std::vector<SmokeVFX>& GetSmokeVFXs() { return m_smokeVFXs; }
+    static bool IsInsideSmoke(float x, float y);
     
     static CImage& GetFlamethrowerExplosionImage(int index) { return m_imgVfxFlamethrowerExplosion[index]; }
 
@@ -133,6 +153,7 @@ private:
     static std::vector<BloodSplatterVFX> m_bloodSplatters;
     static std::vector<ExplosionVFX> m_explosions;
     static std::vector<FireVFX> m_fires;
+    static std::vector<SmokeVFX> m_smokeVFXs;
     
     // Blood layer variables
     static HDC m_hBloodLayerDC;
@@ -158,6 +179,9 @@ private:
     static CImage m_imgVfxFire1[7];
     static CImage m_imgVfxFire2[10];
     static CImage m_imgVfxFlamethrowerExplosion[10];
+    static CImage m_imgVfxSmokeAppear[3];
+    static CImage m_imgVfxSmokeLoop[6];
+    static CImage m_imgVfxSmokeDissolve[7];
 
     static constexpr int m_neonTrailLife = 6;
     static constexpr float m_slashWidth = 10.0f;

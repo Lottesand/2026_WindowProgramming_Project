@@ -295,6 +295,9 @@ void Game::Update() {
     if (!m_isTimePaused && m_player.GetState() == PlayerState::PS_ATTACK) {
         int cf = m_player.GetCurrentFrame(); if (cf >= 1 && cf <= 3 && cf != laF) {
             float cX = m_player.GetX() + m_player.GetColW() / 2.0f, cY = m_player.GetY() + m_player.GetColH() / 2.0f, hX = cX + m_player.GetAttackDirX() * 40.0f - 40.0f, hY = cY + m_player.GetAttackDirY() * 40.0f - 30.0f; RECT aR = { (int)hX, (int)hY, (int)(hX + 80.0f), (int)(hY + 60.0f) };
+            
+            EffectManager::RemoveSmokeInArea(hX, hY, 80.0f, 60.0f);
+
             if (m_player.GetAttackDirY() > 0.5f) { auto glassDomes = StageManager::GetCurrentGlassDomes(); if (glassDomes) { for (auto& gd : *glassDomes) { if (!gd.IsBroken()) { RECT gdR = { (int)gd.GetX(), (int)gd.GetY(), (int)(gd.GetX() + gd.GetW()), (int)(gd.GetY() + gd.GetH()) }, ol; if (IntersectRect(&ol, &aR, &gdR)) { gd.Break(ct); Camera::AddShake(2.0f); } } } } }
             for (int i = 0; i < (int)m_enemies.size(); i++) {
                 Enemy* e = m_enemies[i]; 

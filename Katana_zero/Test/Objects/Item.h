@@ -13,7 +13,8 @@ enum class ItemType {
     POTTED_PLANT,
     KNIFE,
     EXPLOSIVE_VIAL,
-    FLAMETHROWER
+    FLAMETHROWER,
+    SMOKE_BOMB
 };
 
 enum class ItemState {
@@ -38,6 +39,7 @@ protected:
     static CImage m_imgKnife[2];
     static CImage m_imgExplosiveVial[2];
     static CImage m_imgFlamethrower[2];
+    static CImage m_imgSmokeBomb[2];
     static CImage m_imgArrow[8];
     static std::map<ItemType, CImage> m_hudImages; // 추가
 
