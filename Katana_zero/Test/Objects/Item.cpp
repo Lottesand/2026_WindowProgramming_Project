@@ -137,6 +137,22 @@ void Item::Update(float ts, Player& player, const std::vector<Enemy*>& enemies) 
                 }
             }
         }
+
+        // Door Collision
+        auto doors = StageManager::GetCurrentDoors();
+        if (doors) {
+            for (auto& door : *doors) {
+                if (door.IsClosed()) {
+                    RECT dR = { (int)door.GetX(), (int)door.GetY(), (int)(door.GetX() + door.GetW()), (int)(door.GetY() + door.GetH()) }, ol;
+                    if (IntersectRect(&ol, &itemR, &dR)) {
+                        OnHit(enemies, &player);
+                        m_isActive = false;
+                        return;
+                    }
+                }
+            }
+        }
+
         if (CheckMapCollision(m_x, m_y, m_width, m_height)) { OnHit(enemies, &player); m_isActive = false; }
     }
 }
