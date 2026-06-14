@@ -7,6 +7,7 @@
 #include "../SceneAndMap/Camera.h"
 #include <cmath>
 #include <gdiplus.h>
+#include <stdlib.h>
 
 // 아이템 렌더링 배율 설정 (플레이어 대비 크기 조절)
 const float ITEM_RENDER_SCALE = 1.0f;
@@ -79,12 +80,21 @@ void Item::LoadAssets() {
         knifeItemImages[1].Load(TEXT("assets/spr_knife/spr_knife_1.png"));
     }
 
+    // 연막탄 이미지 로드
+    auto& smokeImages = m_itemImages[ItemType::SMOKE_BOMB];
+    if (smokeImages.empty()) {
+        smokeImages.resize(2);
+        smokeImages[0].Load(TEXT("assets/spr_smoke/0.png")); 
+        smokeImages[1].Load(TEXT("assets/spr_smoke/1.png"));
+    }
+
     // HUD 아이콘 로드
     m_hudImages[ItemType::BEER_BOTTLE].Load(TEXT("assets/hud/inven_beer_bottle.png"));
     m_hudImages[ItemType::BUTCHER_KNIFE].Load(TEXT("assets/hud/inven_butcher_knife.png"));
     m_hudImages[ItemType::BUST].Load(TEXT("assets/hud/inven_bust.png"));
     m_hudImages[ItemType::POTTED_PLANT].Load(TEXT("assets/hud/inven_potted_plant.png"));
     m_hudImages[ItemType::KNIFE].Load(TEXT("assets/hud/inven_knife.png"));
+    m_hudImages[ItemType::SMOKE_BOMB].Load(TEXT("assets/hud/inven_smoke.png"));
 
     // 화살표 이미지 로드 (assets/arrow/0.png ~ 7.png)
     if (m_arrowImages.empty()) {
@@ -172,26 +182,31 @@ void Item::Update(float ts, Player& player, const std::vector<class Enemy*>& ene
                         // Kill enemy
                         enemy->OnTakeDamage(m_vx * 0.5f, -5.0f);
                         
-                        // Add blood and hit line effect
-                        float angle = atan2(m_vy, m_vx);
-                        EffectManager::AddBloodSplatter(itemCX, itemCY, m_vx * 0.2f, m_vy * 0.2f, angle, GetTickCount());
-                        
-                        // Add hit sprite and neon trail effect
-                        float dist = sqrt(m_vx * m_vx + m_vy * m_vy);
-                        float ux = m_vx / dist;
-                        float uy = m_vy / dist;
-                        EffectManager::AddNeonTrail(itemCX, itemCY, ux, uy, angle);
-                        EffectManager::AddHitVFX(itemCX, itemCY, angle, GetTickCount());
-                        // EffectManager::AddBluntImpactVFX(itemCX, itemCY, angle, GetTickCount()); // TODO: Add if needed
-
-                        // Add camera shake and feedback (similar to standard attack)
-                        float camUx = cos(angle), camUy = sin(angle);
-                        Camera::AddPush(camUx * 20.0f, camUy * 20.0f);
-                        Camera::AddShake(0.8f);
+                        if (m_type == ItemType::SMOKE_BOMB) {
+                            for (int i = 0; i < 100; ++i) {
+                                float offX = (float)(rand() % 400 - 200); // 가로폭 400
+                                float offY = (float)(rand() % 150 - 75);  // 세로폭 150으로 증가
+                                EffectManager::AddSmokeVFX(itemCX + offX, itemCY + offY, GetTickCount());
+                            }
+                        } else {
+                            // Add blood and hit line effect
+                            float angle = atan2(m_vy, m_vx);
+                            EffectManager::AddBloodSplatter(itemCX, itemCY, m_vx * 0.2f, m_vy * 0.2f, angle, GetTickCount());
+                            
+                            // Add hit sprite and neon trail effect
+                            float dist = sqrt(m_vx * m_vx + m_vy * m_vy);
+                            float ux = m_vx / dist;
+                            float uy = m_vy / dist;
+                            EffectManager::AddNeonTrail(itemCX, itemCY, ux, uy, angle);
+                            EffectManager::AddHitVFX(itemCX, itemCY, angle, GetTickCount());
+                            
+                            // Add camera shake and feedback (similar to standard attack)
+                            float camUx = cos(angle), camUy = sin(angle);
+                            Camera::AddPush(camUx * 20.0f, camUy * 20.0f);
+                            Camera::AddShake(0.8f);
+                        }
                         
                         m_isActive = false;
-                        // Break effect
-                        // EffectManager::AddGlassShards(itemCX, itemCY); // TODO: Add if needed
                         return;
                     }
                 }
@@ -204,10 +219,15 @@ void Item::Update(float ts, Player& player, const std::vector<class Enemy*>& ene
             CheckMapCollision(nx + m_colW, ny, 1, 1) || 
             CheckMapCollision(nx, ny + m_colH, 1, 1) || 
             CheckMapCollision(nx + m_colW, ny + m_colH, 1, 1)) {
-            
+
+            if (m_type == ItemType::SMOKE_BOMB) {
+                for (int i = 0; i < 100; ++i) {
+                    float offX = (float)(rand() % 400 - 200); // 가로폭 400
+                    float offY = (float)(rand() % 100 - 50);  // 세로폭 100
+                    EffectManager::AddSmokeVFX(nx + m_colW / 2.0f + offX, ny + m_colH / 2.0f + offY, GetTickCount());
+                }
+            }
             m_isActive = false;
-            // Break effect at collision point
-            // EffectManager::AddGlassShards(nx + m_colW / 2.0f, ny + m_colH / 2.0f); // TODO: Add if needed
         } else {
             m_x = nx;
             m_y = ny;

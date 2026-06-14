@@ -34,22 +34,22 @@ void UIManager::Init() {
 }
 
 void UIManager::LoadAssets() {
-    m_imgHudBase.Load(TEXT("assets/hud/base.png"));
-    m_imgHudBattery.Load(TEXT("assets/hud/battery.png"));
-    m_imgHudBatteryPart.Load(TEXT("assets/hud/battery_part.png"));
-    m_imgHudBatteryUsed.Load(TEXT("assets/hud/used_battery.png"));
-    m_imgHudTimer.Load(TEXT("assets/hud/timer.png"));
-    m_imgHudTimerGauge.Load(TEXT("assets/hud/timer_gauge.png"));
-    m_imgHudInven.Load(TEXT("assets/hud/inven.png"));
-    m_imgCursor.Load(TEXT("assets/cursor.png"));
-    m_imgHudShift[0].Load(TEXT("assets/hud/keyboard_shift_0.png"));
-    m_imgHudShift[1].Load(TEXT("assets/hud/keyboard_shift_1.png"));
-    m_imgLeftClick.Load(TEXT("assets/hud/left_click.png"));
-    m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
-    m_imgDeathBox.Load(TEXT("assets/deathbox.png"));
-    m_imgTimeoutBox.Load(TEXT("assets/timeoutbox.png"));
-    m_imgGoText.Load(TEXT("assets/spr_go_text.png"));
-    m_imgGoArrow.Load(TEXT("assets/spr_go_arrow.png"));
+    if (!m_imgHudBase.IsNull()) m_imgHudBase.Destroy(); m_imgHudBase.Load(TEXT("assets/hud/base.png"));
+    if (!m_imgHudBattery.IsNull()) m_imgHudBattery.Destroy(); m_imgHudBattery.Load(TEXT("assets/hud/battery.png"));
+    if (!m_imgHudBatteryPart.IsNull()) m_imgHudBatteryPart.Destroy(); m_imgHudBatteryPart.Load(TEXT("assets/hud/battery_part.png"));
+    if (!m_imgHudBatteryUsed.IsNull()) m_imgHudBatteryUsed.Destroy(); m_imgHudBatteryUsed.Load(TEXT("assets/hud/used_battery.png"));
+    if (!m_imgHudTimer.IsNull()) m_imgHudTimer.Destroy(); m_imgHudTimer.Load(TEXT("assets/hud/timer.png"));
+    if (!m_imgHudTimerGauge.IsNull()) m_imgHudTimerGauge.Destroy(); m_imgHudTimerGauge.Load(TEXT("assets/hud/timer_gauge.png"));
+    if (!m_imgHudInven.IsNull()) m_imgHudInven.Destroy(); m_imgHudInven.Load(TEXT("assets/hud/inven.png"));
+    if (!m_imgCursor.IsNull()) m_imgCursor.Destroy(); m_imgCursor.Load(TEXT("assets/cursor.png"));
+    if (!m_imgHudShift[0].IsNull()) m_imgHudShift[0].Destroy(); m_imgHudShift[0].Load(TEXT("assets/hud/keyboard_shift_0.png"));
+    if (!m_imgHudShift[1].IsNull()) m_imgHudShift[1].Destroy(); m_imgHudShift[1].Load(TEXT("assets/hud/keyboard_shift_1.png"));
+    if (!m_imgLeftClick.IsNull()) m_imgLeftClick.Destroy(); m_imgLeftClick.Load(TEXT("assets/hud/left_click.png"));
+    if (!m_imgRightClick.IsNull()) m_imgRightClick.Destroy(); m_imgRightClick.Load(TEXT("assets/hud/right_click.png"));
+    if (!m_imgDeathBox.IsNull()) m_imgDeathBox.Destroy(); m_imgDeathBox.Load(TEXT("assets/deathbox.png"));
+    if (!m_imgTimeoutBox.IsNull()) m_imgTimeoutBox.Destroy(); m_imgTimeoutBox.Load(TEXT("assets/timeoutbox.png"));
+    if (!m_imgGoText.IsNull()) m_imgGoText.Destroy(); m_imgGoText.Load(TEXT("assets/spr_go_text.png"));
+    if (!m_imgGoArrow.IsNull()) m_imgGoArrow.Destroy(); m_imgGoArrow.Load(TEXT("assets/spr_go_arrow.png"));
 }
 
 void UIManager::ReleaseAssets() {

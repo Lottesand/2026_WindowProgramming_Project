@@ -17,10 +17,52 @@ CImage StageManager::m_imgSkylineClouds;
 std::vector<Door>* StageManager::m_pCurrentDoors = nullptr;
 std::vector<GlassDome>* StageManager::m_pCurrentGlassDomes = nullptr;
 std::vector<Item>* StageManager::m_pCurrentItems = nullptr;
+std::vector<Item> StageManager::m_activeItems; // 정의 추가
 POINT StageManager::m_playerStart = { 0, 0 };
 std::vector<RECT> StageManager::m_clearZones;
+std::vector<class Enemy*> StageManager::m_currentEnemies;
 float StageManager::m_stageLimitTime = 0.0f;
 int StageManager::m_currentStage = 1;
+
+void StageManager::SetCurrentEnemies(const std::vector<class Enemy*>& enemies) {
+    m_currentEnemies = enemies;
+}
+
+void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
+    for (int i = 1; i <= 5; ++i) {
+        TCHAR mapPath[256], colPath[256], objPath[256];
+        wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), i, i);
+        wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), i, i);
+        wsprintf(objPath, TEXT("assets/stage%d/objmap_stage%d.png"), i, i);
+
+        // Map과 Colmap은 필수, Objmap은 선택 사항으로 로딩
+        bool mapLoaded = SUCCEEDED(m_mapImages[i].Load(mapPath));
+        bool colLoaded = SUCCEEDED(m_colMapImages[i].Load(colPath));
+        // Objmap은 로드 시도만 하고 결과는 무시 (실패해도 진행)
+        m_objMapImages[i].Load(objPath);
+        bool objLoaded = !m_objMapImages[i].IsNull();
+
+        if (mapLoaded && colLoaded) {
+            ProcessStage(i);
+        } else {
+            TCHAR debugMsg[512];
+            wsprintf(debugMsg, TEXT("[StageManager] Failed to load essential assets for stage %d: Map=%d, Col=%d\n"), i, mapLoaded, colLoaded);
+            OutputDebugString(debugMsg);
+        }
+
+        if (pProgress) {
+            *pProgress = 60 + (i * 7); 
+            Sleep(50);
+        }
+    }
+
+    if (m_imgSkylineBlack.IsNull()) m_imgSkylineBlack.Load(TEXT("assets/spr_skyline_black.png"));
+    if (m_imgSkylineClouds.IsNull()) m_imgSkylineClouds.Load(TEXT("assets/spr_skyline_clouds.png"));
+    
+    if (pProgress) {
+        *pProgress = 95;
+    }
+}
 
 void StageManager::Init() {
     EffectManager::Init();
@@ -41,11 +83,12 @@ void StageManager::ProcessStage(int stage) {
 
     // 테스트를 위해 Stage 1에 아이템 임의 배치
     if (stage == 1) {
-        data.items.push_back(Item(ItemType::BEER_BOTTLE, 300.0f, 400.0f));
-        data.items.push_back(Item(ItemType::BUTCHER_KNIFE, 400.0f, 400.0f));
-        data.items.push_back(Item(ItemType::BUST, 500.0f, 400.0f));
-        data.items.push_back(Item(ItemType::POTTED_PLANT, 600.0f, 400.0f));
-        data.items.push_back(Item(ItemType::KNIFE, 700.0f, 400.0f));
+        data.items.push_back(Item(ItemType::BEER_BOTTLE, 400.0f, 400.0f));
+        data.items.push_back(Item(ItemType::BUTCHER_KNIFE, 600.0f, 400.0f));
+        data.items.push_back(Item(ItemType::BUST, 800.0f, 400.0f));
+        data.items.push_back(Item(ItemType::POTTED_PLANT, 1000.0f, 400.0f));
+        data.items.push_back(Item(ItemType::KNIFE, 1200.0f, 400.0f));
+        data.items.push_back(Item(ItemType::SMOKE_BOMB, 1400.0f, 400.0f));
     }
 
     auto IsColorMatch = [](BYTE r, BYTE g, BYTE b, int tr, int tg, int tb) {
@@ -135,6 +178,11 @@ void StageManager::ProcessStage(int stage) {
                     }
                 }
                 else if (IsColorMatch(r, g, b, 255, 0, 255)) { // Pink: Object
+                    // 디버그: 핑크 발견
+                    TCHAR buf[256];
+                    wsprintf(buf, TEXT("[Debug] Found Pink at %d, %d\n"), x, y);
+                    OutputDebugString(buf);
+
                     int rectW = 0, rectH = 1;
                     while (x + rectW < w) {
                         BYTE* pN = pRow + ((x + rectW) * bpp);
@@ -148,6 +196,10 @@ void StageManager::ProcessStage(int stage) {
                             BYTE* pSubPixel = pBits + ((y + 1) * pitch) + (rx * bpp);
                             BYTE sb2 = pSubPixel[0], sg2 = pSubPixel[1], sr2 = pSubPixel[2];
                             
+                            // 디버그: 아래 픽셀 색상 출력
+                            wsprintf(buf, TEXT("[Debug] Checking below Pink at %d, %d: RGB(%d, %d, %d)\n"), rx, y + 1, sr2, sg2, sb2);
+                            OutputDebugString(buf);
+
                             if (IsColorMatch(sr2, sg2, sb2, 255, 0, 0)) { // Door (Red)
                                 while (y + rectH < h) {
                                     BYTE* pNRow = pBits + ((y + rectH) * pitch) + (rx * bpp);
@@ -165,6 +217,7 @@ void StageManager::ProcessStage(int stage) {
                             }
                         }
                     }
+
                     if (foundType) {
                         for (int ry = y; ry < y + rectH; ry++) for (int rx = x; rx < x + rectW; rx++) visited[ry * w + rx] = true;
                     } else {
@@ -193,48 +246,10 @@ void StageManager::Reset() {
     if (m_pCurrentGlassDomes) {
         for (auto& gd : *m_pCurrentGlassDomes) gd.Reset();
     }
-}
-
-void StageManager::LoadAllStages(std::atomic<int>* pProgress) {
-    for (int i = 1; i <= 5; ++i) {
-        TCHAR mapPath[256], colPath[256], objPath[256];
-        wsprintf(mapPath, TEXT("assets/stage%d/map_stage%d.png"), i, i);
-        wsprintf(colPath, TEXT("assets/stage%d/colmap_stage%d.png"), i, i);
-        wsprintf(objPath, TEXT("assets/stage%d/objmap_stage%d.png"), i, i);
-
-        m_mapImages[i].Load(mapPath);
-        m_colMapImages[i].Load(colPath);
-        m_objMapImages[i].Load(objPath);
-        
-        ProcessStage(i);
-
-        if (i >= 2 && i <= 5) {
-            StageData& data = m_stageDataMap[i];
-            data.camFixedY = -1.0f; // 음수값으로 설정하여 카메라 Y축 고정 해제 (플레이어 추적)
-            data.mapScale = 1.1f; 
-            data.mapRenderOffsetY = 0.0f;
-        }
-
-        if (pProgress) {
-            *pProgress = 60 + (i * 5); // 진행률 분배 조정
-            Sleep(50);
-        }
-    }
-
-    if (m_imgSkylineBlack.IsNull()) m_imgSkylineBlack.Load(TEXT("assets/spr_skyline_black.png"));
-    if (m_imgSkylineClouds.IsNull()) m_imgSkylineClouds.Load(TEXT("assets/spr_skyline_clouds.png"));
-    
-    if (pProgress) {
-        *pProgress = 85;
-        Sleep(100);
-    }
-
-    Door::LoadAssets();
-    GlassDome::LoadAssets();
-
-    if (pProgress) {
-        *pProgress = 90;
-        Sleep(100);
+    // 아이템 초기화: 원본 데이터를 사용하여 활성 아이템 벡터 복원
+    if (m_stageDataMap.count(m_currentStage)) {
+        m_activeItems = m_stageDataMap[m_currentStage].items;
+        m_pCurrentItems = &m_activeItems;
     }
 }
 
@@ -252,7 +267,15 @@ void StageManager::LoadAssets(int stage) {
         StageData& data = m_stageDataMap[stage];
         m_pCurrentDoors = &data.doors;
         m_pCurrentGlassDomes = &data.glassDomes;
-        m_pCurrentItems = &data.items;
+        
+        // 아이템 로드 시 복사본 생성
+        m_activeItems = data.items;
+        m_pCurrentItems = &m_activeItems;
+        
+        TCHAR msg[256];
+        wsprintf(msg, TEXT("[Debug] Stage %d loaded with %d doors\n"), stage, (int)m_pCurrentDoors->size());
+        OutputDebugString(msg);
+        
         m_playerStart = data.playerStart;
         m_clearZones = data.clearZones;
         m_stageLimitTime = data.stageLimitTime;
@@ -378,6 +401,10 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
     }
 
     if (m_pCurrentDoors) {
+        TCHAR msg[256];
+        wsprintf(msg, TEXT("[Debug] Rendering %d doors\n"), (int)m_pCurrentDoors->size());
+        OutputDebugString(msg);
+        
         for (auto& d : *m_pCurrentDoors) {
             float cFS = 0, cFX = 0, cFY = 0;
             if (isFullMapView) {
@@ -387,6 +414,8 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
             }
             d.Render(hDC, camX, camY, mapScale, isFullMapView, cFS, cFX, cFY);
         }
+    } else {
+        OutputDebugString(TEXT("[Debug] m_pCurrentDoors is NULL\n"));
     }
 
     if (m_pCurrentItems) {
@@ -396,10 +425,10 @@ void StageManager::Render(HDC hDC, Gdiplus::Graphics* g, bool isFullMapView, boo
     }
 }
 
-void StageManager::UpdateItems(float ts, Player& player, const std::vector<class Enemy*>& enemies) {
+void StageManager::UpdateItems(float ts, Player& player) {
     if (m_pCurrentItems != nullptr) {
         for (auto& item : *m_pCurrentItems) {
-            item.Update(ts, player, enemies);
+            item.Update(ts, player, m_currentEnemies);
         }
     }
 }

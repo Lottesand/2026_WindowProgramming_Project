@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <windows.h>
 #include <atlimage.h>
 #include <math.h>
@@ -17,7 +17,6 @@ protected:
     float m_x, m_y, m_startX, m_startY, m_vx, m_vy, m_colW, m_colH;
     bool m_isAlive, m_isFacingLeft, m_isImmortal, m_isWaiting;
     float m_bloodDistance;
-    DWORD m_lastBleedTime;
     EnemyType m_Type; EnemyState m_State;
     int m_CurrentFrame; DWORD m_LastTime, m_patternTimer;
     float m_friction, m_knockbackVx, m_walkDistance, m_patrolRange;
@@ -29,8 +28,8 @@ protected:
     static CImage m_ImgExclaim[2];
 
     // Detection constants
-    float m_detectRange = 600.0f;
-    float m_detectAngle = 60.0f; // Cone angle (half of total field)
+    float m_detectRange = 400.0f;
+    float m_detectAngle = 45.0f; 
 
 public:
     Enemy(float startX, float startY, EnemyType type, float patrolRange = 150.0f);
@@ -39,6 +38,10 @@ public:
     virtual void Reset();
     virtual void Update(float ts, const class Player& player);
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo = false) = 0;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) = 0;
+    
+    static void LoadCommonAssets();
+    
     virtual void RenderDetectionRange(HDC hdc, float camX, float camY, float mapScale);
     virtual void RenderExclaim(HDC hdc, float camX, float camY, float mapScale);
     virtual void OnTakeDamage(float kvx, float kvy);
@@ -48,9 +51,8 @@ public:
     void UpdateDetection(float px, float py, float pw, float ph, float ts);
     void RenderDebug(HDC hdc, float camX, float camY, float mapScale);
 
-    bool CheckDoorCollision(float nx, float ny, float nw, float nh);
-
     static void ReleaseAll();
+
     EnemyType GetType() const { return m_Type; }
     bool GetIsAlive() const { return m_isAlive; }
     void SetImmortal(bool immortal) { m_isImmortal = immortal; }
@@ -63,19 +65,19 @@ public:
 };
 
 class Gangster : public Enemy {
-private:
-    GangsterAction m_ActionState;
-    float m_aimAngle;
-    static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[4], m_ImgAim_L[4], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10], m_ImgGun_R[2], m_ImgGun_L[2], m_ImgArm[2];
 public:
-
     Gangster(float x, float y); virtual ~Gangster();
     virtual void Init() override;
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override;
     virtual void OnTakeDamage(float kvx, float kvy) override;
     static void Release();
+private:
+    GangsterAction m_ActionState;
+    float m_aimAngle;
+    static CImage m_ImgIdle_R[8], m_ImgIdle_L[8], m_ImgWalk_R[8], m_ImgWalk_L[8], m_ImgAim_R[4], m_ImgAim_L[4], m_ImgTurn_R[6], m_ImgTurn_L[6], m_ImgFall_R[12], m_ImgFall_L[12], m_ImgHurtFly_R[2], m_ImgHurtFly_L[2], m_ImgHurtGround_R[14], m_ImgHurtGround_L[14], m_ImgRun_R[10], m_ImgRun_L[10], m_ImgGun_R[2], m_ImgGun_L[2], m_ImgArm[2];
 };
 
 class Grunt : public Enemy {
@@ -88,6 +90,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override;
     virtual void OnTakeDamage(float kvx, float kvy) override;
     static void Release();
 };
@@ -102,6 +105,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override;
     virtual void OnTakeDamage(float kvx, float kvy) override;
     static void Release();
 };
@@ -116,6 +120,7 @@ public:
     virtual void Reset() override;
     virtual void Update(float ts, const Player& player) override;
     virtual void Render(HDC hdc, Gdiplus::Graphics* g, float camX, float camY, float mapScale, bool showDebugRect, bool isSlowMo) override;
+    virtual void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale) override;
     virtual void OnTakeDamage(float kvx, float kvy) override;
     static void Release();
 };

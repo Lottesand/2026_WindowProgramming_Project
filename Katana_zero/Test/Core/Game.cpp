@@ -7,7 +7,6 @@
 #include "../Effects/EffectManager.h"
 #include "../UI/UIManager.h"
 #include "../UI/StartScene.h"
-#include "../Objects/Item.h"
 #include <time.h>
 #include <stdlib.h>
 #include <gdiplus.h>
@@ -29,7 +28,6 @@ Game::~Game() {
     for (auto& e : m_enemies) if (e) delete e;
     m_enemies.clear();
     Bullet::Release();
-    Item::ReleaseAssets();
 }
 
 void Game::Init(HWND hWnd, HINSTANCE hInst) {
@@ -57,10 +55,13 @@ void Game::LoadAllAssets() {
     Sleep(50);
 
     UIManager::LoadAssets();
+    StartScene::LoadAssets();
     m_loadingProgress = 15;
     Sleep(50);
 
     EffectManager::LoadAssets();
+    Item::LoadAssets();
+    Enemy::LoadCommonAssets(); // 추가
     m_loadingProgress = 20;
     Sleep(50);
 
@@ -72,20 +73,12 @@ void Game::LoadAllAssets() {
     Pomp(0, 0).Init();
     ShieldCop(0, 0).Init();
     Bullet::Init();
+    StartScene::Init();
     m_loadingProgress = 40;
     Sleep(50);
 
     m_player.Init();
-    Item::LoadAssets();
-    m_loadingProgress = 50;
-    Sleep(50);
-
-    UIManager::Init(); // Initialize UIManager configs
-    m_loadingProgress = 60; // 65에서 70으로 수정하여 역행 방지
-    Sleep(50);
-
-    StartScene::LoadAssets();
-    m_loadingProgress = 80; // 70에서 80으로 수정
+    m_loadingProgress = 60;
     Sleep(50);
 
     StageManager::LoadAllStages(&m_loadingProgress);
@@ -101,15 +94,7 @@ void Game::LoadAllAssets() {
 void Game::LoadStage(int stage) {
     m_currentStage = stage;
     m_isStageCleared = false; 
-    
-    // Stage 1일 때만 클릭 대기 상태로 시작, 그 외에는 바로 시작
-    if (m_currentStage == 1) {
-        m_bGameStarted = false;
-        StartScene::SetActive(true);
-    } else {
-        m_bGameStarted = true;
-        StartScene::SetActive(false);
-    }
+    m_bGameStarted = false;   
     
     StageManager::LoadAssets(m_currentStage);
     
@@ -124,7 +109,12 @@ void Game::LoadStage(int stage) {
     }
 
     StageManager::Init();
+    StageManager::ProcessStage(m_currentStage); // 스테이지 데이터(아이템 포함)를 새로 갱신
+    StageManager::LoadAssets(m_currentStage); // 아이템 포인터 재연결
+    
     SpawnEnemies();
+    // 적 목록을 안전하게 업데이트
+    StageManager::SetCurrentEnemies(m_enemies);
     Bullet::ClearAll();
     
     StageManager::StageData& data = StageManager::GetStageData(m_currentStage);
@@ -147,6 +137,7 @@ void Game::SpawnEnemies() {
     m_enemies.clear();
     
     const auto& stageData = StageManager::GetStageData(m_currentStage);
+    int enemyCount = 0;
     for (const auto& info : stageData.enemySpawns) {
         Enemy* ne = nullptr;
         int type = info.type;
@@ -164,6 +155,7 @@ void Game::SpawnEnemies() {
             ne->SetPatrolRange(info.patrolRange);
             m_enemies.push_back(ne);
         }
+        enemyCount++;
     }
 }
 
@@ -178,6 +170,7 @@ void Game::Update() {
     if (!m_isLoaded) return;
     if (ct - m_prevTime < 16) return;
     float dT = (ct - m_prevTime) / 1000.0f;
+    StartScene::Update(dT, m_bGameStarted);
     Input::Update(); UpdateScreenScale();
 
     if (m_transitionState != TransitionState::NONE) {
@@ -192,7 +185,7 @@ void Game::Update() {
                 if (m_transitionToNextStage) {
                     m_gameMode = GameMode::PLAYING;
                     m_player.ClearSnapshots();
-                    if (m_currentStage < 5) LoadStage(m_currentStage + 1);
+                    if (m_currentStage < 2) LoadStage(m_currentStage + 1);
                     else LoadStage(1);
                     m_transitionToNextStage = false;
                 }
@@ -214,37 +207,24 @@ void Game::Update() {
     }
 
     if (!m_bGameStarted) {
-        if (StartScene::IsActive()) {
-            StartScene::Update(dT, m_bGameStarted);
-        } else {
-            if (Input::GetKeyDown(VK_LBUTTON)) {
-                m_bGameStarted = true;
-                m_prevTime = GetTickCount();
-            }
+        if (Input::GetKeyDown(VK_LBUTTON)) {
+            m_bGameStarted = true;
+            m_prevTime = GetTickCount();
         }
         Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView);
         m_prevTime = ct;
         return;
     }
     
-    bool anyAlive = false;
-    int activeEnemies = 0;
-    for (auto& e : m_enemies) {
-        if (e) {
-            activeEnemies++;
-            if (e->GetIsAlive()) {
+    if (!m_isStageCleared) {
+        bool anyAlive = false;
+        for (auto& e : m_enemies) {
+            if (e && e->GetIsAlive()) {
                 anyAlive = true;
                 break;
             }
         }
-    }
-    
-    if (anyAlive) {
-        m_isStageCleared = false;
-    } else {
-        // 적이 한 마리라도 스폰되었고 모두 죽었을 때만 클리어 처리
-        // (적이 아예 없는 빈 스테이지에서 시작하자마자 GO가 뜨는 것을 방지하여 이전 스테이지의 판정이 넘어왔다는 오해를 막음)
-        if (activeEnemies > 0) {
+        if (!anyAlive) {
             m_isStageCleared = true;
         }
     }
@@ -346,22 +326,22 @@ void Game::Update() {
             Camera::AddPush(0.0f, 40.0f);
             isDeadShaken = true;
             deadStartTime = ct;
-            m_isTimePaused = false; // Immediately cancel hit-pause on player death
         }
-        // Only allow rewind after death animation finished and deathbox is shown
-        if (Input::GetKeyDown(VK_LBUTTON) && m_player.IsDeathAnimationFinished() && (ct - deadStartTime > 800)) {
+        if (Input::GetKeyDown(VK_LBUTTON) && (ct - deadStartTime > 500)) {
             isDeadShaken = false;
             deadStartTime = 0;
             m_isTimeoutDeath = false;
             m_initialRewindHistorySize = m_player.GetHistorySize();
-            float historySeconds = (float)m_initialRewindHistorySize / 60.0f;
-            m_rewindSpeed = (int)(4.0f + historySeconds * 2.5f);
-            if (m_rewindSpeed < 4) m_rewindSpeed = 4;
-            if (m_rewindSpeed > 100) m_rewindSpeed = 100;
+            float elapsed = StageManager::GetStageLimitTime() - m_stageTimer;
+            float rewindDur = (std::max)(1.0f, (std::min)(5.0f, elapsed / 6.0f)); // 理쒕? 5珥? 理쒖냼 1珥?            m_rewindSpeed = (rewindDur > 0) ? (int)(m_initialRewindHistorySize / (rewindDur * 60.0f)) : 4;
+            if (m_rewindSpeed < 1) m_rewindSpeed = 1;
 
             m_player.StartRewind(m_rewindSpeed); 
             StageManager::Reset(); 
+            StageManager::ProcessStage(m_currentStage);
+            StageManager::LoadAssets(m_currentStage);
             m_stageTimer = StageManager::GetStageLimitTime(); 
+            Camera::StartRewindEffect(rewindDur); 
             EffectManager::Init(); 
             for (auto& e : m_enemies) if (e) e->Reset(); 
         }
@@ -373,9 +353,6 @@ void Game::Update() {
 
     if (Input::GetKeyDown('1')) LoadStage(1);
     if (Input::GetKeyDown('2')) LoadStage(2);
-    if (Input::GetKeyDown('3')) LoadStage(3);
-    if (Input::GetKeyDown('4')) LoadStage(4);
-    if (Input::GetKeyDown('5')) LoadStage(5);
 
     static bool prevR_local = false; bool cuR = GetAsyncKeyState('R') & 0x8000;
     if (cuR && !prevR_local) {
@@ -388,8 +365,10 @@ void Game::Update() {
 
         m_player.StartRewind(m_rewindSpeed);
         StageManager::Reset();
+        StageManager::ProcessStage(m_currentStage);
+        StageManager::LoadAssets(m_currentStage);
         m_stageTimer = StageManager::GetStageLimitTime();
-        // Removed immediate Camera::StartRewindEffect to delay it
+        Camera::StartRewindEffect(rewindDur);
         EffectManager::Init();
         for (auto& e : m_enemies) if (e) e->Reset(); 
     }
@@ -409,30 +388,19 @@ void Game::Update() {
 
     if (m_player.IsRewinding()) {
         int currentHist = m_player.GetHistorySize();
-        float progress = (float)currentHist / m_initialRewindHistorySize;
-        
-        // Only trigger camera rewind effect when 20% or less history remains
-        if (progress <= 0.2f && !Camera::IsRewindEffectActive()) {
-            // Calculate remaining duration based on speed (approximate)
-            float remainingSec = (float)currentHist / (m_rewindSpeed * 60.0f);
-            Camera::StartRewindEffect(remainingSec > 0 ? remainingSec : 1.0f);
-        }
-
         if (currentHist > (int)(m_initialRewindHistorySize * 0.2f)) {
             m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
         } else {
-            // 20% 남았을 때 스킵: 플레이어를 시작 위치로 강제 이동하고 히스토리 삭제
+            // 20% ?⑥븯?????ㅽ궢: ?뚮젅?댁뼱瑜??쒖옉 ?꾩튂濡?媛뺤젣 ?대룞?섍퀬 ?덉뒪?좊━ ??젣
             m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH() - 2.0f);
             m_player.ClearHistory();
         }
-
         m_player.UpdateAnimation();
 
         bool forceSnap = (m_player.GetHistorySize() == 0);
         Camera::Update(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), Input::GetMouseX(), Input::GetMouseY(), m_renderMapScale, StageManager::GetMapWidth(), StageManager::GetMapHeight(), m_isFullMapView, forceSnap);
 
-        // Terminate rewind only if history is cleared AND camera effect is finished
-        if (currentHist == 0 && !Camera::IsRewindEffectActive()) {
+        if (!Camera::IsRewindEffectActive()) {
             m_player.StopRewind();
             m_player.SetState(PlayerState::PS_IDLE);
             m_player.SetPos(StageManager::GetPlayerStartX(), StageManager::GetPlayerStartY() - m_player.GetColH() - 2.0f);
@@ -446,30 +414,16 @@ void Game::Update() {
     float ts = m_player.GetIsSlowMo() ? 0.3f : 1.0f;
     if (!m_isTimePaused) {
         m_player.Update(Input::GetMouseX(), Input::GetMouseY(), Camera::GetCamX(), Camera::GetCamY(), m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView);
+        Bullet::UpdateAll(ts, m_player, m_enemies);
+        StageManager::UpdateItems(ts, m_player);
         
-        // 총알 튕겨내기 로직: 플레이어 업데이트 후, 총알 업데이트 전에 수행
-        if (m_player.GetState() == PlayerState::PS_ATTACK) {
-            RECT attackRect = m_player.GetAttackRect();
-            InflateRect(&attackRect, 15, 15); // 총알 판정을 위해 약간 더 넓게 확장
-            for (auto b : Bullet::GetBullets()) {
-                if (b && b->IsActive() && !b->IsDeflected()) { // 아직 튕겨나가지 않은 총알만 처리
-                    RECT bulletRect = b->GetRect();
-                    RECT overlap;
-                    if (IntersectRect(&overlap, &attackRect, &bulletRect)) {
-                        b->Deflect(-b->GetVX(), -b->GetVY());
-                        // 전용 gunspark 이펙트 생성 (이전보다 크고 명확하게 보임)
-                        EffectManager::AddGunSparkVFX((float)(overlap.left + overlap.right) / 2.0f, 
-                                                    (float)(overlap.top + overlap.bottom) / 2.0f, 
-                                                    atan2(-b->GetVY(), -b->GetVX()), ct);
-                    }
+        bool playerInSmoke = EffectManager::IsInsideSmoke(m_player.GetX() + m_player.GetColW() / 2.0f, m_player.GetY() + m_player.GetColH() / 2.0f);
+        if (!m_player.IsDead()) {
+            for (auto& e : m_enemies) {
+                if (e) {
+                    e->Update(ts, m_player);
                 }
             }
-        }
-
-        Bullet::UpdateAll(ts, m_player, m_enemies);
-        StageManager::UpdateItems(ts, m_player, m_enemies);
-        if (!m_player.IsDead()) {
-            for (auto& e : m_enemies) if (e) e->Update(ts, m_player);
         }
     }
     static int laF = -1;
@@ -478,25 +432,11 @@ void Game::Update() {
         if (cf >= 1 && cf <= 3 && cf != laF) {
             float cX = m_player.GetX() + m_player.GetColW() / 2.0f, cY = m_player.GetY() + m_player.GetColH() / 2.0f;
             float hX = cX + m_player.GetAttackDirX() * 40.0f - 40.0f, hY = cY + m_player.GetAttackDirY() * 40.0f - 30.0f;
-            RECT aR = { (int)hX, (int)hY, (int)(hX + 80.0f), (int)(hY + 60.0f) };
             
-            // GlassDome 파괴 로직 (하단 공격 검사)
-            if (m_player.GetAttackDirY() > 0.5f) { // 마우스가 캐릭터보다 아래쪽을 향할 때
-                auto glassDomes = StageManager::GetCurrentGlassDomes();
-                if (glassDomes) {
-                    for (auto& gd : *glassDomes) {
-                        if (!gd.IsBroken()) {
-                            RECT gdR = { (int)gd.GetX(), (int)gd.GetY(), (int)(gd.GetX() + gd.GetW()), (int)(gd.GetY() + gd.GetH()) };
-                            RECT ol;
-                            if (IntersectRect(&ol, &aR, &gdR)) {
-                                gd.Break(ct);
-                                Camera::AddShake(2.0f); // 돔이 깨질 때 약간의 화면 흔들림
-                            }
-                        }
-                    }
-                }
-            }
+            // 공격 범위 내의 연막 제거
+            EffectManager::RemoveSmokeInArea(hX, hY, 80.0f, 60.0f);
 
+            RECT aR = { (int)hX, (int)hY, (int)(hX + 80.0f), (int)(hY + 60.0f) };
             for (int i = 0; i < (int)m_enemies.size(); i++) {
                 Enemy* e = m_enemies[i];
                 if (e && e->GetIsAlive()) {
@@ -508,26 +448,14 @@ void Game::Update() {
                         float ex = e->GetX() + e->GetColW() / 2.0f, ey = e->GetY() + e->GetColH() / 2.0f;
                         float dx = ex - cX, dy = ey - cY, dist = (std::max)(1.0f, (float)sqrt(dx * dx + dy * dy));
                         float ux = dx / dist, uy = dy / dist;
-                        
-                        // 타격 이펙트는 적 중심에서 타격점 반대 방향으로 발생하도록 유지
                         EffectManager::AddNeonTrail(ex, ey, ux, uy, atan2(uy, ux));
                         EffectManager::AddHitVFX(ex, ey, atan2(uy, ux), ct);
                         Camera::AddPush(ux * 30.0f, uy * 30.0f); Camera::AddShake(1.0f);
                         
-                        // 넉백 로직: 플레이어가 클릭하여 검을 휘두른 방향(AttackDir)을 직접 사용
-                        float kbPower = 25.0f; // 40.0f에서 25.0f로 넉백 힘 감소
-                        float attackDx = m_player.GetAttackDirX();
-                        float attackDy = m_player.GetAttackDirY();
-                        
-                        float kvx = attackDx * kbPower;
-                        float kvy = attackDy * kbPower;
-                        
-                        // 수평 베기이거나 아래로 내리꽂는 공격일 경우, 땅에 쓸리지 않게 위로 살짝 띄워줌
-                        if (kvy > -5.0f) kvy -= 8.0f; // 위로 띄워주는 보정값도 살짝 줄임
-                        
-                        // 지연 처리(AddPendingHit)를 제거하고 즉시 데미지/넉백 적용
-                        // 플레이어가 대시 중이라 위치가 계속 변하므로, 지연 처리를 하면 엉뚱한 위치에서 날아감
-                        e->OnTakeDamage(kvx, kvy);
+                        // Knockback with dramatic force
+                        float kbPowerX = 30.0f;
+                        float kbPowerY = -15.0f; // Always fly up slightly
+                        EffectManager::AddPendingHit(e, m_player.GetDashDirX() * kbPowerX, (m_player.GetDashDirY() * 20.0f) + kbPowerY);
                     }
                 }
             }
@@ -536,7 +464,6 @@ void Game::Update() {
     } else if (!m_isTimePaused) laF = -1;
     if (!m_isTimePaused) {
         int openedDoorIdx = StageManager::UpdateDoors(m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), (GetAsyncKeyState('A') & 0x8000) != 0, (GetAsyncKeyState('D') & 0x8000) != 0, m_player.GetState() == PlayerState::PS_ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct, ts);
-        StageManager::UpdateGlassDomes(m_player.GetState() == PlayerState::PS_ATTACK, m_player.GetAttackHitX(), m_player.GetAttackHitY(), m_player.GetAttackHitW(), m_player.GetAttackHitH(), ct);
         if (openedDoorIdx != -1) {
             m_player.AddReplayEvent(Player::ReplayEvent::DOOR_OPEN, openedDoorIdx);
             // ?뚮젅?댁뼱媛 怨듦꺽 以묒씠 ?꾨땲?덈떎硫?臾몄쓣 諛쒕줈 李⑥꽌 ?щ뒗 ?좊땲硫붿씠???ъ깮
@@ -545,14 +472,14 @@ void Game::Update() {
             }
         }
 
-        // 문이 열리는 동안 적과 충돌 체크 (문 공격)
+        // 臾몄씠 ?대━???숈븞 ?곴낵 異⑸룎 泥댄겕 (臾?怨듦꺽)
         auto& stageData = StageManager::GetStageData(m_currentStage);
         for (int i = 0; i < (int)stageData.doors.size(); i++) {
             Door& d = stageData.doors[i];
-            // 문이 완전히 열린 상태가 아니면서 애니메이션이 초반(1~5프레임) 진행 중일 때 공격 판정
-            if (d.GetCurrentFrame() >= 1 && d.GetCurrentFrame() <= 5) {
+            // 臾몄씠 ?대━湲??쒖옉?섎뒗 ?꾨젅??蹂댄넻 珥덈컲遺)?먯꽌 怨듦꺽 ?먯젙
+            if (!d.IsClosed() && d.GetCurrentFrame() >= 1 && d.GetCurrentFrame() <= 5) {
                 RECT dR = { (int)d.GetX(), (int)d.GetY(), (int)(d.GetX() + d.GetW()), (int)(d.GetY() + d.GetH()) };
-                // 문의 공격 범위를 약간 확장 (좌우로)
+                // 臾몄쓽 怨듦꺽 踰붿쐞瑜??쎄컙 ?뺤옣 (醫뚯슦濡?
                 dR.left -= 30; dR.right += 30;
 
                 for (int j = 0; j < (int)m_enemies.size(); j++) {
@@ -566,7 +493,7 @@ void Game::Update() {
                             e->OnTakeDamage(kbx, -5.0f);
                             m_player.AddReplayEvent(Player::ReplayEvent::ENEMY_DIE, j);
                             
-                            // 시각 효과 추가
+                            // ?쒓컖 ?④낵 異붽?
                             float angle = (kbx > 0) ? 0.0f : 3.14159f;
                             EffectManager::AddNeonTrail(ex, ey, (kbx > 0 ? 1.0f : -1.0f), 0.0f, angle);
                             EffectManager::AddHitVFX(ex, ey, angle, ct);
@@ -678,9 +605,20 @@ void Game::Render(HDC hDC) {
     float fW = (float)VIRTUAL_WIDTH, fH = (float)VIRTUAL_HEIGHT, fCW = (float)StageManager::GetMapWidth(), fCH = (float)StageManager::GetMapHeight();
     float scX = fW / fCW, scY = fH / fCH, cFS = (scX < scY) ? scX : scY;
     float cFX = (fW - fCW * cFS) / 2.0f, cFY = (fH - fCH * cFS) / 2.0f;
-    EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
+    
     if (!StartScene::IsActive()) {
+        // 1. 플레이어와 적을 먼저 렌더링 (연막에 가려지기 위함)
         m_player.Render(hMemDC, &g, cX, cY, mapScale, playerScale, m_renderMapScale, m_mapOffsetX, m_mapOffsetY, m_isFullMapView, m_showDebugRect, m_stageTimer);
+        
+        // 2. 연막 및 이펙트 렌더링
+        EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
+        
+        // 3. 연막 위에 실루엣 렌더링 (연막 속에 있을 때만 보이게 됨)
+        m_player.RenderSilhouette(&g, cX, cY, mapScale);
+        for (auto& e : m_enemies) if (e) e->RenderSilhouette(&g, cX, cY, mapScale);
+    } else {
+        EffectManager::Render(hMemDC, cX, cY, mapScale, m_isFullMapView, cFS, cFX, cFY);
+        StartScene::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), mapScale);
     }
     
     auto drawTransition = [&](HDC dc) {
@@ -769,10 +707,8 @@ void Game::Render(HDC hDC) {
     } else {
         if (!m_player.IsRewinding()) {
             bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage, m_player.GetHeldItemType());
-            if (StartScene::IsActive()) {
-                StartScene::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, m_player.GetX(), m_player.GetY(), m_player.GetColW(), m_player.GetColH(), mapScale);
-            }
+            int heldItemType = (m_player.m_pHeldItem ? (int)m_player.m_pHeldItem->GetType() : -1);
+            UIManager::Render(hMemDC, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, Input::GetMouseX(), Input::GetMouseY(), m_player.GetBatteryLevel(), m_stageTimer, StageManager::GetStageLimitTime(), m_bGameStarted, isShift, m_player.IsDead(), m_isTimeoutDeath, m_player.IsDeathAnimationFinished(), m_isStageCleared, m_currentStage, heldItemType);
         }
 
         drawTransition(hMemDC);

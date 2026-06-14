@@ -74,6 +74,21 @@ struct MapBlood {
     bool isDirectional;
 };
 
+enum class SmokeState {
+    APPEARING,
+    LOOPING,
+    DISSOLVING
+};
+
+struct SmokeVFX {
+    float x, y;
+    float radius;
+    SmokeState state;
+    int currentFrame;
+    int maxFrame;
+    DWORD lastTime;
+};
+
 class EffectManager {
 public:
     static void Init();
@@ -96,9 +111,13 @@ public:
     static void AddPendingHit(class Enemy* target, float kvx, float kvy);
     static void AddBloodSplatter(float x, float y, float vx, float vy, float angle, DWORD currentTime);
     static void AddMapBlood(float x, float y, float angle, int imgIndex);
+    static void AddSmokeVFX(float x, float y, DWORD currentTime);
+    static void RemoveSmokeInArea(float x, float y, float w, float h);
 
     static bool HasActiveVFX();
     static bool HasActiveHitVFX();
+    static std::vector<SmokeVFX>& GetSmokeVFXs() { return m_smokeVFXs; }
+    static bool IsInsideSmoke(float x, float y);
 
 private:
     static std::vector<NeonTrail> m_neonTrails;
@@ -108,6 +127,7 @@ private:
     static std::vector<LandCloudVFX> m_landCloudVFXs;
     static std::vector<PendingHit> m_pendingHits;
     static std::vector<BloodSplatterVFX> m_bloodSplatters;
+    static std::vector<SmokeVFX> m_smokeVFXs;
     
     // Blood layer variables
     static HDC m_hBloodLayerDC;
@@ -127,6 +147,9 @@ private:
     static CImage m_imgVfxBloodBleed[9];
     static CImage m_imgVfxMapBloodDir[48];
     static CImage m_imgVfxMapBloodStatic[7];
+    static CImage m_imgVfxSmokeAppear[3];
+    static CImage m_imgVfxSmokeLoop[6];
+    static CImage m_imgVfxSmokeDissolve[7];
 
     static constexpr int m_neonTrailLife = 6;
     static constexpr float m_slashWidth = 10.0f;

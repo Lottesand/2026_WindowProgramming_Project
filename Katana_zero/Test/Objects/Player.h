@@ -4,8 +4,8 @@
 #include <math.h>
 #include <algorithm>
 #include <vector>
-#include "Item.h"
 #include <deque>
+#include "Item.h"
 
 // ?꾩뿭 蹂???좎뼵
 extern int g_playerAfterImageInterval;
@@ -59,7 +59,7 @@ private:
     float m_attackTargetX, m_attackTargetY, m_attackDirX, m_attackDirY, m_dashDirX, m_dashDirY, m_attackAngle, m_attackHitW, m_attackHitH, m_attackHitOffset;
 
     bool m_hasLeapedInAir, m_isAttackClicked;
-
+    
     struct AfterImageData {
         float x, y;
         PlayerState state;
@@ -96,6 +96,7 @@ public:
     void Update(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
     void UpdateAnimation();
     void Render(HDC hMemDC, Gdiplus::Graphics* g, float camX, float camY, float mapScale, float playerScale, float g_renderMapScale, float g_mapOffsetX, float g_mapOffsetY, bool g_isFullMapView, bool g_showDebugRect, float stageTimer = 10.0f);
+    void RenderSilhouette(Gdiplus::Graphics* g, float camX, float camY, float mapScale);
     
     void SetState(PlayerState state);
 
@@ -112,11 +113,6 @@ public:
     float GetAttackHitX() const { return m_x + m_colW / 2.0f + m_attackDirX * m_attackHitOffset - m_attackHitW / 2.0f; }
     float GetAttackHitY() const { return m_y + m_colH / 2.0f + m_attackDirY * m_attackHitOffset - m_attackHitH / 2.0f; }
     float GetAttackHitOffset() const { return m_attackHitOffset; }
-    RECT GetAttackRect() const { 
-        float cX = m_x + m_colW / 2.0f, cY = m_y + m_colH / 2.0f;
-        float hX = cX + m_attackDirX * 40.0f - 40.0f, hY = cY + m_attackDirY * 40.0f - 30.0f;
-        return { (int)hX, (int)hY, (int)(hX + 80.0f), (int)(hY + 60.0f) };
-    }
     int GetCurrentFrame() const { return m_currentFrame; }
     PlayerState GetState() const { return m_state; }
     bool GetIsSlowMo() const { return m_isSlowMo; }
@@ -161,7 +157,6 @@ public:
     void SetGodMode(bool god) { m_isGodMode = god; }
     bool IsGodMode() const { return m_isGodMode; }
     float m_bloodDistance;
-    DWORD m_lastBleedTime;
     void OnTakeDamage(float damage, float kvx = 0.0f, float kvy = 0.0f);
 
     // Item management
@@ -170,7 +165,4 @@ public:
     ItemType m_popupItemType;
     void PickUpItem(class Item* item);
     void ThrowItem(int mouseX, int mouseY, float camX, float camY, float rs, float ox, float oy, bool fv);
-    
-    bool HasHeldItem() const { return m_pHeldItem != nullptr; }
-    int GetHeldItemType() const;
 };

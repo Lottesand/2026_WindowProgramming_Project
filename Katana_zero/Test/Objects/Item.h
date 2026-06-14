@@ -1,4 +1,4 @@
-#pragma once
+    #pragma once
 #include <windows.h>
 #include <atlimage.h>
 #include <vector>
@@ -11,7 +11,8 @@ enum class ItemType {
     BUTCHER_KNIFE,
     BUST,
     POTTED_PLANT,
-    KNIFE
+    KNIFE,
+    SMOKE_BOMB
 };
 
 enum class ItemState {

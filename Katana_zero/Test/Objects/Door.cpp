@@ -1,4 +1,4 @@
-﻿#include "Door.h"
+#include "Door.h"
 #include <math.h>
 #include <algorithm>
 
@@ -15,8 +15,7 @@ Door::Door(float x, float y, float w, float h) {
     m_isFullBreak = false;
 }
 
-Door::~Door() {
-}
+Door::~Door() {}
 
 void Door::Reset() {
     m_state = DoorState::DS_CLOSED;
@@ -61,7 +60,6 @@ void Door::ReleaseAssets() {
 DoorOpenEvent Door::Update(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale) {
     if (m_state == DoorState::DS_BROKEN) return DoorOpenEvent::DOE_NONE;
 
-    // 히트박스 판정 범위 확장 (20 -> 40)
     bool playerNear = (playerX + playerW >= m_x - 40.0f && playerX <= m_x + m_w + 40.0f &&
                        playerY + playerH >= m_y - 10.0f && playerY <= m_y + m_h + 10.0f);
 
@@ -76,7 +74,6 @@ DoorOpenEvent Door::Update(float playerX, float playerY, float playerW, float pl
                 return DoorOpenEvent::DOE_OPEN_BY_ATTACK;
             }
         }
-        // 좌우 이동 시 방향 상관없이 문 근처라면 열리게끔 수정
         if (playerNear && (isA || isD)) {
             m_state = DoorState::DS_OPENING;
             m_currentFrame = 0;
@@ -113,6 +110,7 @@ void Door::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMa
     else { dX = (m_x - camX) * mapScale; dY = (m_y - camY) * mapScale; }
 
     if (m_state == DoorState::DS_BROKEN) return;
+    
     CImage* img = nullptr;
     int safeFrame = (std::max)(0, m_currentFrame);
     
@@ -127,41 +125,24 @@ void Door::Render(HDC hDC, float camX, float camY, float mapScale, bool isFullMa
     if (img && !img->IsNull()) {
         float baseImgW = (float)img->GetWidth();
         float baseImgH = (float)img->GetHeight();
-        
-        // 문 높이에 맞춰 스케일 조정 (Convention: detected m_h corresponds to door height)
         float scaleY = m_h / (baseImgH > 0 ? baseImgH : 1.0f);
-        float scaleX = scaleY; // 비율 유지
+        float scaleX = scaleY;
 
         float drawW = baseImgW * scaleX * pFS;
         float drawH = baseImgH * scaleY * pFS;
         
-        // 중앙 하단 정렬 보정 + 우측 오프셋 추가 (핑크색 구역 정렬)
-        float offsetX = 18.0f; 
-        float doorOffsetX = offsetX + 5.0f; // 문 본체만 추가로 오른쪽으로 이동
-        float drawX = dX + (m_w * pFS - drawW) / 2.0f + doorOffsetX * pFS;
+        // 오프셋 제거: objmap에서 인식된 좌표(dX, dY)에 정확히 맞춤
+        float drawX = dX;
         float drawY = dY + (m_h * pFS - drawH);
 
-        if (drawW > 0 && drawH > 0) {
-            img->Draw(hDC, (int)drawX, (int)drawY, (int)drawW, (int)drawH);
-        }
+        img->Draw(hDC, (int)drawX, (int)drawY, (int)drawW, (int)drawH);
         
         if (m_state == DoorState::DS_CLOSED) {
-            // Glow 이미지 렌더링 (Glow는 기존 위치 유지)
-            int glowFrame = (GetTickCount() / m_glowDelay) % 4;
+            int glowFrame = (GetTickCount() / 100) % 4;
             CImage* gImg = &m_imgGlow[glowFrame];
             if (gImg && !gImg->IsNull()) {
-                // 글로우를 더 얇게 (가로 크기 65%로 축소)
-                float glowWidthScale = 0.65f;
-                float gW = gImg->GetWidth() * scaleX * pFS * glowWidthScale;
-                float gH = gImg->GetHeight() * scaleY * pFS;
-                float gX = dX + (m_w * pFS - gW) / 2.0f + offsetX * pFS;
-                float gY = dY + (m_h * pFS - gH);
-                
-                int oldMode = SetStretchBltMode(hDC, HALFTONE);
-                gImg->TransparentBlt(hDC, (int)gX, (int)gY, (int)gW, (int)gH, 0, 0, gImg->GetWidth(), gImg->GetHeight(), RGB(0, 0, 0));
-                SetStretchBltMode(hDC, oldMode);
+                gImg->TransparentBlt(hDC, (int)drawX, (int)drawY, (int)drawW, (int)drawH, 0, 0, gImg->GetWidth(), gImg->GetHeight(), RGB(0, 0, 0));
             }
         }
     }
 }
-

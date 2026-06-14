@@ -39,10 +39,12 @@ public:
     static void LoadAllStages(std::atomic<int>* pProgress = nullptr);
     static void LoadAssets(int stage = 1);
     static void ReleaseAssets();
+    static void ProcessStage(int stage);
+    static void SetCurrentEnemies(const std::vector<class Enemy*>& enemies);
     static void Render(HDC hDC, class Gdiplus::Graphics* g, bool isFullMapView, bool showDebugRect, float mapScale, float renderMapScale, float mapOffsetX, float mapOffsetY, float camX, float camY, int virtualWidth, int virtualHeight, bool isSlowMo = false);
     static int UpdateDoors(float playerX, float playerY, float playerW, float playerH, bool isA, bool isD, bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime, float timeScale);
     static void UpdateGlassDomes(bool isAttacking, float attackHitX, float attackHitY, float attackHitW, float attackHitH, DWORD currentTime);
-    static void UpdateItems(float ts, class Player& player, const std::vector<class Enemy*>& enemies);
+    static void UpdateItems(float ts, class Player& player);
 
     static int GetMapWidth() { return m_imgMap == nullptr || m_imgMap->IsNull() ? 0 : m_imgMap->GetWidth(); }
     static int GetMapHeight() { return m_imgMap == nullptr || m_imgMap->IsNull() ? 0 : m_imgMap->GetHeight(); }
@@ -62,8 +64,6 @@ public:
     static std::vector<Item>* GetCurrentItems() { return m_pCurrentItems; }
 
 private:
-    static void ProcessStage(int stage);
-
     static std::map<int, CImage> m_mapImages;
     static std::map<int, CImage> m_colMapImages;
     static std::map<int, CImage> m_objMapImages;
@@ -79,8 +79,10 @@ private:
     static std::vector<Door>* m_pCurrentDoors;
     static std::vector<GlassDome>* m_pCurrentGlassDomes;
     static std::vector<Item>* m_pCurrentItems;
+    static std::vector<Item> m_activeItems; // 추가: 활성 아이템 관리를 위한 멤버 변수
     static POINT m_playerStart;
     static std::vector<RECT> m_clearZones;
+    static std::vector<class Enemy*> m_currentEnemies;
     static float m_stageLimitTime;
     static int m_currentStage;
 };
