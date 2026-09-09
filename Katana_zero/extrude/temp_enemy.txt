@@ -1,0 +1,30 @@
+﻿void ShieldCop::Update(float ts, const Player& player) {
+    CheckPlayerDetection(player);
+    if (m_ActionState == ShieldCopAction::HURT_FLY || m_ActionState == ShieldCopAction::HURT_GROUND || m_State == EnemyState::DEAD) {
+        if (m_ActionState == ShieldCopAction::HURT_FLY) {
+            m_vy += 1.5f * ts;
+            float nextX = m_x + m_vx * ts;
+            float nextY = m_y + m_vy * ts;
+
+            if (!CheckMapCollision(nextX, m_y, m_colW, m_colH)) m_x = nextX;
+            else m_vx = 0;
+
+            if (CheckMapCollision(m_x, nextY, m_colW, m_colH)) {
+                if (m_vy > 0) {
+                    m_ActionState = ShieldCopAction::HURT_GROUND; m_State = EnemyState::DEAD; m_vx = 0; m_vy = 0; m_CurrentFrame = 0;
+                    while (CheckMapCollision(m_x, m_y, m_colW, m_colH)) m_y -= 1.0f;
+                } else m_vy = 0;
+            } else m_y = nextY;
+
+            m_vx *= m_friction;
+        }
+        if (GetTickCount() - m_LastTime >= 100) {
+            if (m_ActionState == ShieldCopAction::HURT_GROUND || m_State == EnemyState::DEAD) {
+                if (m_CurrentFrame < 14) m_CurrentFrame++;
+            } else m_CurrentFrame++;
+            m_LastTime = GetTickCount();
+        }
+        return;
+    }
+    Enemy::Update(ts, player);
+    if (m_isWaiting) {

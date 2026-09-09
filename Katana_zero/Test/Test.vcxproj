@@ -105,6 +105,7 @@
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -127,7 +128,44 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FileName.cpp" />
+    <ClCompile Include="Core\Game.cpp" />
+    <ClCompile Include="Core\Input.cpp" />
+    <ClCompile Include="Core\main.cpp" />
+    <ClCompile Include="Core\SoundManager.cpp" />
+    <ClCompile Include="Effects\EffectManager.cpp" />
+    <ClCompile Include="Objects\Bullet.cpp" />
+    <ClCompile Include="Objects\Door.cpp" />
+    <ClCompile Include="Objects\Enemy.cpp" />
+    <ClCompile Include="Objects\GlassDome.cpp" />
+    <ClCompile Include="Objects\Item.cpp" />
+    <ClCompile Include="Objects\Kissyface.cpp" />
+    <ClCompile Include="Objects\OilDrum.cpp" />
+    <ClCompile Include="Objects\Physics.cpp" />
+    <ClCompile Include="Objects\Player.cpp" />
+    <ClCompile Include="SceneAndMap\Camera.cpp" />
+    <ClCompile Include="SceneAndMap\StageManager.cpp" />
+    <ClCompile Include="UI\StartScene.cpp" />
+    <ClCompile Include="UI\EndScene.cpp" />
+    <ClCompile Include="UI\UIManager.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Core\Game.h" />
+    <ClInclude Include="Core\Input.h" />
+    <ClInclude Include="Core\SoundManager.h" />
+    <ClInclude Include="Effects\EffectManager.h" />
+    <ClInclude Include="Objects\Bullet.h" />
+    <ClInclude Include="Objects\Door.h" />
+    <ClInclude Include="Objects\Enemy.h" />
+    <ClInclude Include="Objects\GlassDome.h" />
+    <ClInclude Include="Objects\Item.h" />
+    <ClInclude Include="Objects\OilDrum.h" />
+    <ClInclude Include="Objects\Physics.h" />
+    <ClInclude Include="Objects\Player.h" />
+    <ClInclude Include="SceneAndMap\Camera.h" />
+    <ClInclude Include="SceneAndMap\StageManager.h" />
+    <ClInclude Include="UI\StartScene.h" />
+    <ClInclude Include="UI\EndScene.h" />
+    <ClInclude Include="UI\UIManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
